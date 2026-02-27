@@ -1,85 +1,106 @@
 <template>
-  <div class="chat-container">
-    <!-- Navbar -->
-    <nav class="chat-nav glass-panel">
-      <div class="brand">
-        <div class="ai-orb"></div>
-        <span class="gradient-text">仲易达智能助手</span>
-      </div>
-
-      <!-- Mode Selector -->
-      <div class="mode-selector">
-        <button 
-          :class="['mode-btn', { active: currentMode === 'general' }]"
-          @click="currentMode = 'general'"
-        >
-          <span class="icon">✨</span> 全能助手
-        </button>
-        <button 
-          :class="['mode-btn', { active: currentMode === 'coach' }]"
-          @click="currentMode = 'coach'"
-        >
-          <span class="icon">📚</span> 知识教练
+  <div class="app-layout">
+    <aside class="sidebar glass-panel">
+      <div class="sidebar-header">
+        <button class="new-chat-btn" @click="startNewChat">
+          <span class="icon">+</span> 新对话
         </button>
       </div>
-
-      <div class="nav-links">
-        <a href="/admin" class="nav-btn" target="_blank">管理员入口</a>
-      </div>
-    </nav>
-
-    <!-- Chat Area -->
-    <main class="chat-main" ref="chatMain">
-      <div v-if="messages.length === 0" class="welcome-screen">
-        <h2>您好，我是仲易达智能员工助手</h2>
-        <p>我可以帮您解答公司制度，查询最新运费与报价情况。</p>
-        <div class="suggestion-chips">
-          <button @click="presetMsg('我们的出勤打卡制度是怎样的？')">公司的出勤打卡制度是怎样的？</button>
-          <button @click="presetMsg('帮我查一下美西航线这周的最新报价')">查一下美西航线最新报价</button>
+      <div class="session-list">
+        <div v-for="session in sessions" :key="session.id" 
+             :class="['session-item', { active: session.id === currentSessionId }]"
+             @click="switchSession(session.id)">
+          <div class="session-title">{{ session.title || '新对话' }}</div>
+          <button class="delete-btn" @click.stop="deleteSession(session.id)" title="删除对话">×</button>
         </div>
       </div>
+    </aside>
 
-      <div class="message-list">
-        <div v-for="(msg, index) in messages" :key="index" 
-             class="message-wrapper" :class="msg.role">
-          <div class="avatar">
-            <template v-if="msg.role === 'assistant'">
-              <div class="ai-avatar">AI</div>
-            </template>
-            <template v-else>
-              <div class="user-avatar">You</div>
-            </template>
-          </div>
-          <div class="message-content glass-panel" :class="{'is-typing': msg.isTyping}">
-            <div class="markdown-body" v-html="renderMarkdown(msg.content)"></div>
-            <span v-if="msg.isTyping" class="cursor-blink"></span>
+    <div class="chat-container">
+      <!-- Navbar -->
+      <nav class="chat-nav glass-panel">
+        <div class="brand">
+          <img src="/logo.png" alt="仲易达集团" class="company-logo" />
+          <span class="brand-divider">|</span>
+          <span class="gradient-text">智能助手</span>
+        </div>
+
+        <!-- Mode Selector -->
+        <div class="mode-selector">
+          <button 
+            :class="['mode-btn', { active: currentMode === 'general' }]"
+            @click="currentMode = 'general'"
+          >
+            <span class="icon">✨</span> 全能助手
+          </button>
+          <button 
+            :class="['mode-btn', { active: currentMode === 'coach' }]"
+            @click="currentMode = 'coach'"
+          >
+            <span class="icon">📚</span> 知识教练
+          </button>
+        </div>
+
+        <div class="nav-links">
+          <a href="/admin" class="nav-btn" target="_blank">管理员入口</a>
+        </div>
+      </nav>
+
+      <!-- Chat Area -->
+      <main class="chat-main" ref="chatMain">
+        <div v-if="messages.length === 0" class="welcome-screen">
+          <h2>把繁琐的流程交给我，把专注留给真正重要的事情。</h2>
+          <p>今天想先解决什么？</p>
+          <div class="suggestion-chips">
+            <button @click="presetMsg('我们的出勤打卡制度是怎样的？')">公司的出勤打卡制度是怎样的？</button>
+            <button @click="presetMsg('帮我查一下美西航线这周的最新报价')">查一下美西航线最新报价</button>
           </div>
         </div>
-      </div>
-    </main>
 
-    <!-- Input Area -->
-    <footer class="chat-footer">
-      <div class="input-box glass-panel">
-        <textarea 
-          v-model="inputMsg" 
-          @keydown.enter.prevent="sendMessage"
-          placeholder="给智能助手发送消息，按 Enter 键发送..."
-          rows="1"
-          ref="inputRef"
-          @input="autoGrow"
-        ></textarea>
-        <button class="send-btn" :disabled="!inputMsg.trim() || isGenerating" @click="sendMessage">
-          <IconSend class="icon-send" />
-        </button>
-      </div>
-      <p class="disclaimer">助手生成的内容可能不准确，请参考系统里的正式文档与报价。</p>
-    </footer>
+        <div class="message-list">
+          <div v-for="(msg, index) in messages" :key="index" 
+               class="message-wrapper" :class="msg.role">
+            <div class="avatar">
+              <template v-if="msg.role === 'assistant'">
+                <div class="avatar-container assistant">
+                  <img src="/logo-icon.png" alt="AI" class="ai-avatar-icon" />
+                </div>
+              </template>
+              <template v-else>
+                <div class="user-avatar">You</div>
+              </template>
+            </div>
+            <div class="message-content glass-panel" :class="{'is-typing': msg.isTyping}">
+              <div class="markdown-body" v-html="renderMarkdown(msg.content)"></div>
+              <span v-if="msg.isTyping" class="cursor-blink"></span>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <!-- Input Area -->
+      <footer class="chat-footer">
+        <div class="input-box glass-panel">
+          <textarea 
+            v-model="inputMsg" 
+            @keydown.enter.prevent="sendMessage"
+            placeholder="给智能助手发送消息，按 Enter 键发送..."
+            rows="1"
+            ref="inputRef"
+            @input="autoGrow"
+          ></textarea>
+          <button class="send-btn" :disabled="!inputMsg.trim() || isGenerating" @click="sendMessage">
+            <IconSend class="icon-send" />
+          </button>
+        </div>
+        <p class="disclaimer">助手生成的内容可能不准确，请参考系统里的正式文档与报价。</p>
+      </footer>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, onMounted } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { Send as IconSend } from 'lucide-vue-next'
@@ -91,9 +112,14 @@ const chatMain = ref(null)
 const inputRef = ref(null)
 const currentMode = ref('general')
 
+const sessions = ref([])
+const currentSessionId = ref(null)
+
 const renderMarkdown = (text) => {
   if (!text) return ''
-  return DOMPurify.sanitize(marked(text))
+  let cleaned = text.replace(/~~([\s\S]*?)~~/g, '$1')
+  cleaned = cleaned.replace(/~+/g, '')
+  return DOMPurify.sanitize(marked(cleaned))
 }
 
 const scrollToBottom = async () => {
@@ -103,7 +129,68 @@ const scrollToBottom = async () => {
   }
 }
 
-watch(() => messages.value, scrollToBottom, { deep: true })
+onMounted(() => {
+  const saved = localStorage.getItem('zyd_chat_sessions')
+  if (saved) {
+    try {
+      sessions.value = JSON.parse(saved)
+    } catch(e) {}
+  }
+  if (sessions.value.length === 0) {
+    startNewChat()
+  } else {
+    currentSessionId.value = sessions.value[0].id
+    messages.value = sessions.value[0].messages || []
+  }
+})
+
+const startNewChat = () => {
+  const newId = Date.now().toString()
+  sessions.value.unshift({
+    id: newId,
+    title: '新对话',
+    messages: []
+  })
+  currentSessionId.value = newId
+  messages.value = sessions.value.find(s => s.id === newId).messages
+}
+
+const switchSession = (id) => {
+  const session = sessions.value.find(s => s.id === id)
+  if (session) {
+    currentSessionId.value = id
+    messages.value = session.messages || []
+    setTimeout(scrollToBottom, 100)
+  }
+}
+
+const deleteSession = (id) => {
+  sessions.value = sessions.value.filter(s => s.id !== id)
+  if (sessions.value.length === 0) {
+    startNewChat()
+  } else if (currentSessionId.value === id) {
+    switchSession(sessions.value[0].id)
+  } else {
+    saveSessions()
+  }
+}
+
+const saveSessions = () => {
+  localStorage.setItem('zyd_chat_sessions', JSON.stringify(sessions.value))
+}
+
+watch(() => messages.value, () => {
+  scrollToBottom()
+  const session = sessions.value.find(s => s.id === currentSessionId.value)
+  if (session) {
+    session.messages = messages.value
+    const firstUser = messages.value.find(m => m.role === 'user')
+    if (firstUser && session.title === '新对话') {
+      session.title = firstUser.content.slice(0, 15) + (firstUser.content.length > 15 ? '...' : '')
+    }
+    saveSessions()
+  }
+}, { deep: true })
 
 const presetMsg = (msg) => {
   inputMsg.value = msg
@@ -122,7 +209,6 @@ const sendMessage = async () => {
   const content = inputMsg.value.trim()
   if (!content || isGenerating.value) return
   
-  // Add user message
   messages.value.push({
     role: 'user',
     content: content
@@ -134,7 +220,6 @@ const sendMessage = async () => {
   }
   isGenerating.value = true
   
-  // Create assistant placeholder
   const aiMsgIdx = messages.value.length
   messages.value.push({
     role: 'assistant',
@@ -152,7 +237,6 @@ const sendMessage = async () => {
       },
       body: JSON.stringify({
         message: content,
-        // Only send last 4 real messages for context to avoid token limits
         history: messages.value.slice(0, Math.max(0, messages.value.length - 2)).map(m => ({
           role: m.role,
           content: m.content
@@ -179,7 +263,7 @@ const sendMessage = async () => {
     }
   } catch (err) {
     console.error('Chat error:', err)
-    messages.value[aiMsgIdx].content = `**Error**: ${err.message}. 请检查后端服务是否启动以及 Doubao API KEY 是否正确配置。`
+    messages.value[aiMsgIdx].content = `**Error**: ${err.message}. 请检查后端服务是否启动以及 API KEY 是否正确配置。`
   } finally {
     messages.value[aiMsgIdx].isTyping = false
     isGenerating.value = false
@@ -188,11 +272,102 @@ const sendMessage = async () => {
 </script>
 
 <style scoped>
-.chat-container {
+.app-layout {
   display: flex;
-  flex-direction: column;
   height: 100vh;
   background: var(--bg-primary);
+  width: 100vw;
+  overflow: hidden;
+}
+.sidebar {
+  width: 260px;
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-tertiary);
+  flex-shrink: 0;
+}
+.sidebar-header {
+  padding: 20px;
+}
+.new-chat-btn {
+  width: 100%;
+  padding: 12px;
+  background: var(--primary-gradient);
+  color: white;
+  border-radius: 8px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.new-chat-btn:hover {
+  opacity: 0.9;
+}
+.session-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.session-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: background 0.2s;
+  border: 1px solid transparent;
+}
+.session-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+.session-item.active {
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--accent-color);
+  border-color: rgba(37, 99, 235, 0.2);
+}
+.session-title {
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+.delete-btn {
+  color: var(--text-secondary);
+  opacity: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.session-item:hover .delete-btn {
+  opacity: 1;
+}
+.delete-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger-color);
+}
+
+.chat-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .chat-nav {
@@ -208,8 +383,18 @@ const sendMessage = async () => {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
+}
+.company-logo {
+  height: 32px;
+  width: auto;
+  object-fit: contain;
+}
+.brand-divider {
+  color: var(--border-color);
+  font-weight: 300;
+  font-size: 24px;
 }
 .gradient-text {
   background: var(--primary-gradient);
@@ -221,8 +406,8 @@ const sendMessage = async () => {
   display: flex;
   padding: 4px;
   border-radius: 12px;
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid var(--glass-border);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
 }
 .mode-btn {
   display: flex;
@@ -233,6 +418,9 @@ const sendMessage = async () => {
   font-size: 14px;
   color: var(--text-secondary);
   font-weight: 500;
+  background: transparent;
+  border: none;
+  cursor: pointer;
 }
 .mode-btn .icon {
   font-size: 16px;
@@ -242,28 +430,15 @@ const sendMessage = async () => {
   color: var(--text-primary);
 }
 .mode-btn.active {
-  background: var(--glass-bg);
-  color: var(--text-primary);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-secondary);
+  color: var(--accent-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--border-color);
 }
 .mode-btn.active .icon {
   opacity: 1;
 }
 
-.ai-orb {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--primary-gradient);
-  box-shadow: 0 0 12px var(--accent-color);
-  animation: pulse 2s infinite ease-in-out;
-}
-@keyframes pulse {
-  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
-  70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
-  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
-}
 .nav-btn {
   color: var(--text-secondary);
   text-decoration: none;
@@ -277,7 +452,7 @@ const sendMessage = async () => {
 .chat-main {
   flex: 1;
   overflow-y: auto;
-  padding: 32px 20%;
+  padding: 32px 15%;
   scroll-behavior: smooth;
 }
 
@@ -286,9 +461,9 @@ const sendMessage = async () => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 70%;
+  height: 80%;
   text-align: center;
-  gap: 16px;
+  gap: 20px;
 }
 .welcome-screen h2 {
   font-size: 32px;
@@ -313,9 +488,10 @@ const sendMessage = async () => {
   padding: 12px 20px;
   border-radius: 20px;
   font-size: 14px;
+  cursor: pointer;
 }
 .suggestion-chips button:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.03);
   border-color: var(--accent-hover);
 }
 
@@ -330,16 +506,23 @@ const sendMessage = async () => {
 .avatar {
   flex-shrink: 0;
 }
-.ai-avatar {
-  background: var(--primary-gradient);
+.avatar-container.assistant {
   width: 36px;
   height: 36px;
+  background: white;
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: bold;
-  font-size: 12px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  overflow: hidden;
+  padding: 4px;
+}
+.ai-avatar-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 .user-avatar {
   background: var(--bg-tertiary);
@@ -357,11 +540,10 @@ const sendMessage = async () => {
   line-height: 1.6;
 }
 .message-wrapper.user .message-content {
-  background: rgba(59, 130, 246, 0.1);
-  border-color: rgba(59, 130, 246, 0.2);
+  background: rgba(37, 99, 235, 0.08);
+  border-color: rgba(37, 99, 235, 0.2);
 }
 
-/* Custom Markdown styling */
 :deep(.markdown-body p) { margin-bottom: 12px; }
 :deep(.markdown-body p:last-child) { margin-bottom: 0; }
 :deep(.markdown-body table) { 
@@ -373,9 +555,6 @@ const sendMessage = async () => {
 :deep(.markdown-body th) { background: var(--bg-tertiary); }
 :deep(.markdown-body code) { 
   background: var(--bg-secondary); padding: 2px 6px; border-radius: 4px; font-family: monospace; 
-}
-:deep(.markdown-body pre code) {
-  display: block; padding: 12px; overflow-x: auto; 
 }
 
 .cursor-blink {
@@ -389,7 +568,7 @@ const sendMessage = async () => {
 @keyframes blink { 50% { opacity: 0; } }
 
 .chat-footer {
-  padding: 0 20% 32px;
+  padding: 0 15% 32px;
 }
 .input-box {
   display: flex;
@@ -408,6 +587,9 @@ const sendMessage = async () => {
   color: var(--text-primary);
   max-height: 120px;
   padding: 4px 0;
+  background: transparent;
+  border: none;
+  outline: none;
 }
 .input-box textarea::placeholder {
   color: var(--text-secondary);
@@ -422,6 +604,8 @@ const sendMessage = async () => {
   justify-content: center;
   color: white;
   margin-bottom: 2px;
+  border: none;
+  cursor: pointer;
 }
 .send-btn:hover:not(:disabled) {
   background: var(--accent-hover);

@@ -14,34 +14,66 @@ class ChatRequest(BaseModel):
     message: str
     history: Optional[List[dict]] = []
     
-async def classify_intent(message: str) -> str:
+async def classify_intent(message: str, history: List[dict] = None) -> str:
     """Classify user intent to determine routing (simple heuristic or LLM based)"""
-    # Simply check keywords to decide routing
-    quote_keywords = ["报价", "价格", "运费", "多少钱", "航线", "时效", "价目"]
+    import re
+    # 1. Regex check for warehouse codes (e.g. ONT8, PHX5) in current message
+    wh_pattern = re.compile(r'[A-Z]{3,4}\d+[A-Z]?')
+    if wh_pattern.search(message.upper()):
+        return "quote"
+        
+    # 2. Keyward check in current message
+    quote_keywords = ["报价", "价格", "运费", "多少钱", "航线", "时效", "价目", "单价", "仓位"]
     for kw in quote_keywords:
         if kw in message:
             return "quote"
+            
+    # 3. If it's a short message or followup, check recent history for context
+    if history and len(history) > 0:
+        recent_msgs = [m.get("content", "") for m in history[-4:] if m.get("role") == "user"]
+        for old_msg in recent_msgs:
+            if wh_pattern.search(old_msg.upper()) or any(kw in old_msg for kw in quote_keywords):
+                return "quote"
+                
     return "document"
 
 @router.post("/stream")
 async def chat_stream(request: ChatRequest):
     """Stream chat response based on RAG and quote tables."""
     
-    intent = await classify_intent(request.message)
+    intent = await classify_intent(request.message, request.history)
     system_prompt = ""
     
     if intent == "quote":
         # Handle Quote Query
-        quote_data = get_quote_data_as_string()
-        system_prompt = f"""你是一个名为“仲易达智能助手”的高效且充满亲和力的智能全能助手。
-在解答用户关于报价、业务查询及运费等相关问题时，请遵循以下原则：
-1. **表达方式与情绪价值**：说话要轻松、自然、有温度，可以适当带点语气词（如“呢”、“啦”、“哦”）。但**绝对禁止使用波浪号（~）**来表达情绪的延长，否则您的回答在前端会变成错误的删除线格式。
-2. **言简意赅，拒绝长篇大论**：绝对**不要**把原表的长段内容直接复制粘贴过来。你要做的是提取核心数据，然后用一两句话直接告诉用户最终结果。
-3. **查阅与延伸**：优先详细查阅下面提供的“系统最新报价表数据”。如果表内能查到，帮用户算好、总结好再发出来；如果查不到，或者用户在问通用外贸/物流知识，请直接动用你的广博知识大方解答，绝不生硬拒绝。
+        # Pass the concatenated content of recent user messages to assist the search algorithm
+        search_query = request.message
+        if request.history:
+            search_query += " " + " ".join([m.get("content", "") for m in request.history[-2:] if m.get("role") == "user"])
+        quote_data = get_quote_data_as_string(search_query)
+        system_prompt = f"""你是一个名为“仲易达智能助手”的高效且充满亲和力的智能物流顾问。
+在解答用户关于报价、业务查询及运费等相关问题时，请必须遵循以下核心准则：
+
+1. **绝对禁止“几块钱总价”的幻觉**：【价格体系】里的数字（如 5.2, 9.7 等）代表的是**每公斤（Per KG）单价**，绝不是整票货的总价。如果由于用户货太少（如10kg）没达到起收重量（如12kg），请按起收重量计算总价。
+   - **错误示范**：100kg一共5元。
+   - **正确示范**：按 100kg 计算，单价 5.2元/kg，由于未满100kg阶梯按50kg阶梯价格报，总计约 520 元。
+
+2. **以表为准，拒绝外部幻觉**：下方展示的【系统最新报价表数据】是唯一的真实来源。如果系统返回了多条渠道的数据（例如同时包含 14T卡派、18T卡派、OA普船等），请**为你找到的所有符合时效要求的合适渠道计算价格，并向客户提供多套方案对比**以彰显你的专业性。千万不要用任何“旧记忆”或“案例”。
+
+3. **语气规范**：说话要自然，适当带语气词，但**绝对禁止使用~（波浪号）**。提取核心数据并给用户算好总价预览，列出清晰的数学计算过程。
+
+4. **时效精准匹配与“只推最具性价比”原则**：当客户说“可以接受50天到”时，其实暗示了客户更看重极致的性价比（价格最便宜）而不是速度。
+   - **绝对不要**把所有“小于等于50天”的渠道全列出来（比如20天、30天的那些高价快船，全删掉，不要提）！
+   - **你只需筛选并展示 2 到 3 个真正最便宜的保底方案即可**。
+   - 一般来说，只挑时效最贴近客户要求（比如40-50天），且**单价最低**的方案。把那些单价高、速度快的方案过滤掉，避免啰嗦和浪费 token。
+
+5. **强制添加【老鸟建议】**：在所有报价方案或费用计算的结尾，你**必须单独另起一行加粗显示【💡 老鸟建议】：**。这段建议必须紧扣本次查询的航线或时效，给客户提供关于如何规避风险（如延误、海关严查等）和如何利润最大化（如凑够下一个重量阶梯更省钱等）的专业性建议。
 
 【系统最新生效率报价表数据】：
 {quote_data}
 """
+
+
     else:
         # Handle RAG Document Query
         query_embedding = await get_embedding(request.message)
@@ -64,9 +96,9 @@ async def chat_stream(request: ChatRequest):
     # Build messages array
     messages = [{"role": "system", "content": system_prompt}]
     
-    # Append history (limited to last 6 for context length)
+    # Append history (limited to last 20 for context length)
     if request.history:
-        messages.extend(request.history[-6:])
+        messages.extend(request.history[-20:])
         
     messages.append({"role": "user", "content": request.message})
 
@@ -90,9 +122,13 @@ async def chat_stream(request: ChatRequest):
                 try:
                     data = json.loads(data_str)
                     if "choices" in data and len(data["choices"]) > 0:
-                        delta = data["choices"][0].get("delta", {})
-                        if "content" in delta and delta["content"]:
-                            yield delta["content"]
+                        choice = data["choices"][0]
+                        # Standard OpenAI style
+                        if "delta" in choice and "content" in choice["delta"]:
+                            yield choice["delta"]["content"]
+                        # Bot-style (DeepSeek V3.2 on Ark)
+                        elif "message" in choice and "content" in choice["message"]:
+                            yield choice["message"]["content"]
                 except json.JSONDecodeError:
                     pass
 

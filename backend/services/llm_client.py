@@ -50,18 +50,44 @@ async def get_embedding(text: str) -> List[float]:
             return data["data"]["embedding"]
 
 async def chat_completion_stream(messages: List[dict]):
-    """Generator for streaming Chat Completions"""
+    """Generator for streaming Chat Completions (Optimized for DeepSeek V3.2 on Volcengine)"""
     headers = {
         "Authorization": f"Bearer {DOUBAO_API_KEY}",
         "Content-Type": "application/json"
     }
-    payload = {
-        "model": DOUBAO_MODEL_ENDPOINT,
-        "messages": messages,
-        "stream": True
-    }
+    
+    # Check if we are using the new bot-style endpoint for DeepSeek-V3.2
+    if "deepseek-v3-2" in DOUBAO_MODEL_ENDPOINT:
+        url = f"{BASE_URL}/responses"
+        # The bot-style endpoint expects 'input' instead of 'messages' and a specific structure
+        payload = {
+            "model": DOUBAO_MODEL_ENDPOINT,
+            "input": [
+                {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": m["content"]
+                        }
+                    ],
+                    "role": m["role"]
+                } for m in messages
+            ],
+            "stream": True
+        }
+    else:
+        url = f"{BASE_URL}/chat/completions"
+        payload = {
+            "model": DOUBAO_MODEL_ENDPOINT,
+            "messages": messages,
+            "stream": True
+        }
+
     async with httpx.AsyncClient() as client:
-        async with client.stream("POST", f"{BASE_URL}/chat/completions", headers=headers, json=payload) as response:
+        async with client.stream("POST", url, headers=headers, json=payload, timeout=60.0) as response:
+            if response.status_code != 200:
+                body = await response.aread()
+                print(f"API Stream Error: {response.status_code} - {body.decode()}")
             response.raise_for_status()
             async for chunk in response.aiter_text():
                 yield chunk

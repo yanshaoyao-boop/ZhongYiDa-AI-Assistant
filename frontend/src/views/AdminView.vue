@@ -1,7 +1,11 @@
 <template>
   <div class="admin-container">
     <header class="admin-header glass-panel">
-      <h1><span class="gradient-text">仲易达</span> 智能助手后台管理</h1>
+      <div class="admin-brand">
+        <img src="/logo.png" alt="仲易达集团" class="admin-logo" />
+        <span class="brand-divider">|</span>
+        <span class="gradient-text">智能助手后台管理</span>
+      </div>
       <p>管理业务知识库与最新报价表数据</p>
     </header>
     
@@ -191,15 +195,27 @@ const uploadQuotes = async () => {
   padding: 24px 32px;
   text-align: left;
 }
+.admin-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.admin-logo {
+  height: 32px;
+  width: auto;
+}
+.brand-divider {
+  color: var(--border-color);
+  font-weight: 300;
+  font-size: 24px;
+}
 .gradient-text {
   background: var(--primary-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   font-weight: 800;
-}
-.admin-header h1 {
   font-size: 28px;
-  margin-bottom: 8px;
 }
 .admin-header p {
   color: var(--text-secondary);
