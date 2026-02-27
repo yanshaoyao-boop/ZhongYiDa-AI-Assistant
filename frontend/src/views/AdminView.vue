@@ -21,14 +21,18 @@
              :class="{'drag-active': isDraggingDoc}"
              @click="triggerDocSelect">
           <IconUpload class="upload-icon" />
-          <p v-if="!docFile">点击或拖拽制度文档到此处 (PDF / Word)</p>
-          <p v-else class="file-sel">{{ docFile.name }}</p>
-          <input type="file" ref="docInput" style="display:none" @change="onDocSelected" accept=".pdf,.doc,.docx,.txt" />
+          <p v-if="docFiles.length === 0">点击或多选拖拽文件到此处 (PDF / Word)</p>
+          <div v-else class="file-list">
+            <div v-for="(file, idx) in docFiles" :key="idx" class="file-item">
+              <span class="file-sel">{{ file.name }}</span>
+            </div>
+          </div>
+          <input type="file" ref="docInput" style="display:none" @change="onDocSelected" accept=".pdf,.doc,.docx,.txt" multiple />
         </div>
         
-        <button class="btn-primary" :disabled="!docFile || docUploading" @click="uploadDocument">
-          <span v-if="docUploading">正在解析并存入向量库...</span>
-          <span v-else>上传并学习文档</span>
+        <button class="btn-primary" :disabled="docFiles.length === 0 || docUploading" @click="uploadDocuments">
+          <span v-if="docUploading">正在批量学习中 ({{ currentFileIndex + 1 }}/{{ docFiles.length }})...</span>
+          <span v-else>开始批量上传学习</span>
         </button>
         <div v-if="docMessage" class="status-msg" :class="docStatus">{{ docMessage }}</div>
       </section>
@@ -48,14 +52,18 @@
              :class="{'drag-active': isDraggingQuote}"
              @click="triggerQuoteSelect">
           <IconUpload class="upload-icon" />
-          <p v-if="!quoteFile">点击或拖拽报价表到此处 (Excel / CSV)</p>
-          <p v-else class="file-sel">{{ quoteFile.name }}</p>
-          <input type="file" ref="quoteInput" style="display:none" @change="onQuoteSelected" accept=".xlsx,.xls,.csv" />
+          <p v-if="quoteFiles.length === 0">点击或多选拖拽报价表到此处 (Excel / CSV)</p>
+          <div v-else class="file-list">
+            <div v-for="(file, idx) in quoteFiles" :key="idx" class="file-item">
+              <span class="file-sel">{{ file.name }}</span>
+            </div>
+          </div>
+          <input type="file" ref="quoteInput" style="display:none" @change="onQuoteSelected" accept=".xlsx,.xls,.csv" multiple />
         </div>
         
-        <button class="btn-primary quote-btn" :disabled="!quoteFile || quoteUploading" @click="uploadQuote">
-          <span v-if="quoteUploading">正在更新报价数据库...</span>
-          <span v-else>更新系统报价表</span>
+        <button class="btn-primary quote-btn" :disabled="quoteFiles.length === 0 || quoteUploading" @click="uploadQuotes">
+          <span v-if="quoteUploading">正在更新报价库 ({{ currentQuoteIndex + 1 }}/{{ quoteFiles.length }})...</span>
+          <span v-else>批量更新系统报价表</span>
         </button>
         <div v-if="quoteMessage" class="status-msg" :class="quoteStatus">{{ quoteMessage }}</div>
       </section>
@@ -68,84 +76,103 @@ import { ref } from 'vue'
 import axios from 'axios'
 import { FileBox as IconFileBox, Database as IconDatabase, UploadCloud as IconUpload } from 'lucide-vue-next'
 
-const BASE_URL = 'http://localhost:8000/api/upload'
+const BASE_URL = `http://${window.location.hostname}:8000/api/upload`
 
 // Docs logic
 const isDraggingDoc = ref(false)
-const docFile = ref(null)
+const docFiles = ref([])
 const docInput = ref(null)
 const docUploading = ref(false)
 const docMessage = ref('')
 const docStatus = ref('')
+const currentFileIndex = ref(0)
 
 const triggerDocSelect = () => docInput.value.click()
-const onDocSelected = (e) => docFile.value = e.target.files[0]
+const onDocSelected = (e) => docFiles.value = Array.from(e.target.files)
 const onDropDoc = (e) => {
   isDraggingDoc.value = false
   if (e.dataTransfer.files.length > 0) {
-    docFile.value = e.dataTransfer.files[0]
+    docFiles.value = Array.from(e.dataTransfer.files)
   }
 }
-const uploadDocument = async () => {
-  if (!docFile.value) return
+const uploadDocuments = async () => {
+  if (docFiles.value.length === 0) return
   docUploading.value = true
   docMessage.value = ''
+  docStatus.value = ''
   
-  const formData = new FormData()
-  formData.append('file', docFile.value)
-  
-  try {
-    const res = await axios.post(`${BASE_URL}/document`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
-    docStatus.value = 'success'
-    docMessage.value = res.data.message
-    docFile.value = null
-  } catch (err) {
-    docStatus.value = 'error'
-    docMessage.value = err.response?.data?.detail || err.message
-  } finally {
-    docUploading.value = false
+  let successCount = 0
+  let errorMessages = []
+
+  for (let i = 0; i < docFiles.value.length; i++) {
+    currentFileIndex.value = i
+    const formData = new FormData()
+    formData.append('file', docFiles.value[i])
+    
+    try {
+      await axios.post(`${BASE_URL}/document`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      successCount++
+    } catch (err) {
+      errorMessages.push(`${docFiles.value[i].name}: ${err.response?.data?.detail || err.message}`)
+    }
   }
+
+  if (errorMessages.length === 0) {
+    docStatus.value = 'success'
+    docMessage.value = `成功处理并学习了 ${successCount} 份文档。`
+    docFiles.value = []
+  } else {
+    docStatus.value = 'error'
+    docMessage.value = `处理完成。成功: ${successCount}. 失败: ${errorMessages.length}. 错误信息: ${errorMessages.join('; ')}`
+  }
+  docUploading.value = false
 }
 
 // Quote logic
 const isDraggingQuote = ref(false)
-const quoteFile = ref(null)
+const quoteFiles = ref([])
 const quoteInput = ref(null)
 const quoteUploading = ref(false)
 const quoteMessage = ref('')
 const quoteStatus = ref('')
+const currentQuoteIndex = ref(0)
 
 const triggerQuoteSelect = () => quoteInput.value.click()
-const onQuoteSelected = (e) => quoteFile.value = e.target.files[0]
+const onQuoteSelected = (e) => quoteFiles.value = Array.from(e.target.files)
 const onDropQuote = (e) => {
   isDraggingQuote.value = false
   if (e.dataTransfer.files.length > 0) {
-    quoteFile.value = e.dataTransfer.files[0]
+    quoteFiles.value = Array.from(e.dataTransfer.files)
   }
 }
-const uploadQuote = async () => {
-  if (!quoteFile.value) return
+const uploadQuotes = async () => {
+  if (quoteFiles.value.length === 0) return
   quoteUploading.value = true
   quoteMessage.value = ''
+  quoteStatus.value = ''
   
-  const formData = new FormData()
-  formData.append('file', quoteFile.value)
-  
-  try {
-    const res = await axios.post(`${BASE_URL}/quote`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
-    quoteStatus.value = 'success'
-    quoteMessage.value = res.data.message
-    quoteFile.value = null
-  } catch (err) {
-    quoteStatus.value = 'error'
-    quoteMessage.value = err.response?.data?.detail || err.message
-  } finally {
-    quoteUploading.value = false
+  let successCount = 0
+  for (let i = 0; i < quoteFiles.value.length; i++) {
+    currentQuoteIndex.value = i
+    const formData = new FormData()
+    formData.append('file', quoteFiles.value[i])
+    
+    try {
+      await axios.post(`${BASE_URL}/quote`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      successCount++
+    } catch (err) {
+      console.error(err)
+    }
   }
+
+  quoteStatus.value = 'success'
+  quoteMessage.value = `成功更新了 ${successCount} 份报价单。`
+  quoteFiles.value = []
+  quoteUploading.value = false
 }
 </script>
 
@@ -236,9 +263,27 @@ const uploadQuote = async () => {
   height: 32px;
   color: var(--text-secondary);
 }
+.file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 120px;
+  overflow-y: auto;
+  width: 100%;
+}
+.file-item {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+}
 .file-sel {
   color: var(--accent-hover);
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
 }
 
 .btn-primary {

@@ -65,3 +65,41 @@ async def chat_completion_stream(messages: List[dict]):
             response.raise_for_status()
             async for chunk in response.aiter_text():
                 yield chunk
+
+async def describe_image(image_base64: str) -> str:
+    """Use Doubao Vision model to describe an image for better OCR/understanding"""
+    headers = {
+        "Authorization": f"Bearer {DOUBAO_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "model": DOUBAO_MODEL_ENDPOINT,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "请简要描述这张图片中的内容，包含文字、图表或重要信息，以便作为文本搜索的参考。直接输出描述内容即可。"
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{image_base64}"
+                        }
+                    }
+                ]
+            }
+        ],
+        "max_tokens": 512
+    }
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.post(f"{BASE_URL}/chat/completions", headers=headers, json=payload, timeout=60.0)
+        if response.status_code != 200:
+            print(f"Vision API Error: {response.status_code} - {response.text}")
+            return ""
+        
+        data = response.json()
+        return data["choices"][0]["message"]["content"]

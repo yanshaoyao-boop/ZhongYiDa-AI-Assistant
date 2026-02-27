@@ -1,18 +1,38 @@
-import os
-import PyPDF2
+import fitz
+import base64
+import io
 from docx import Document
 from typing import List
+from services.llm_client import describe_image
 
-def extract_text_from_pdf(file_path: str) -> str:
-    """Extract text from a PDF file."""
+async def extract_text_from_pdf(file_path: str) -> str:
+    """Extract text from a PDF file using PyMuPDF and handle images vision-wise."""
     text = ""
     try:
-        with open(file_path, "rb") as file:
-            reader = PyPDF2.PdfReader(file)
-            for page in reader.pages:
-                extracted = page.extract_text()
-                if extracted:
-                    text += extracted + "\n"
+        doc = fitz.open(file_path)
+        for page_num in range(len(doc)):
+            page = doc.load_page(page_num)
+            
+            # 1. 提取普通文字
+            text += page.get_text() + "\n"
+            
+            # 2. 提取图片并进行视觉描述
+            image_list = page.get_images(full=True)
+            for img_index, img in enumerate(image_list):
+                xref = img[0]
+                base_image = doc.extract_image(xref)
+                image_bytes = base_image["image"]
+                
+                # 转换 Base64
+                image_b64 = base_64_encode = base64.b64encode(image_bytes).decode('utf-8')
+                
+                # 调用 Vision 模型描述图片
+                print(f"Detecting image on page {page_num+1}, calling Vision model...")
+                description = await describe_image(image_b64)
+                if description:
+                    text += f"\n[图片内容描述: {description}]\n"
+                    
+        doc.close()
     except Exception as e:
         print(f"Error reading PDF {file_path}: {e}")
     return text
@@ -62,11 +82,12 @@ def clean_text(text: str) -> str:
     text = re.sub(r'\n\s*\n', '\n', text)
     return text.strip()
 
-def parse_document(file_path: str) -> str:
-    """Parse document based on its extension."""
+async def parse_document(file_path: str) -> str:
+    """Parse document based on its extension (Async support for Vision model)."""
+    import os
     ext = os.path.splitext(file_path)[1].lower()
     if ext == ".pdf":
-        text = extract_text_from_pdf(file_path)
+        text = await extract_text_from_pdf(file_path)
     elif ext in [".doc", ".docx"]:
         text = extract_text_from_docx(file_path)
     elif ext == ".txt":

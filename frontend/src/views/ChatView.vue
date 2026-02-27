@@ -145,7 +145,7 @@ const sendMessage = async () => {
   scrollToBottom()
 
   try {
-    const response = await fetch('http://localhost:8000/api/chat/stream', {
+    const response = await fetch(`http://${window.location.hostname}:8000/api/chat/stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

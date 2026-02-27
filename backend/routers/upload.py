@@ -25,7 +25,7 @@ async def upload_document(file: UploadFile = File(...)):
         
     try:
         # Parse document
-        text = parse_document(file_path)
+        text = await parse_document(file_path)
         if not text.strip():
             return {"status": "error", "message": "No text could be extracted from the document."}
             
