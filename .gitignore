@@ -11,10 +11,14 @@ stats.json
 .env
 data/
 backend/venv/
-backend/__pycache__/
+**/__pycache__/
+*.pyc
 backend/data/
 backend/*.log
 backend/.env
 frontend/node_modules/
 frontend/dist/
 frontend/.env
+test_*.py
+tmp_*.py
+parsed_quotes.json

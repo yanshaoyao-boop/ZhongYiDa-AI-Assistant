@@ -13,10 +13,19 @@ def init_quote_directory():
 def parse_quote_file(file_path: str) -> List[Dict]:
     """Parse an Excel or CSV quote file into a list of structured dictionaries."""
     ext = os.path.splitext(file_path)[1].lower()
+    filename = os.path.basename(file_path)
     try:
-        from services.excel_parser import parse_complex_excel
         if ext in [".xlsx", ".xls"]:
-            return parse_complex_excel(file_path)
+            # 文件名路由：锦联系列用专属解析器，其他用通用解析器
+            if "锦联" in filename:
+                from services.jinlian_parser import parse_jinlian_excel
+                return parse_jinlian_excel(file_path)
+            elif "亿阳" in filename:
+                from services.yiyang_parser import parse_yiyang_excel
+                return parse_yiyang_excel(file_path)
+            else:
+                from services.excel_parser import parse_complex_excel
+                return parse_complex_excel(file_path)
         elif ext == ".csv":
             df = pd.read_csv(file_path)
             return df.fillna("").to_dict(orient="records")
@@ -45,26 +54,25 @@ def search_best_quotes(query: str, limit: int = 15) -> List[Dict]:
     if not QUOTES_CACHE:
         load_all_quotes()
     
-    # Extract potential warehouse codes (e.g., ONT8, PHX5)
     import re
     wh_pattern = re.compile(r'[A-Z]{3,4}\d+[A-Z]?')
     found_whs = wh_pattern.findall(query.upper())
     
     results = []
     
-    # First priority: Match by warehouse code
+    # 优先级1：仓库代码精确匹配（美线/加线标准代码，如 ONT8, YYZ1）
     if found_whs:
         for wh in found_whs:
             for filename, records in QUOTES_CACHE.items():
                 for r in records:
                     if wh in r.get("仓库代码", "").upper():
-                        # Add a flag to indicate it's a direct match
                         r_copy = r.copy()
                         r_copy["_source"] = filename
                         results.append(r_copy)
     
-    # Second priority: If no warehouse match, or to fill up, match by channel keywords
-    keywords = ["14T", "16T", "18T", "20T", "OA", "普船", "快船", "海派", "卡派"]
+    # 优先级2：渠道关键词匹配（普船、快船、卡派、快递派 等）
+    keywords = ["14T", "16T", "18T", "20T", "OA", "普船", "快船", "海派", "卡派",
+                "快递派", "美转加", "直航", "亚马逊", "限时达", "锦联", "空派", "空运"]
     found_keywords = [k for k in keywords if k.lower() in query.lower()]
     
     if len(results) < limit:
@@ -75,8 +83,23 @@ def search_best_quotes(query: str, limit: int = 15) -> List[Dict]:
                         r_copy = r.copy()
                         r_copy["_source"] = filename
                         results.append(r_copy)
-                if len(results) >= limit:
-                    break
+            if len(results) >= limit:
+                break
+
+    # 优先级3：锦联区域匹配（美东/美中/美西），专门给快递派/空派等锦联产品用
+    region_map = {"美东": "美东", "美中": "美中", "美西": "美西",
+                  "东部": "美东", "中部": "美中", "西部": "美西"}
+    found_regions = [v for k, v in region_map.items() if k in query]
+    if found_regions and len(results) < limit:
+        for filename, records in QUOTES_CACHE.items():
+            for r in records:
+                if r.get("_type") == "region_based" and r.get("目的地区") in found_regions:
+                    if r not in results:
+                        r_copy = r.copy()
+                        r_copy["_source"] = filename
+                        results.append(r_copy)
+            if len(results) >= limit:
+                break
     
     return results[:limit]
 

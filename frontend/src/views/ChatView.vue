@@ -22,7 +22,7 @@
         <div class="brand">
           <img src="/logo.png" alt="仲易达集团" class="company-logo" />
           <span class="brand-divider">|</span>
-          <span class="gradient-text">智能助手</span>
+          <span class="gradient-text">小易智能助手</span>
         </div>
 
         <!-- Mode Selector -->
@@ -49,7 +49,8 @@
       <!-- Chat Area -->
       <main class="chat-main" ref="chatMain">
         <div v-if="messages.length === 0" class="welcome-screen">
-          <h2>把繁琐的流程交给我，把专注留给真正重要的事情。</h2>
+          <h2 class="welcome-name">您好，我是小易，您的全能助手</h2>
+          <h2 class="welcome-slogan">把繁琐的流程交给我，把专注留给真正重要的事情。</h2>
           <p>今天想先解决什么？</p>
           <div class="suggestion-chips">
             <button @click="presetMsg('我们的出勤打卡制度是怎样的？')">公司的出勤打卡制度是怎样的？</button>
@@ -84,7 +85,7 @@
           <textarea 
             v-model="inputMsg" 
             @keydown.enter.prevent="sendMessage"
-            placeholder="给智能助手发送消息，按 Enter 键发送..."
+            placeholder="给小易发送消息，按 ENTER 键发送..."
             rows="1"
             ref="inputRef"
             @input="autoGrow"
@@ -465,11 +466,18 @@ const sendMessage = async () => {
   text-align: center;
   gap: 20px;
 }
-.welcome-screen h2 {
-  font-size: 32px;
+.welcome-screen h2.welcome-name {
+  font-size: 36px;
   background: var(--text-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  margin-bottom: 8px;
+}
+.welcome-screen h2.welcome-slogan {
+  font-size: 24px;
+  color: var(--text-primary);
+  opacity: 0.9;
+  font-weight: 500;
 }
 .welcome-screen p {
   color: var(--text-secondary);
