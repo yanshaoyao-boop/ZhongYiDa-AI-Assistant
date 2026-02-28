@@ -21,4 +21,12 @@ frontend/dist/
 frontend/.env
 test_*.py
 tmp_*.py
+check_*.py
+inspect_*.py
+detailed_*.py
+scan_*.py
+dump_*.py
+list_*.py
+价格表/
+*.txt
 parsed_quotes.json

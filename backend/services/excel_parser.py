@@ -36,7 +36,7 @@ def parse_complex_excel(file_path: str) -> list:
 
     try:
         # 补丁一：使用 openpyxl data_only=True，读取公式的真实计算结果（而非公式字符串）
-        wb = openpyxl.load_workbook(file_path, data_only=True)
+        wb = openpyxl.load_workbook(file_path, data_only=True, read_only=True)
 
         for sheet_name in wb.sheetnames:
             if not is_valid_sheet(sheet_name):

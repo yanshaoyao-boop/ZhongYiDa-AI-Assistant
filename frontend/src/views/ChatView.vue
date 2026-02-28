@@ -1,15 +1,16 @@
 <template>
   <div class="app-layout">
-    <aside class="sidebar glass-panel">
+    <div :class="['sidebar-overlay', { show: isSidebarOpen }]" @click="isSidebarOpen = false"></div>
+    <aside :class="['sidebar', 'glass-panel', { show: isSidebarOpen }]">
       <div class="sidebar-header">
-        <button class="new-chat-btn" @click="startNewChat">
+        <button class="new-chat-btn" @click="startNewChatWithClose">
           <span class="icon">+</span> 新对话
         </button>
       </div>
       <div class="session-list">
         <div v-for="session in sessions" :key="session.id" 
              :class="['session-item', { active: session.id === currentSessionId }]"
-             @click="switchSession(session.id)">
+             @click="switchSessionWithClose(session.id)">
           <div class="session-title">{{ session.title || '新对话' }}</div>
           <button class="delete-btn" @click.stop="deleteSession(session.id)" title="删除对话">×</button>
         </div>
@@ -19,10 +20,16 @@
     <div class="chat-container">
       <!-- Navbar -->
       <nav class="chat-nav glass-panel">
-        <div class="brand">
-          <img src="/logo.png" alt="仲易达集团" class="company-logo" />
-          <span class="brand-divider">|</span>
-          <span class="gradient-text">小易智能助手</span>
+        <div class="nav-left">
+          <button class="menu-toggle" @click="isSidebarOpen = !isSidebarOpen">
+            <IconMenu v-if="!isSidebarOpen" />
+            <IconX v-else />
+          </button>
+          <div class="brand">
+            <img src="/logo.png" alt="仲易达集团" class="company-logo" />
+            <span class="brand-divider">|</span>
+            <span class="gradient-text">小易智能助手</span>
+          </div>
         </div>
 
         <!-- Mode Selector -->
@@ -104,7 +111,7 @@
 import { ref, watch, nextTick, onMounted } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { Send as IconSend } from 'lucide-vue-next'
+import { Send as IconSend, Menu as IconMenu, X as IconX } from 'lucide-vue-next'
 
 const messages = ref([])
 const inputMsg = ref('')
@@ -112,6 +119,7 @@ const isGenerating = ref(false)
 const chatMain = ref(null)
 const inputRef = ref(null)
 const currentMode = ref('general')
+const isSidebarOpen = ref(false)
 
 const sessions = ref([])
 const currentSessionId = ref(null)
@@ -156,6 +164,11 @@ const startNewChat = () => {
   messages.value = sessions.value.find(s => s.id === newId).messages
 }
 
+const startNewChatWithClose = () => {
+  startNewChat()
+  isSidebarOpen.value = false
+}
+
 const switchSession = (id) => {
   const session = sessions.value.find(s => s.id === id)
   if (session) {
@@ -163,6 +176,11 @@ const switchSession = (id) => {
     messages.value = session.messages || []
     setTimeout(scrollToBottom, 100)
   }
+}
+
+const switchSessionWithClose = (id) => {
+  switchSession(id)
+  isSidebarOpen.value = false
 }
 
 const deleteSession = (id) => {
@@ -276,12 +294,13 @@ const sendMessage = async () => {
 .app-layout {
   display: flex;
   height: 100vh;
+  height: 100dvh;
   background: var(--bg-primary);
   width: 100vw;
   overflow: hidden;
 }
 .sidebar {
-  width: 260px;
+  width: 280px;
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
@@ -462,7 +481,8 @@ const sendMessage = async () => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 80%;
+  min-height: 60%;
+  padding-top: 40px;
   text-align: center;
   gap: 20px;
 }
@@ -630,5 +650,119 @@ const sendMessage = async () => {
   color: var(--text-secondary);
   font-size: 12px;
   margin-top: 12px;
+}
+
+/* Responsive Design */
+.menu-toggle {
+  display: none;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 8px;
+  margin-right: 8px;
+}
+
+.nav-left {
+  display: flex;
+  align-items: center;
+}
+
+@media (max-width: 1024px) {
+  .chat-main {
+    padding: 32px 5%;
+  }
+  .chat-footer {
+    padding: 0 5% 32px;
+  }
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 1000;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    box-shadow: 10px 0 30px rgba(0,0,0,0.1);
+  }
+  
+  .sidebar.show {
+    transform: translateX(0);
+  }
+
+  .sidebar-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.3);
+    backdrop-filter: blur(4px);
+    z-index: 999;
+  }
+
+  .sidebar-overlay.show {
+    display: block;
+  }
+
+  .menu-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .chat-nav {
+    margin: 12px 12px 0;
+    padding: 12px 16px;
+  }
+
+  .brand-divider {
+    display: none;
+  }
+
+  .gradient-text {
+    font-size: 16px;
+  }
+  
+  .company-logo {
+    height: 24px;
+  }
+
+  .mode-selector {
+    display: none; /* Hide mode selector on very small screens to save space */
+  }
+
+  .chat-main {
+    padding: 20px 16px;
+  }
+
+  .welcome-screen h2.welcome-name {
+    font-size: 24px;
+  }
+
+  .welcome-screen h2.welcome-slogan {
+    font-size: 18px;
+  }
+
+  .message-content {
+    max-width: 90%;
+    font-size: 15px;
+  }
+
+  .chat-footer {
+    padding: 0 12px 20px;
+  }
+  
+  .input-box {
+    padding: 10px 14px;
+  }
+  
+  .nav-links {
+    display: none;
+  }
 }
 </style>

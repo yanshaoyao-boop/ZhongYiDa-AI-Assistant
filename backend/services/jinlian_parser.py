@@ -16,7 +16,7 @@ JINLIAN_REGION_PATTERNS = [
 # 跳过的 Sheet 黑名单
 JINLIAN_BLACKLIST = [
     "目录", "各公司联系人", "船期表", "理赔条款", "偏远邮编",
-    "偏仓卡派", "海外仓", "承运规则", "发票模版", "偏远地区",
+    "海外仓", "承运规则", "发票模版", "偏远地区",
     "定时达", "反倾销"
 ]
 
@@ -51,7 +51,7 @@ def _detect_warehouse_groups(header_row: list, ref_row: list, start_col: int):
     """
     groups = []
     current_group = None
-    for col_idx in range(start_col, min(start_col + 20, len(header_row))):
+    for col_idx in range(start_col, min(start_col + 30, len(header_row))):
         h_val = str(header_row[col_idx]).strip() if header_row[col_idx] is not None else ""
         r_val = str(ref_row[col_idx]).strip() if col_idx < len(ref_row) and ref_row[col_idx] is not None else ""
 
@@ -60,9 +60,21 @@ def _detect_warehouse_groups(header_row: list, ref_row: list, start_col: int):
             current_group = {"name": h_val.split("/")[0].strip() + "仓", "start_col": col_idx, "headers": []}
             groups.append(current_group)
 
+        # 兜底：如果第一组迟迟未识别，且这一列有 KG/CBM 标识，则开启一个通用的仓库组
+        if not current_group and any(kw in (h_val + r_val).upper() for kw in ["KG", "CBM", "方"]):
+             current_group = {"name": "通用", "start_col": col_idx, "headers": []}
+             groups.append(current_group)
+
         # 识别价格档位（KG+, CBM+...），归入当前仓库组
-        if current_group and r_val and ("kg" in r_val.lower() or "cbm" in r_val.lower() or "KG" in r_val):
-            current_group["headers"].append((col_idx, r_val))
+        # 允许档位在 header_row 或 ref_row 中
+        found_kw = ""
+        if "kg" in h_val.lower() or "cbm" in h_val.lower() or "KG" in h_val or "方" in h_val:
+            found_kw = h_val
+        elif "kg" in r_val.lower() or "cbm" in r_val.lower() or "KG" in r_val or "方" in r_val:
+            found_kw = r_val
+            
+        if current_group and found_kw:
+            current_group["headers"].append((col_idx, found_kw))
 
     return groups
 
@@ -76,7 +88,7 @@ def parse_jinlian_excel(file_path: str) -> list:
     source_name = file_path.split("\\")[-1].split("/")[-1]
 
     try:
-        wb = openpyxl.load_workbook(file_path, data_only=True)
+        wb = openpyxl.load_workbook(file_path, data_only=True, read_only=True)
 
         for sheet_name in wb.sheetnames:
             if not _is_valid_sheet(sheet_name):
@@ -101,11 +113,14 @@ def parse_jinlian_excel(file_path: str) -> list:
                 # 检测锚点行：含有"交货仓"或"分区"关键词
                 anchor_col = -1
                 region_col = -1  # "分区"/"美东"这一列的索引
+                is_warehouse_mode = False
                 for col_idx, val in enumerate(row):
                     s = str(val).strip() if val is not None else ""
-                    if "交货仓" in s or "分区" in s:
+                    if "交货仓" in s or "分区" in s or "仓库代码" in s:
                         anchor_col = col_idx
-                    if "分区" in s or "区域" in s:
+                        if "仓库代码" in s:
+                            is_warehouse_mode = True
+                    if "分区" in s or "区域" in s or "仓库" in s:
                         region_col = col_idx
 
                 if anchor_col == -1:
@@ -149,17 +164,25 @@ def parse_jinlian_excel(file_path: str) -> list:
                 while i < len(all_rows):
                     data_row = all_rows[i]
 
-                    # 读取区域标识（美东/美中/美西）
+                    # 读取区域标识（美东/美中/美西）或仓库代码（ABE2等）
                     region_val = ""
-                    for check_col in range(max(0, region_col - 1), min(region_col + 3, len(data_row))):
-                        v = str(data_row[check_col]).strip() if data_row[check_col] is not None else ""
-                        if _is_region_row(v):
-                            region_val = v
-                            region_col = check_col
-                            break
+                    current_wh_codes = []
+                    
+                    if is_warehouse_mode:
+                        region_val = str(data_row[anchor_col]).strip() if anchor_col < len(data_row) and data_row[anchor_col] is not None else ""
+                        if region_val and region_val.upper() not in ["仓库代码", "仓库名称", "None", ""]:
+                            # 简单的仓库代码提取
+                            current_wh_codes = [c.strip().upper() for c in re.split(r'[/,，\n ]+', region_val) if c.strip()]
+                    else:
+                        for check_col in range(max(0, region_col - 1), min(region_col + 3, len(data_row))):
+                            v = str(data_row[check_col]).strip() if data_row[check_col] is not None else ""
+                            if _is_region_row(v):
+                                region_val = v
+                                region_col = check_col
+                                break
 
-                    # 非区域数据行则结束当前块
-                    if not region_val:
+                    # 非数据行则结束当前块
+                    if not region_val or (is_warehouse_mode and not current_wh_codes):
                         # 检测是否碰到新的锚点、说明行或完全空行
                         any_val = [c for c in data_row if c is not None]
                         if not any_val:
@@ -174,6 +197,8 @@ def parse_jinlian_excel(file_path: str) -> list:
 
                     # 清理区域名（去掉括号内的邮编说明）
                     region_clean = re.sub(r'[（(].*?[）)]', '', region_val).strip()
+                    
+                    target_codes = current_wh_codes if is_warehouse_mode else [region_clean]
 
                     # 对每个仓库组提取价格
                     for group in warehouse_groups:
@@ -193,18 +218,19 @@ def parse_jinlian_excel(file_path: str) -> list:
                         if delivery_time_col != -1 and delivery_time_col < len(data_row):
                             delivery_time = str(data_row[delivery_time_col] or "").strip()
 
-                        all_quotes.append({
-                            "渠道": f"{current_channel}({group['name']})",
-                            "目的地区": region_clean,          # 锦联用"目的地区"，而非"仓库代码"
-                            "仓库代码": region_clean,          # 兼容搜索逻辑，同时写入仓库代码字段
-                            "时效和赔偿约定": "",
-                            "价格体系": prices,
-                            "起收重量": "",
-                            "宣称时效": delivery_time,
-                            "附加备注": f"目的地区: {region_val}",
-                            "_source": source_name,
-                            "_type": "region_based"        # 标记这条数据是"邮编区"类型而非"仓库代码"类型
-                        })
+                        for code in target_codes:
+                            all_quotes.append({
+                                "渠道": f"{current_channel}({group['name']})",
+                                "目的地区": region_clean,
+                                "仓库代码": code,
+                                "时效和赔偿约定": "",
+                                "价格体系": prices,
+                                "起收重量": "",
+                                "宣称时效": delivery_time,
+                                "附加备注": f"来源: {region_val}",
+                                "_source": source_name,
+                                "_type": "warehouse_based" if is_warehouse_mode else "region_based"
+                            })
                     i += 1
 
     except Exception as e:

@@ -18,11 +18,21 @@ def parse_quote_file(file_path: str) -> List[Dict]:
         if ext in [".xlsx", ".xls"]:
             # 文件名路由：锦联系列用专属解析器，其他用通用解析器
             if "锦联" in filename:
-                from services.jinlian_parser import parse_jinlian_excel
-                return parse_jinlian_excel(file_path)
+                if any(x in filename for x in ["欧", "加", "英", "墨"]):
+                    from services.jinlian_global_parser import parse_jinlian_global_excel
+                    return parse_jinlian_global_excel(file_path)
+                else:
+                    from services.jinlian_parser import parse_jinlian_excel
+                    return parse_jinlian_excel(file_path)
             elif "亿阳" in filename:
                 from services.yiyang_parser import parse_yiyang_excel
                 return parse_yiyang_excel(file_path)
+            elif "星夜" in filename:
+                from services.xingye_parser import parse_xingye_excel
+                return parse_xingye_excel(file_path)
+            elif "腾信" in filename:
+                from services.tengxin_parser import parse_tengxin_excel
+                return parse_tengxin_excel(file_path)
             else:
                 from services.excel_parser import parse_complex_excel
                 return parse_complex_excel(file_path)
