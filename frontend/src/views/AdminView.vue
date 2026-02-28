@@ -253,13 +253,28 @@ const deleteQuote = async (filename) => {
 
 <style scoped>
 .admin-container {
-  min-height: 100vh;
+  height: 100vh;
+  overflow-y: auto;
   padding: 40px;
   display: flex;
   flex-direction: column;
   gap: 32px;
   background: radial-gradient(circle at top right, rgba(59, 130, 246, 0.1), transparent 40%),
               radial-gradient(circle at bottom left, rgba(139, 92, 246, 0.1), transparent 40%);
+}
+
+.admin-container::-webkit-scrollbar {
+  width: 8px;
+}
+.admin-container::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.02);
+}
+.admin-container::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+}
+.admin-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
 }
 
 .admin-header {
@@ -424,23 +439,6 @@ const deleteQuote = async (filename) => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 480px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-/* Scrollbar strictly for these inner lists */
-.uploaded-list ul::-webkit-scrollbar {
-  width: 4px;
-}
-.uploaded-list ul::-webkit-scrollbar-track {
-  background: transparent;
-}
-.uploaded-list ul::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 4px;
-}
-.uploaded-list ul::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.2);
 }
 .uploaded-list li {
   display: flex;
