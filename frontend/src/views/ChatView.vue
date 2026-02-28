@@ -1,5 +1,5 @@
 <template>
-  <div class="app-layout">
+  <div :class="['app-layout', currentMode + '-mode']">
     <div :class="['sidebar-overlay', { show: isSidebarOpen }]" @click="isSidebarOpen = false"></div>
     <aside :class="['sidebar', 'glass-panel', { show: isSidebarOpen }]">
       <div class="sidebar-header">
@@ -56,13 +56,24 @@
       <!-- Chat Area -->
       <main class="chat-main" ref="chatMain">
         <div v-if="messages.length === 0" class="welcome-screen">
-          <h2 class="welcome-name">您好，我是小易，您的全能助手</h2>
-          <h2 class="welcome-slogan">把繁琐的流程交给我，把专注留给真正重要的事情。</h2>
-          <p>今天想先解决什么？</p>
-          <div class="suggestion-chips">
-            <button @click="presetMsg('我们的出勤打卡制度是怎样的？')">公司的出勤打卡制度是怎样的？</button>
-            <button @click="presetMsg('帮我查一下美西航线这周的最新报价')">查一下美西航线最新报价</button>
-          </div>
+          <template v-if="currentMode === 'general'">
+            <h2 class="welcome-name">您好，我是小易，您的全能助手</h2>
+            <h2 class="welcome-slogan">把繁琐的流程交给我，把专注留给真正重要的事情。</h2>
+            <p>今天想先解决什么？</p>
+            <div class="suggestion-chips">
+              <button @click="presetMsg('我们的出勤打卡制度是怎样的？')">公司的出勤打卡制度是怎样的？</button>
+              <button @click="presetMsg('帮我查一下美西航线这周的最新报价')">查一下美西航线最新报价</button>
+            </div>
+          </template>
+          <template v-else>
+            <h2 class="welcome-name">欢迎来到知识教练模式</h2>
+            <h2 class="welcome-slogan">行业百事通与严苛客户模拟器。</h2>
+            <p>想演练一下，还是请教问题？</p>
+            <div class="suggestion-chips">
+              <button @click="presetMsg('我是公司新员工，你能扮演一个想走海运到美国ONT8的客户来刁难一下我吗？')">扮演刁钻客户演练</button>
+              <button @click="presetMsg('能通俗地给我讲解一下什么是DDP和DDU吗？')">讲解物流基础知识</button>
+            </div>
+          </template>
         </div>
 
         <div class="message-list">
@@ -256,6 +267,7 @@ const sendMessage = async () => {
       },
       body: JSON.stringify({
         message: content,
+        mode: currentMode.value,
         history: messages.value.slice(0, Math.max(0, messages.value.length - 2)).map(m => ({
           role: m.role,
           content: m.content
@@ -298,7 +310,20 @@ const sendMessage = async () => {
   background: var(--bg-primary);
   width: 100vw;
   overflow: hidden;
+  transition: background-color 0.4s ease, --primary-gradient 0.4s ease;
 }
+
+.coach-mode {
+  --bg-primary: #f0fdf4;
+  --bg-tertiary: #dcfce7;
+  --primary-gradient: linear-gradient(135deg, #059669 0%, #10b981 100%);
+  --text-gradient: linear-gradient(135deg, #064e3b 0%, #047857 100%);
+  --accent-color: #059669;
+  --accent-hover: #047857;
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(16, 185, 129, 0.2);
+}
+
 .sidebar {
   width: 280px;
   border-right: 1px solid var(--border-color);
