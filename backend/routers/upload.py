@@ -74,3 +74,57 @@ async def upload_quote(file: UploadFile = File(...)):
         return {"status": "success", "message": f"Quote file {file.filename} uploaded and parsed successfully."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/documents")
+async def list_documents():
+    """List all uploaded knowledge base documents."""
+    try:
+        if not os.path.exists(UPLOAD_DOCS_DIR):
+            return {"files": []}
+        files = [f for f in os.listdir(UPLOAD_DOCS_DIR) if os.path.isfile(os.path.join(UPLOAD_DOCS_DIR, f))]
+        # Sort by modification time, newest first
+        files.sort(key=lambda x: os.path.getmtime(os.path.join(UPLOAD_DOCS_DIR, x)), reverse=True)
+        return {"files": files}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/document/{filename}")
+async def delete_document(filename: str):
+    """Delete a document and its knowledge base chunks."""
+    try:
+        file_path = os.path.join(UPLOAD_DOCS_DIR, filename)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            
+        # Delete from ChromaDB
+        delete_documents_by_source(filename)
+        return {"status": "success", "message": f"Document {filename} deleted successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/quotes")
+async def list_quotes():
+    """List all uploaded quote files."""
+    try:
+        if not os.path.exists(QUOTE_DIR):
+            return {"files": []}
+        files = [f for f in os.listdir(QUOTE_DIR) if os.path.isfile(os.path.join(QUOTE_DIR, f))]
+        # Sort by modification time, newest first
+        files.sort(key=lambda x: os.path.getmtime(os.path.join(QUOTE_DIR, x)), reverse=True)
+        return {"files": files}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/quote/{filename}")
+async def delete_quote(filename: str):
+    """Delete a quote file from the system."""
+    try:
+        file_path = os.path.join(QUOTE_DIR, filename)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            
+        # Reload cache to reflect deletion
+        load_all_quotes()
+        return {"status": "success", "message": f"Quote file {filename} deleted successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

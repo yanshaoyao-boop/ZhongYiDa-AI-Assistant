@@ -39,6 +39,17 @@
           <span v-else>开始批量上传学习</span>
         </button>
         <div v-if="docMessage" class="status-msg" :class="docStatus">{{ docMessage }}</div>
+        
+        <!-- Uploaded Docs List -->
+        <div class="uploaded-list" v-if="uploadedDocs.length > 0">
+          <h3>已学习的资料库</h3>
+          <ul>
+            <li v-for="file in uploadedDocs" :key="file">
+              <span class="file-name">{{ file }}</span>
+              <button class="btn-delete" @click="deleteDoc(file)" title="从记忆中删除">🗑️ 删除</button>
+            </li>
+          </ul>
+        </div>
       </section>
 
       <!-- Quotes Upload Section -->
@@ -70,17 +81,54 @@
           <span v-else>批量更新系统报价表</span>
         </button>
         <div v-if="quoteMessage" class="status-msg" :class="quoteStatus">{{ quoteMessage }}</div>
+        
+        <!-- Uploaded Quotes List -->
+        <div class="uploaded-list" v-if="uploadedQuotes.length > 0">
+          <h3>系统中的报价表</h3>
+          <ul>
+            <li v-for="file in uploadedQuotes" :key="file">
+              <span class="file-name">{{ file }}</span>
+              <button class="btn-delete" @click="deleteQuote(file)" title="从记忆中删除">🗑️ 删除</button>
+            </li>
+          </ul>
+        </div>
       </section>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import { FileBox as IconFileBox, Database as IconDatabase, UploadCloud as IconUpload } from 'lucide-vue-next'
 
 const BASE_URL = `http://${window.location.hostname}:8000/api/upload`
+
+const uploadedDocs = ref([])
+const uploadedQuotes = ref([])
+
+const fetchUploadedDocs = async () => {
+  try {
+    const res = await axios.get(`${BASE_URL}/documents`)
+    uploadedDocs.value = res.data.files || []
+  } catch (err) {
+    console.error("Failed to fetch documents:", err)
+  }
+}
+
+const fetchUploadedQuotes = async () => {
+  try {
+    const res = await axios.get(`${BASE_URL}/quotes`)
+    uploadedQuotes.value = res.data.files || []
+  } catch (err) {
+    console.error("Failed to fetch quotes:", err)
+  }
+}
+
+onMounted(() => {
+  fetchUploadedDocs()
+  fetchUploadedQuotes()
+})
 
 // Docs logic
 const isDraggingDoc = ref(false)
@@ -132,7 +180,19 @@ const uploadDocuments = async () => {
     docMessage.value = `处理完成。成功: ${successCount}. 失败: ${errorMessages.length}. 错误信息: ${errorMessages.join('; ')}`
   }
   docUploading.value = false
+  fetchUploadedDocs()
 }
+
+const deleteDoc = async (filename) => {
+  if (!confirm(`确定要从系统记忆中删除【${filename}】吗？删除后不可恢复。`)) return
+  try {
+    await axios.delete(`${BASE_URL}/document/${encodeURIComponent(filename)}`)
+    fetchUploadedDocs()
+  } catch (err) {
+    alert(`删除失败: ${err.response?.data?.detail || err.message}`)
+  }
+}
+
 
 // Quote logic
 const isDraggingQuote = ref(false)
@@ -177,6 +237,17 @@ const uploadQuotes = async () => {
   quoteMessage.value = `成功更新了 ${successCount} 份报价单。`
   quoteFiles.value = []
   quoteUploading.value = false
+  fetchUploadedQuotes()
+}
+
+const deleteQuote = async (filename) => {
+  if (!confirm(`确定要从系统中删除报价表【${filename}】吗？`)) return
+  try {
+    await axios.delete(`${BASE_URL}/quote/${encodeURIComponent(filename)}`)
+    fetchUploadedQuotes()
+  } catch (err) {
+    alert(`删除失败: ${err.response?.data?.detail || err.message}`)
+  }
 }
 </script>
 
@@ -335,4 +406,54 @@ const uploadQuotes = async () => {
 }
 .success { background: rgba(16, 185, 129, 0.1); color: #34d399; }
 .error { background: rgba(239, 68, 68, 0.1); color: #f87171; }
+
+.uploaded-list {
+  margin-top: 10px;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 8px;
+  padding: 16px;
+}
+.uploaded-list h3 {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+.uploaded-list ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.uploaded-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  font-size: 14px;
+}
+.file-name {
+  color: var(--text-primary);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 70%;
+}
+.btn-delete {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger-color);
+  border: none;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.btn-delete:hover {
+  background: var(--danger-color);
+  color: white;
+}
 </style>
