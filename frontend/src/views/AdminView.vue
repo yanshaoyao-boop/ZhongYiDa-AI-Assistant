@@ -424,6 +424,23 @@ const deleteQuote = async (filename) => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+/* Scrollbar strictly for these inner lists */
+.uploaded-list ul::-webkit-scrollbar {
+  width: 4px;
+}
+.uploaded-list ul::-webkit-scrollbar-track {
+  background: transparent;
+}
+.uploaded-list ul::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+}
+.uploaded-list ul::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.2);
 }
 .uploaded-list li {
   display: flex;
