@@ -2,7 +2,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 import os
 import shutil
 from services.doc_parser import parse_document, chunk_text
-from services.rag_service import add_documents_to_db
+from services.rag_service import add_documents_to_db, delete_documents_by_source
 from services.llm_client import get_embedding
 from services.quote_service import parse_quote_file, load_all_quotes, DATA_DIR as QUOTE_DIR
 import uuid
@@ -31,6 +31,12 @@ async def upload_document(file: UploadFile = File(...)):
             
         # Chunk text
         chunks = chunk_text(text)
+        
+        # Determine unique source name
+        source_name = file.filename
+        
+        # DELETE old overlapping chunks if they exist to prevent memory duplication and conflict
+        delete_documents_by_source(source_name)
         
         # Get embeddings and save to ChromaDB
         for i, chunk in enumerate(chunks):

@@ -28,6 +28,16 @@ def add_documents_to_db(ids: list[str], texts: list[str], embeddings: list[list[
         metadatas=metadatas
     )
 
+def delete_documents_by_source(source_name: str):
+    """Delete all chunks belonging to a specific file from ChromaDB"""
+    try:
+        collection.delete(
+            where={"source": source_name}
+        )
+    except Exception as e:
+        print(f"Error deleting previous chunks for {source_name}: {e}")
+
+
 def search_similar_documents(query_embedding: list[float], n_results: int = 3):
     """Search for the most similar document chunks given a query embedding"""
     results = collection.query(
