@@ -424,7 +424,7 @@ const deleteQuote = async (filename) => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 200px;
+  max-height: 480px;
   overflow-y: auto;
   padding-right: 4px;
 }
