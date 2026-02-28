@@ -36,13 +36,13 @@
         <div class="mode-selector">
           <button 
             :class="['mode-btn', { active: currentMode === 'general' }]"
-            @click="currentMode = 'general'"
+            @click="switchMode('general')"
           >
             <span class="icon">✨</span> 全能助手
           </button>
           <button 
             :class="['mode-btn', { active: currentMode === 'coach' }]"
-            @click="currentMode = 'coach'"
+            @click="switchMode('coach')"
           >
             <span class="icon">📚</span> 知识教练
           </button>
@@ -149,19 +149,38 @@ const scrollToBottom = async () => {
   }
 }
 
-onMounted(() => {
-  const saved = localStorage.getItem('zyd_chat_sessions')
+const loadSessionsForMode = (mode) => {
+  const saved = localStorage.getItem(`zyd_chat_sessions_${mode}`)
   if (saved) {
     try {
       sessions.value = JSON.parse(saved)
-    } catch(e) {}
+    } catch(e) {
+      sessions.value = []
+    }
+  } else {
+    sessions.value = []
   }
+  
   if (sessions.value.length === 0) {
     startNewChat()
   } else {
     currentSessionId.value = sessions.value[0].id
     messages.value = sessions.value[0].messages || []
   }
+}
+
+const switchMode = (mode) => {
+  if (currentMode.value === mode) return
+  currentMode.value = mode
+  loadSessionsForMode(mode)
+}
+
+onMounted(() => {
+  const oldSaved = localStorage.getItem('zyd_chat_sessions')
+  if (oldSaved && !localStorage.getItem('zyd_chat_sessions_general')) {
+    localStorage.setItem('zyd_chat_sessions_general', oldSaved)
+  }
+  loadSessionsForMode(currentMode.value)
 })
 
 const startNewChat = () => {
@@ -206,7 +225,7 @@ const deleteSession = (id) => {
 }
 
 const saveSessions = () => {
-  localStorage.setItem('zyd_chat_sessions', JSON.stringify(sessions.value))
+  localStorage.setItem(`zyd_chat_sessions_${currentMode.value}`, JSON.stringify(sessions.value))
 }
 
 watch(() => messages.value, () => {
