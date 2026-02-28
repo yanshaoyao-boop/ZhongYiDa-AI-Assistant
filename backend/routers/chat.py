@@ -14,6 +14,7 @@ class ChatRequest(BaseModel):
     message: str
     history: Optional[List[dict]] = []
     mode: Optional[str] = "general"
+    image_base64: Optional[str] = None
     
 async def classify_intent(message: str, history: List[dict] = None) -> str:
     """Classify user intent to determine routing (simple heuristic or LLM based)"""
@@ -42,6 +43,18 @@ async def classify_intent(message: str, history: List[dict] = None) -> str:
 async def chat_stream(request: ChatRequest):
     """Stream chat response based on mode, RAG, and quote tables."""
     
+    # Process image if present
+    if request.image_base64:
+        from services.llm_client import describe_image
+        try:
+            image_desc = await describe_image(request.image_base64)
+            if image_desc:
+                img_context = f"[系统提示：用户上传了一张图片，大模型的视觉解析结果如下：\n{image_desc}]\n\n"
+                request.message = img_context + request.message
+        except Exception as e:
+            print(f"Image processing error: {e}")
+            request.message = f"[图片解析失败，请提醒用户重新上传] " + request.message
+
     system_prompt = ""
     
     if request.mode == "coach":
@@ -82,7 +95,12 @@ async def chat_stream(request: ChatRequest):
 
 4. **以表为准**：下方展示的【报价表数据】是唯一来源。
 
-5. **老鸟策略建议**：在结尾用 **【💡 老鸟建议】** 给出1-2句关于规避风险或成交技巧的干货，拒绝波浪号。
+5. **计费重逻辑补完**：如果用户提供了货物的箱规和重量，必须同时报出【计费重】。
+   * 计算逻辑：体积重 (KG) = 长(cm) * 宽(cm) * 高(cm) / 6000 (或 7000，请根据主流渠道选取)；
+   * 最终计费重 = Max(实重, 体积重)；
+   * 必须清晰列出：实重、体积重、最终计费重。
+
+6. **老鸟策略建议**：在结尾用 **【💡 老鸟建议】** 给出1-2句关于规避风险或成交技巧的干货，拒绝波浪号。
 
 【系统生效率报价表数据】：
 {quote_data}
@@ -109,6 +127,10 @@ async def chat_stream(request: ChatRequest):
 
     # Build messages array
     messages = [{"role": "system", "content": system_prompt}]
+    
+    # Nudge for images: If we have an image context, add a specific instruction to the system prompt
+    if request.image_base64 and "[系统提示" in request.message:
+        messages[0]["content"] += "\n\n**重要指令**：用户当前上传了一张图片，其解析内容已经附带在用户的最新留言中（以[系统提示]开头）。你必须根据这些解析出的文字信息来理解图片，并像真的看见了图片一样回答，严禁回答“我看不见图片”。"
     
     # Append history (limited to last 20 for context length)
     if request.history:

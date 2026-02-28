@@ -90,6 +90,9 @@
               </template>
             </div>
             <div class="message-content glass-panel" :class="{'is-typing': msg.isTyping}">
+              <div v-if="msg.image" class="message-image-container">
+                <img :src="msg.image" alt="用户上传图片" class="chat-message-image" @click="openImageModal(msg.image)" />
+              </div>
               <div class="markdown-body" v-html="renderMarkdown(msg.content)"></div>
               <span v-if="msg.isTyping" class="cursor-blink"></span>
             </div>
@@ -99,18 +102,35 @@
 
       <!-- Input Area -->
       <footer class="chat-footer">
-        <div class="input-box glass-panel">
-          <textarea 
-            v-model="inputMsg" 
-            @keydown.enter.prevent="sendMessage"
-            placeholder="给小易发送消息，按 ENTER 键发送..."
-            rows="1"
-            ref="inputRef"
-            @input="autoGrow"
-          ></textarea>
-          <button class="send-btn" :disabled="!inputMsg.trim() || isGenerating" @click="sendMessage">
-            <IconSend class="icon-send" />
-          </button>
+        <div class="input-container glass-panel" 
+             :class="{'has-image': selectedImage}"
+             @dragover.prevent="onDragOver"
+             @drop.prevent="onDrop">
+          <div v-if="selectedImage" class="image-preview-area">
+            <img :src="selectedImage" alt="Preview" class="image-preview" />
+            <button class="remove-image-btn" @click="removeImage"><IconXCircle size="18" /></button>
+          </div>
+          <div class="input-box">
+            <button class="upload-pic-btn" @click="triggerImageUpload" title="上传图片分析">
+              <IconImage class="icon-img" />
+            </button>
+            <input type="file" ref="fileInput" style="display:none" @change="onImageSelected" accept="image/jpeg,image/png,image/webp" />
+            <textarea 
+              v-model="inputMsg" 
+              @keydown.enter.prevent="sendMessage"
+              @paste="handlePaste"
+              placeholder="发送消息、粘贴或拖入图片..."
+              rows="1"
+              ref="inputRef"
+              @input="autoGrow"
+            ></textarea>
+            <button v-if="!isGenerating" class="send-btn" :disabled="!inputMsg.trim() && !selectedImage" @click="sendMessage">
+              <IconSend class="icon-send" />
+            </button>
+            <button v-else class="send-btn stop-btn" @click="stopGeneration" title="停止生成">
+              <IconSquare class="icon-send" />
+            </button>
+          </div>
         </div>
         <p class="disclaimer">助手生成的内容可能不准确，请参考系统里的正式文档与报价。</p>
       </footer>
@@ -122,15 +142,87 @@
 import { ref, watch, nextTick, onMounted } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { Send as IconSend, Menu as IconMenu, X as IconX } from 'lucide-vue-next'
+import { Send as IconSend, Menu as IconMenu, X as IconX, Image as IconImage, XCircle as IconXCircle, Square as IconSquare } from 'lucide-vue-next'
 
 const messages = ref([])
 const inputMsg = ref('')
 const isGenerating = ref(false)
+const abortController = ref(null)
+
+const stopGeneration = () => {
+  if (abortController.value) {
+    abortController.value.abort()
+  }
+}
 const chatMain = ref(null)
 const inputRef = ref(null)
 const currentMode = ref('general')
 const isSidebarOpen = ref(false)
+
+const selectedImage = ref(null)
+const fileInput = ref(null)
+
+const triggerImageUpload = () => {
+  if (fileInput.value) fileInput.value.click()
+}
+
+const onImageSelected = (e) => {
+  const file = e.target.files[0]
+  if (file) {
+    const reader = new FileReader()
+    reader.onload = (evt) => {
+      selectedImage.value = evt.target.result
+    }
+    reader.readAsDataURL(file)
+  }
+}
+
+const removeImage = () => {
+  selectedImage.value = null
+  if (fileInput.value) {
+    fileInput.value.value = ''
+  }
+}
+
+const handlePaste = (e) => {
+  const items = e.clipboardData.items
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].type.indexOf('image') !== -1) {
+      const blob = items[i].getAsFile()
+      const reader = new FileReader()
+      reader.onload = (evt) => {
+        selectedImage.value = evt.target.result
+      }
+      reader.readAsDataURL(blob)
+    }
+  }
+}
+
+const onDragOver = (e) => {
+  // Can add visual feedback for dragging here
+}
+
+const onDrop = (e) => {
+  const file = e.dataTransfer.files[0]
+  if (file && file.type.startsWith('image/')) {
+    const reader = new FileReader()
+    reader.onload = (evt) => {
+      selectedImage.value = evt.target.result
+    }
+    reader.readAsDataURL(file)
+  }
+}
+
+// Full screen image modal logic (Optional enhancement)
+const showImageModal = ref(false)
+const modalImageUrl = ref('')
+const openImageModal = (url) => {
+  modalImageUrl.value = url
+  showImageModal.value = true
+}
+const closeImageModal = () => {
+  showImageModal.value = false
+}
 
 const sessions = ref([])
 const currentSessionId = ref(null)
@@ -255,19 +347,28 @@ const autoGrow = () => {
 }
 
 const sendMessage = async () => {
-  const content = inputMsg.value.trim()
-  if (!content || isGenerating.value) return
+  let content = inputMsg.value.trim()
+  if (!content && !selectedImage.value) return
+  if (isGenerating.value) return
+  
+  if (!content && selectedImage.value) {
+    content = "这是一份发货清单图片，请帮我分析各项货物的实重、尺寸，计算出计费重，并直接为我提供合适的报价方案。"
+  }
   
   messages.value.push({
     role: 'user',
-    content: content
+    content: content,
+    image: selectedImage.value // Store image in history
   })
   
   inputMsg.value = ''
+  const currentImage = selectedImage.value
+  removeImage()
   if (inputRef.value) {
     inputRef.value.style.height = 'auto'
   }
   isGenerating.value = true
+  abortController.value = new AbortController()
   
   const aiMsgIdx = messages.value.length
   messages.value.push({
@@ -281,12 +382,14 @@ const sendMessage = async () => {
   try {
     const response = await fetch(`http://${window.location.hostname}:8000/api/chat/stream`, {
       method: 'POST',
+      signal: abortController.value.signal,
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         message: content,
         mode: currentMode.value,
+        image_base64: currentImage ? currentImage.split(',')[1] : null,
         history: messages.value.slice(0, Math.max(0, messages.value.length - 2)).map(m => ({
           role: m.role,
           content: m.content
@@ -312,8 +415,13 @@ const sendMessage = async () => {
       }
     }
   } catch (err) {
-    console.error('Chat error:', err)
-    messages.value[aiMsgIdx].content = `**Error**: ${err.message}. 请检查后端服务是否启动以及 API KEY 是否正确配置。`
+    if (err.name === 'AbortError') {
+      console.log('Generation stopped by user')
+      messages.value[aiMsgIdx].content += '\n\n*[用户已终止生成]*'
+    } else {
+      console.error('Chat error:', err)
+      messages.value[aiMsgIdx].content = `**Error**: ${err.message}. 请检查后端服务是否启动以及 API KEY 是否正确配置。`
+    }
   } finally {
     messages.value[aiMsgIdx].isTyping = false
     isGenerating.value = false
@@ -611,6 +719,17 @@ const sendMessage = async () => {
   padding: 16px 20px;
   line-height: 1.6;
 }
+.message-image-container {
+  margin-bottom: 12px;
+}
+.chat-message-image {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 8px;
+  cursor: zoom-in;
+  border: 1px solid var(--border-color);
+  display: block;
+}
 .message-wrapper.user .message-content {
   background: rgba(37, 99, 235, 0.08);
   border-color: rgba(37, 99, 235, 0.2);
@@ -642,15 +761,74 @@ const sendMessage = async () => {
 .chat-footer {
   padding: 0 15% 32px;
 }
+.input-container {
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.3s;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.input-container:focus-within {
+  border-color: var(--accent-hover);
+}
+.image-preview-area {
+  padding: 12px 16px 0;
+  position: relative;
+  display: inline-block;
+  align-self: flex-start;
+}
+.image-preview {
+  max-width: 100px;
+  max-height: 100px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  object-fit: cover;
+}
+.remove-image-btn {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.remove-image-btn:hover {
+  background: var(--danger-color);
+  color: white;
+}
 .input-box {
   display: flex;
   align-items: flex-end;
   padding: 12px 16px;
   gap: 12px;
-  transition: border-color 0.3s;
 }
-.input-box:focus-within {
-  border-color: var(--accent-hover);
+.upload-pic-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 6px;
+  margin-bottom: 2px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+.upload-pic-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--accent-color);
+}
+.icon-img {
+  width: 20px;
+  height: 20px;
 }
 .input-box textarea {
   flex: 1;
@@ -681,6 +859,12 @@ const sendMessage = async () => {
 }
 .send-btn:hover:not(:disabled) {
   background: var(--accent-hover);
+}
+.stop-btn {
+  background: var(--danger-color, #ef4444);
+}
+.stop-btn:hover {
+  background: #dc2626 !important;
 }
 .send-btn:disabled {
   background: var(--bg-tertiary);

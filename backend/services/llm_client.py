@@ -13,6 +13,7 @@ load_dotenv()
 
 DOUBAO_API_KEY = os.getenv("DOUBAO_API_KEY", "")
 DOUBAO_MODEL_ENDPOINT = os.getenv("DOUBAO_MODEL_ENDPOINT", "")
+DOUBAO_VISION_ENDPOINT = os.getenv("DOUBAO_VISION_ENDPOINT", DOUBAO_MODEL_ENDPOINT) # 优先使用视觉端点
 DOUBAO_EMBEDDING_ENDPOINT = os.getenv("DOUBAO_EMBEDDING_ENDPOINT", "")
 BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 
@@ -80,7 +81,7 @@ async def describe_image(image_base64: str) -> str:
     }
     
     payload = {
-        "model": DOUBAO_MODEL_ENDPOINT,
+        "model": DOUBAO_VISION_ENDPOINT,
         "messages": [
             {
                 "role": "user",
@@ -98,14 +99,23 @@ async def describe_image(image_base64: str) -> str:
                 ]
             }
         ],
-        "max_tokens": 512
+        "max_tokens": 1024
     }
     
+    # Use standard Chat Completions endpoint for 1.5-vision series
+    url = f"{BASE_URL}/chat/completions"
+    
     async with httpx.AsyncClient() as client:
-        response = await client.post(f"{BASE_URL}/chat/completions", headers=headers, json=payload, timeout=60.0)
-        if response.status_code != 200:
-            print(f"Vision API Error: {response.status_code} - {response.text}")
-            return ""
-        
-        data = response.json()
-        return data["choices"][0]["message"]["content"]
+        try:
+            response = await client.post(url, headers=headers, json=payload, timeout=60.0)
+            if response.status_code != 200:
+                error_body = response.text
+                print(f"Vision API Error ({url}): {response.status_code} - {error_body}")
+                return f"[识别失败：模型接入点({DOUBAO_VISION_ENDPOINT})返回了错误。请确认该接入点是否支持视觉问答。]"
+            
+            data = response.json()
+            # Standard OpenAI compatible structure
+            return data["choices"][0]["message"]["content"]
+        except Exception as e:
+            print(f"Describe image crash: {e}")
+            return f"[解析图片时发生系统错误: {str(e)}]"
