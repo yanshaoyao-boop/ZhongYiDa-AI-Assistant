@@ -59,7 +59,7 @@ def load_all_quotes():
                 QUOTES_CACHE[filename] = records
     return list(QUOTES_CACHE.keys())
 
-def search_best_quotes(query: str, limit: int = 15) -> List[Dict]:
+def search_best_quotes(query: str, limit: int = 40) -> List[Dict]:
     """Search for relevant quotes based on warehouse codes or channel names in the query."""
     if not QUOTES_CACHE:
         load_all_quotes()
@@ -68,50 +68,90 @@ def search_best_quotes(query: str, limit: int = 15) -> List[Dict]:
     wh_pattern = re.compile(r'[A-Z]{3,4}\d+[A-Z]?')
     found_whs = wh_pattern.findall(query.upper())
     
-    results = []
+    # 建立仓库到区域的隐式映射
+    wh_to_region = {
+        "ONT8": "美西", "LGB8": "美西", "LAX9": "美西", "PHX5": "美西", "SBD1": "美西",
+        "SMF3": "美西", "LAS1": "美西", "OAK3": "美西", "SCK4": "美西", "FAT1": "美西",
+        "GEG1": "美西", "FTW1": "美中", "IND9": "美中", "MDW2": "美中", "MEM1": "美中",
+        "MQJ1": "美中", "OKL2": "美中", "TPA2": "美中", "SDF8": "美中", "TEB9": "美东",
+        "ABE2": "美东", "PHL7": "美东", "CLT2": "美东", "SAV3": "美东", "BWI2": "美东",
+        "EWR4": "美东", "LGA9": "美东"
+    }
     
-    # 优先级1：仓库代码精确匹配（美线/加线标准代码，如 ONT8, YYZ1）
-    if found_whs:
-        for wh in found_whs:
-            for filename, records in QUOTES_CACHE.items():
-                for r in records:
-                    if wh in r.get("仓库代码", "").upper():
-                        r_copy = r.copy()
-                        r_copy["_source"] = filename
-                        results.append(r_copy)
-    
-    # 优先级2：渠道关键词匹配（普船、快船、卡派、快递派 等）
-    keywords = ["14T", "16T", "18T", "20T", "OA", "普船", "快船", "海派", "卡派",
-                "快递派", "美转加", "直航", "亚马逊", "限时达", "锦联", "空派", "空运"]
-    found_keywords = [k for k in keywords if k.lower() in query.lower()]
-    
-    if len(results) < limit:
-        for filename, records in QUOTES_CACHE.items():
-            for r in records:
-                if any(k.lower() in r.get("渠道", "").lower() for k in found_keywords):
-                    if r not in results:
-                        r_copy = r.copy()
-                        r_copy["_source"] = filename
-                        results.append(r_copy)
-            if len(results) >= limit:
-                break
+    extra_regions = []
+    for wh in found_whs:
+        if wh in wh_to_region:
+            extra_regions.append(wh_to_region[wh])
 
-    # 优先级3：锦联区域匹配（美东/美中/美西），专门给快递派/空派等锦联产品用
     region_map = {"美东": "美东", "美中": "美中", "美西": "美西",
                   "东部": "美东", "中部": "美中", "西部": "美西"}
-    found_regions = [v for k, v in region_map.items() if k in query]
-    if found_regions and len(results) < limit:
-        for filename, records in QUOTES_CACHE.items():
-            for r in records:
-                if r.get("_type") == "region_based" and r.get("目的地区") in found_regions:
-                    if r not in results:
-                        r_copy = r.copy()
-                        r_copy["_source"] = filename
-                        results.append(r_copy)
-            if len(results) >= limit:
-                break
+    found_regions_from_query = [v for k, v in region_map.items() if k in query]
+    all_found_regions = list(set(found_regions_from_query + extra_regions))
+
+    priority_results = []
+    other_results = []
     
-    return results[:limit]
+    # 识别查询中是否指名道姓要某一家
+    explicit_agents = []
+    for agent in ["锦联", "亿阳", "星夜", "腾信", "明日之星"]:
+        if agent in query:
+            explicit_agents.append(agent)
+
+    def is_priority(filename: str) -> bool:
+        if explicit_agents:
+            return any(a in filename for a in explicit_agents)
+        return "明日之星" in filename
+
+    def is_duplicate(r: Dict, results_list: List[Dict]) -> bool:
+        return any(res["渠道"] == r["渠道"] and res.get("仓库代码") == r.get("仓库代码") and res.get("目的地区") == r.get("目的地区") for res in results_list)
+
+    def passes_geography_filter(r: Dict) -> bool:
+        # 如果用户没有限制地理位置，直接放行
+        if not found_whs and not all_found_regions:
+            return True
+        
+        wh_code = r.get("仓库代码", "").upper()
+        region = r.get("目的地区", "")
+        
+        # 精确仓库匹配
+        if any(wh in wh_code for wh in found_whs):
+            return True
+        # 区域匹配（锦联等区域报价）
+        if any(rg in region for rg in all_found_regions):
+            return True
+            
+        return False
+
+    agent_keywords = ["明日之星", "锦联", "亿阳", "星夜", "腾信"]
+    service_keywords = ["14T", "16T", "18T", "20T", "OA", "普船", "快船", "海派", "卡派",
+                        "快递派", "美转加", "直航", "亚马逊", "限时达", "锦联", "空派", "空运"]
+    search_keywords = list(set(service_keywords + agent_keywords))
+    found_keywords = [k for k in search_keywords if k.lower() in query.lower()]
+
+    # 遍历所有数据并根据匹配度分级
+    for filename, records in QUOTES_CACHE.items():
+        for r in records:
+            if not passes_geography_filter(r):
+                continue
+            
+            # 只有通过了地理位置过滤，才进行关键词匹配
+            matches_agent = any(a.lower() in filename.lower() or a.lower() in r.get("渠道", "").lower() for a in explicit_agents)
+            matches_keyword = any(k.lower() in r.get("渠道", "").lower() for k in found_keywords)
+            
+            # 如果是指定仓库查询，默认任何包含该仓库的都是匹配的
+            matches_wh = any(wh in r.get("仓库代码", "").upper() for wh in found_whs) if found_whs else False
+            
+            if matches_wh or matches_agent or matches_keyword or all_found_regions:
+                if not is_duplicate(r, priority_results + other_results):
+                    r_copy = r.copy()
+                    r_copy["_source"] = filename
+                    if is_priority(filename):
+                        priority_results.append(r_copy)
+                    else:
+                        other_results.append(r_copy)
+
+    final_results = priority_results + other_results
+    return final_results[:limit]
 
 def get_quote_data_as_string(query: str = None) -> str:
     """Return quote data as formatted structured JSON text for the LLM to read."""

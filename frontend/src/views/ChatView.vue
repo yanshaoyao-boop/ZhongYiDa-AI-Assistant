@@ -67,11 +67,35 @@
           </template>
           <template v-else>
             <h2 class="welcome-name">欢迎来到知识教练模式</h2>
-            <h2 class="welcome-slogan">行业百事通与严苛客户模拟器。</h2>
-            <p>想演练一下，还是请教问题？</p>
-            <div class="suggestion-chips">
-              <button @click="presetMsg('我是公司新员工，你能扮演一个想走海运到美国ONT8的客户来刁难一下我吗？')">扮演刁钻客户演练</button>
-              <button @click="presetMsg('能通俗地给我讲解一下什么是DDP和DDU吗？')">讲解物流基础知识</button>
+            <h2 class="welcome-slogan">场景化沉浸式对练，打造金牌业务员。</h2>
+            <p>请选择一个演练场景开始实战，或直接请教基础知识：</p>
+            
+            <div class="scenario-cards">
+              <div class="scenario-card" @click="startCoachScenario('抠门比价型', '你是一个手里拿了好几个极低价格的抠门客户，来找货代询价，疯狂试探底价。请直接开始第一句话，不要说多余的废话。')">
+                <span class="emoji">💰</span>
+                <div class="card-info">
+                  <h4>抠门比价型</h4>
+                  <p>疯狂压价，拿着别家的低价来刁难</p>
+                </div>
+              </div>
+              <div class="scenario-card" @click="startCoachScenario('严苛大卖型', '你是一个每月走50条柜子的大卖，对时效、延误赔偿、账期要求极高，压迫感强。请直接开始第一句话，挑战我的专业度。')">
+                <span class="emoji">🏢</span>
+                <div class="card-info">
+                  <h4>严苛大卖型</h4>
+                  <p>货量大要求高，考验专业度与气场</p>
+                </div>
+              </div>
+              <div class="scenario-card" @click="startCoachScenario('纯小白型', '你是一个第一次发亚马逊FBA的小白客户，什么都不懂，连DDP是什么也不知道，但又要得急。请直接开始第一句话。')">
+                <span class="emoji">👶</span>
+                <div class="card-info">
+                  <h4>亚马逊纯小白</h4>
+                  <p>第一次发货，需要极大的耐心和引导</p>
+                </div>
+              </div>
+            </div>
+            
+            <div class="suggestion-chips" style="margin-top: 24px;">
+              <button @click="presetMsg('能通俗地给我讲解一下什么是DDP和DDU吗？')">📖 常见物流基础名词讲解</button>
             </div>
           </template>
         </div>
@@ -102,6 +126,11 @@
 
       <!-- Input Area -->
       <footer class="chat-footer">
+        <div class="coach-action-bar" v-if="currentMode === 'coach' && messages.length > 0">
+           <button class="evaluate-btn" @click="requestCoachEvaluation" :disabled="isGenerating">
+              <span class="icon">📈</span> 结束对练并获取导师点评
+           </button>
+        </div>
         <div class="input-container glass-panel" 
              :class="{'has-image': selectedImage}"
              @dragover.prevent="onDragOver"
@@ -335,6 +364,20 @@ watch(() => messages.value, () => {
 
 const presetMsg = (msg) => {
   inputMsg.value = msg
+  sendMessage()
+}
+
+const startCoachScenario = (name, prompt) => {
+  inputMsg.value = `我要挑战【${name}】场景。${prompt}`
+  sendMessage()
+}
+
+const requestCoachEvaluation = () => {
+  if (isGenerating.value) return
+  if (messages.value.length === 0) return
+  
+  const content = "【结束对练】请现在切换为“资深销售总监/金牌导师”的人设，根据刚才的全部聊天记录，输出一份结构化的点评报告，必须包含：\n1. 整体评分(百分制)\n2. 闪光点(我做得好的地方)\n3. 踩坑或丢分项(报错价、过度承诺或遗漏项)\n4. 话术修正建议(对比原来话术和建议话术)\n请用Markdown格式输出，并给出下一步改进建议。"
+  inputMsg.value = content
   sendMessage()
 }
 
@@ -673,6 +716,80 @@ const sendMessage = async () => {
 .suggestion-chips button:hover {
   background: rgba(0, 0, 0, 0.03);
   border-color: var(--accent-hover);
+}
+
+.scenario-cards {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+  max-width: 800px;
+  margin: 0 auto;
+}
+.scenario-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 16px;
+  width: 240px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  text-align: left;
+}
+.scenario-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(16, 185, 129, 0.1);
+  border-color: var(--accent-color);
+}
+.scenario-card .emoji {
+  font-size: 28px;
+  margin-top: 2px;
+}
+.scenario-card h4 {
+  margin: 0 0 4px 0;
+  color: var(--text-primary);
+  font-size: 16px;
+}
+.scenario-card p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.coach-action-bar {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+  animation: fadeIn 0.3s ease;
+}
+.evaluate-btn {
+  background: var(--primary-gradient);
+  color: white;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+  transition: transform 0.2s, opacity 0.2s;
+}
+.evaluate-btn:hover {
+  transform: translateY(-2px);
+  opacity: 0.95;
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+}
+.evaluate-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .message-wrapper {

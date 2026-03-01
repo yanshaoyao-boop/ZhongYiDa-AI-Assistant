@@ -25,6 +25,7 @@ def parse_tengxin_excel(file_path: str) -> list:
     按网格和仓库代码锚点查找。
     """
     all_quotes = []
+    wb = None
     source_name = file_path.split("\\")[-1].split("/")[-1]
 
     try:
@@ -130,5 +131,8 @@ def parse_tengxin_excel(file_path: str) -> list:
             
     except Exception as e:
         print(f"Error parsing tengxin: {e}")
+    finally:
+        if wb:
+            wb.close()
         
     return all_quotes

@@ -86,8 +86,13 @@ def parse_jinlian_global_excel(file_path: str) -> list:
     all_quotes = []
     source_name = file_path.split("\\")[-1].split("/")[-1]
 
+    all_quotes = []
+    wb = None
+    source_name = file_path.split("\\")[-1].split("/")[-1]
+
     try:
         wb = openpyxl.load_workbook(file_path, data_only=True, read_only=True)
+        # ... (rest of logic)
         for sheet_name in wb.sheetnames:
             if not _is_valid_sheet(sheet_name):
                 continue
@@ -233,5 +238,8 @@ def parse_jinlian_global_excel(file_path: str) -> list:
         import traceback
         print(f"Error parse_jinlian_global_excel {file_path}: {e}")
         traceback.print_exc()
+    finally:
+        if wb:
+            wb.close()
 
     return all_quotes

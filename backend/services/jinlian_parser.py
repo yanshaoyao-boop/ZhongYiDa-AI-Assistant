@@ -85,11 +85,12 @@ def parse_jinlian_excel(file_path: str) -> list:
     价格按多仓库组横向展开。
     """
     all_quotes = []
+    wb = None
     source_name = file_path.split("\\")[-1].split("/")[-1]
 
     try:
         wb = openpyxl.load_workbook(file_path, data_only=True, read_only=True)
-
+        # ... (rest of logic)
         for sheet_name in wb.sheetnames:
             if not _is_valid_sheet(sheet_name):
                 continue
@@ -139,6 +140,12 @@ def parse_jinlian_excel(file_path: str) -> list:
                     continue
 
                 price_header_row = all_rows[i + 1]
+                
+                # 再次检测，很多时候"交货仓"的正下方（即 price_header_row 对应的位置）写着"仓库代码"
+                if not is_warehouse_mode and anchor_col != -1 and anchor_col < len(price_header_row):
+                    s2 = str(price_header_row[anchor_col]).strip() if price_header_row[anchor_col] is not None else ""
+                    if "仓库" in s2 or "代码" in s2 or "FBA" in s2:
+                        is_warehouse_mode = True
 
                 # 识别仓库组（从 anchor_col+1 开始扫描）
                 warehouse_groups = _detect_warehouse_groups(row, price_header_row, anchor_col + 1)
@@ -172,11 +179,21 @@ def parse_jinlian_excel(file_path: str) -> list:
                         region_val = str(data_row[anchor_col]).strip() if anchor_col < len(data_row) and data_row[anchor_col] is not None else ""
                         if region_val and region_val.upper() not in ["仓库代码", "仓库名称", "None", ""]:
                             # 简单的仓库代码提取
-                            current_wh_codes = [c.strip().upper() for c in re.split(r'[/,，\n ]+', region_val) if c.strip()]
+                            raw_codes = [c.strip().upper() for c in re.split(r'[/,，\n ]+', region_val) if c.strip()]
+                            for c in raw_codes:
+                                # 尝试从 "ONT8(92551-9534)" 这种格式中截取纯净的 "ONT8"
+                                m = re.search(r'([A-Z]{3,4}\d+[A-Z]?)', c)
+                                if m:
+                                    current_wh_codes.append(m.group(1))
+                                else:
+                                    # 剥离括号
+                                    clean_c = re.sub(r'[\(\（].*?[\)\）]', '', c).strip()
+                                    if clean_c:
+                                        current_wh_codes.append(clean_c)
                     else:
                         for check_col in range(max(0, region_col - 1), min(region_col + 3, len(data_row))):
                             v = str(data_row[check_col]).strip() if data_row[check_col] is not None else ""
-                            if _is_region_row(v):
+                            if _is_region_row(v) or re.match(r'[A-Z]{3,4}\d+[A-Z]?', v.upper()):
                                 region_val = v
                                 region_col = check_col
                                 break
@@ -237,5 +254,8 @@ def parse_jinlian_excel(file_path: str) -> list:
         import traceback
         print(f"Error parse_jinlian_excel {file_path}: {e}")
         traceback.print_exc()
+    finally:
+        if wb:
+            wb.close()
 
     return all_quotes

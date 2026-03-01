@@ -33,6 +33,7 @@ def parse_complex_excel(file_path: str) -> list:
             return None
 
     all_quotes = []
+    wb = None
 
     try:
         # 补丁一：使用 openpyxl data_only=True，读取公式的真实计算结果（而非公式字符串）
@@ -241,5 +242,8 @@ def parse_complex_excel(file_path: str) -> list:
         import traceback
         print(f"Error parse_complex_excel {file_path}: {e}")
         traceback.print_exc()
+    finally:
+        if wb:
+            wb.close()
 
     return all_quotes

@@ -21,18 +21,37 @@ def parse_yiyang_excel(file_path: str) -> list:
     all_quotes = []
     source_name = file_path.split("\\")[-1].split("/")[-1]
 
+    wb = None
+    sheets_data = {}
     try:
-        wb = openpyxl.load_workbook(file_path, data_only=True)
+        if file_path.lower().endswith('.xls'):
+            import xlrd
+            wb = xlrd.open_workbook(file_path)
+            for sheet_name in wb.sheet_names():
+                sheet = wb.sheet_by_name(sheet_name)
+                rows = []
+                for rx in range(sheet.nrows):
+                    rows.append(sheet.row_values(rx))
+                sheets_data[sheet_name] = rows
+            # xlrd doesn't need explicit close if no file locking, but release resources
+            wb.release_resources()
+            wb = None # so finally block doesn't crash on xlrd
+        else:
+            wb = openpyxl.load_workbook(file_path, data_only=True, read_only=True)
+            for sheet_name in wb.sheetnames:
+                sheet = wb[sheet_name]
+                sheets_data[sheet_name] = [list(r) for r in sheet.iter_rows(values_only=True)]
 
+        # ... (rest of the logic)
         # 1. 降维打击：直接提取《卡派价格汇总表》
-        if "卡派价格汇总表" in wb.sheetnames:
-            ws = wb["卡派价格汇总表"]
-            for i, row in enumerate(ws.iter_rows(values_only=True)):
+        if "卡派价格汇总表" in sheets_data:
+            all_rows = sheets_data["卡派价格汇总表"]
+            for i, row in enumerate(all_rows):
                 if i == 0: 
                     continue # 跳过表头
                 
                 channel = str(row[0]).strip() if row[0] is not None else ""
-                wh = str(row[1]).strip().upper() if row[1] is not None else ""
+                wh = str(row[1]).strip().upper() if len(row) > 1 and row[1] is not None else ""
                 
                 if not channel or not wh or "对应渠道" in channel:
                     continue
@@ -57,7 +76,8 @@ def parse_yiyang_excel(file_path: str) -> list:
                         "起收重量": "12KG+",
                         "宣称时效": time_val,
                         "附加备注": "",
-                        "_source": source_name
+                        "_source": source_name,
+                        "_type": "yiyang_flat"
                     })
 
                 # 提取深圳/广州仓价格(列 5,6,7)
@@ -78,13 +98,14 @@ def parse_yiyang_excel(file_path: str) -> list:
                         "起收重量": "12KG+",
                         "宣称时效": time_val,
                         "附加备注": "",
-                        "_source": source_name
+                        "_source": source_name,
+                        "_type": "yiyang_flat"
                     })
 
-        # 2. 补齐拼图：解析《YY海派渠道汇总》（分区模式）
-        if "YY海派渠道汇总" in wb.sheetnames:
-            ws = wb["YY海派渠道汇总"]
-            all_rows = [list(r) for r in ws.iter_rows(values_only=True)]
+        # 2. 深度扫描：解析所有包含 "渠道汇总" 关键词的 Sheet
+        summary_sheets = [name for name in sheets_data.keys() if "渠道汇总" in name]
+        for sheet_name in summary_sheets:
+            all_rows = sheets_data[sheet_name]
             
             anchor_idx = -1
             for i, r in enumerate(all_rows):
@@ -101,14 +122,18 @@ def parse_yiyang_excel(file_path: str) -> list:
                 col_time = -1
                 for j, v in enumerate(header):
                     s = str(v).strip() if v else ""
-                    if "下单渠道" in s: col_channel = j
-                    if "分区" in s: col_region = j
-                    if "时效赔付" in s: col_time = j
+                    if "下单渠道" in s or "渠道名称" in s: col_channel = j
+                    if "分区" in s or "仓库代码" in s: col_region = j
+                    if "时效" in s: col_time = j
                 
-                # 设定列组
+                # 如果没找到这些关键列，跳过
+                if col_region == -1: continue
+
+                # 定义价格列组（通常是 义乌/深圳 两种仓）
+                # 亿阳表的规律：分区列之后紧跟 3 列为一个仓的价格梯度
                 groups = [
                     {"name": "义乌仓", "col_start": col_region + 1, "col_end": col_region + 3},
-                    {"name": "深圳/广州仓", "col_start": col_region + 4, "col_end": col_region + 6}
+                    {"name": "深圳/广州/华南仓", "col_start": col_region + 4, "col_end": col_region + 6}
                 ]
                 
                 for g in groups:
@@ -120,25 +145,19 @@ def parse_yiyang_excel(file_path: str) -> list:
                 current_channel = ""
                 for i in range(anchor_idx + 2, len(all_rows)):
                     row = all_rows[i]
-                    if not any(c for c in row): 
-                        continue
+                    if not any(c for c in row): continue
                     
                     ch_val = str(row[col_channel]).strip() if col_channel != -1 and col_channel < len(row) and row[col_channel] is not None else ""
-                    # 处理隐式继承（如果是空的，用上一行的渠道名）
                     if ch_val: 
                         current_channel = ch_val.split("\n")[0].strip()
                     
-                    if not current_channel: 
-                        continue
+                    if not current_channel: continue
                     
-                    reg_val = str(row[col_region]).strip() if col_region != -1 and col_region < len(row) and row[col_region] is not None else ""
-                    if not reg_val or "分区" in reg_val: 
-                        continue
-                    if "美" not in reg_val: 
-                        continue
+                    reg_val = str(row[col_region]).strip() if col_region < len(row) and row[col_region] is not None else ""
+                    if not reg_val or "分区" in reg_val: continue
                     
-                    # 摘取美西、美中、美东
-                    region_clean = reg_val.split("-")[0].strip()
+                    # 清理区域名，提取仓库代码
+                    raw_codes = [c.strip().upper() for c in re.split(r'[/,，\n ]+', reg_val) if c.strip()]
                     time_val = str(row[col_time]).strip() if col_time != -1 and col_time < len(row) and row[col_time] is not None else ""
                     
                     for g in groups:
@@ -149,23 +168,27 @@ def parse_yiyang_excel(file_path: str) -> list:
                             if v and v > 0:
                                 prices[h] = v
                                 has_price = True
+                        
                         if has_price:
-                            all_quotes.append({
-                                "渠道": f"{current_channel}({g['name']})",
-                                "目的地区": region_clean,
-                                "仓库代码": region_clean,
-                                "时效和赔偿约定": "",
-                                "价格体系": prices,
-                                "起收重量": "",
-                                "宣称时效": time_val.split("\n")[0],
-                                "附加备注": reg_val,
-                                "_source": source_name,
-                                "_type": "region_based"
-                            })
+                            # 如果是一串仓库代码，则每个人都加一遍
+                            for code in raw_codes:
+                                all_quotes.append({
+                                    "渠道": f"{current_channel}({g['name']})",
+                                    "目的地区": reg_val if len(reg_val) < 10 else "多目的地",
+                                    "仓库代码": code,
+                                    "价格体系": prices,
+                                    "宣称时效": time_val.split("\n")[0] if time_val else "",
+                                    "附加备注": f"Sheet: {sheet_name}",
+                                    "_source": source_name,
+                                    "_type": "yiyang_region"
+                                })
 
     except Exception as e:
         import traceback
         print(f"Error parse_yiyang_excel {file_path}: {e}")
         traceback.print_exc()
+    finally:
+        if wb:
+            wb.close()
 
     return all_quotes
