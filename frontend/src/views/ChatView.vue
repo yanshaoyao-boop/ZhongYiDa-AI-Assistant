@@ -60,41 +60,27 @@
             <h2 class="welcome-name">您好，我是小易，您的全能助手</h2>
             <h2 class="welcome-slogan">把繁琐的流程交给我，把专注留给真正重要的事情。</h2>
             <p>今天想先解决什么？</p>
-            <div class="suggestion-chips">
-              <button @click="presetMsg('我们的出勤打卡制度是怎样的？')">公司的出勤打卡制度是怎样的？</button>
-              <button @click="presetMsg('帮我查一下美西航线这周的最新报价')">查一下美西航线最新报价</button>
-            </div>
+            <!-- 删除了建议卡片 -->
           </template>
           <template v-else>
             <h2 class="welcome-name">欢迎来到知识教练模式</h2>
             <h2 class="welcome-slogan">场景化沉浸式对练，打造金牌业务员。</h2>
             <p>请选择一个演练场景开始实战，或直接请教基础知识：</p>
             
-            <div class="scenario-cards">
-              <div class="scenario-card" @click="startCoachScenario('抠门比价型', '你是一个手里拿了好几个极低价格的抠门客户，来找货代询价，疯狂试探底价。请直接开始第一句话，不要说多余的废话。')">
-                <span class="emoji">💰</span>
-                <div class="card-info">
-                  <h4>抠门比价型</h4>
-                  <p>疯狂压价，拿着别家的低价来刁难</p>
-                </div>
-              </div>
-              <div class="scenario-card" @click="startCoachScenario('严苛大卖型', '你是一个每月走50条柜子的大卖，对时效、延误赔偿、账期要求极高，压迫感强。请直接开始第一句话，挑战我的专业度。')">
-                <span class="emoji">🏢</span>
-                <div class="card-info">
-                  <h4>严苛大卖型</h4>
-                  <p>货量大要求高，考验专业度与气场</p>
-                </div>
-              </div>
-              <div class="scenario-card" @click="startCoachScenario('纯小白型', '你是一个第一次发亚马逊FBA的小白客户，什么都不懂，连DDP是什么也不知道，但又要得急。请直接开始第一句话。')">
-                <span class="emoji">👶</span>
-                <div class="card-info">
-                  <h4>亚马逊纯小白</h4>
-                  <p>第一次发货，需要极大的耐心和引导</p>
+            <!-- 5 大盲盒分类入口 -->
+            <div class="category-grid">
+              <div v-for="cat in mainCategories" :key="cat.name" 
+                   class="category-main-card" 
+                   @click="startRandomCoachInCategory(cat.name)">
+                <span class="cat-emoji">{{ cat.emoji }}</span>
+                <div class="cat-info">
+                  <h3>{{ cat.name }}</h3>
+                  <p>{{ cat.desc }}</p>
                 </div>
               </div>
             </div>
             
-            <div class="suggestion-chips" style="margin-top: 24px;">
+            <div class="suggestion-chips" style="margin-top: 32px;">
               <button @click="presetMsg('能通俗地给我讲解一下什么是DDP和DDU吗？')">📖 常见物流基础名词讲解</button>
             </div>
           </template>
@@ -168,7 +154,8 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick, onMounted } from 'vue'
+import { ref, watch, nextTick, onMounted, computed } from 'vue'
+import axios from 'axios'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { Send as IconSend, Menu as IconMenu, X as IconX, Image as IconImage, XCircle as IconXCircle, Square as IconSquare } from 'lucide-vue-next'
@@ -255,6 +242,47 @@ const closeImageModal = () => {
 
 const sessions = ref([])
 const currentSessionId = ref(null)
+const coachCases = ref([])
+const selectedCategory = ref(null)
+const mainCategories = [
+  { name: '精明比价派', emoji: '💰', desc: '应对价格敏感、反复试探底价的客户' },
+  { name: '强势大货主', emoji: '🏢', desc: '在舱位、时效与压迫式沟通中建立主权' },
+  { name: '麻烦纠纷型', emoji: '💢', desc: '处理计费重、查验费、小白理解等纠纷' },
+  { name: '美国线卖家', emoji: '🇺🇸', desc: '专注美森快船、海派、空派等美线实战' },
+  { name: '欧洲线卖家', emoji: '🇪🇺', desc: '聚焦税号、清关、欧洲延迟等欧线博弈' }
+]
+
+const startRandomCoachInCategory = (categoryName) => {
+  const matchingCases = coachCases.value.filter(c => {
+    const cat = c.category || ''
+    return cat.includes(categoryName) || categoryName.substring(0,3) === cat.substring(0,3)
+  })
+  
+  if (matchingCases.length === 0) {
+    alert(`库存里暂时没有【${categoryName}】类的案例，请管理员上传剧本素材。`)
+    return
+  }
+  
+  const randomCase = matchingCases[Math.floor(Math.random() * matchingCases.length)]
+  startCoachScenario(randomCase.name, randomCase.prompt)
+}
+
+const fetchCoachCases = async () => {
+  try {
+    const res = await axios.get(`http://${window.location.hostname}:8000/api/upload/coach-cases`)
+    // 后端现在直接返回数组
+    if (Array.isArray(res.data)) {
+      coachCases.value = res.data
+    } else if (res.data && res.data.cases) {
+      coachCases.value = res.data.cases
+    } else {
+      coachCases.value = []
+    }
+    console.log(">> Loaded coach cases count:", coachCases.value.length)
+  } catch (err) {
+    console.error("Failed to fetch coach cases:", err)
+  }
+}
 
 const renderMarkdown = (text) => {
   if (!text) return ''
@@ -302,6 +330,7 @@ onMounted(() => {
     localStorage.setItem('zyd_chat_sessions_general', oldSaved)
   }
   loadSessionsForMode(currentMode.value)
+  fetchCoachCases()
 })
 
 const startNewChat = () => {
@@ -368,7 +397,7 @@ const presetMsg = (msg) => {
 }
 
 const startCoachScenario = (name, prompt) => {
-  inputMsg.value = `我要挑战【${name}】场景。${prompt}`
+  inputMsg.value = `我要挑战【${name}】场景。`
   sendMessage()
 }
 
@@ -469,6 +498,28 @@ const sendMessage = async () => {
     messages.value[aiMsgIdx].isTyping = false
     isGenerating.value = false
   }
+}
+
+const getCategoryClass = (cat) => {
+  if (!cat) return 'cat-default';
+  if (cat.includes('精明比价')) return 'cat-savvy';
+  if (cat.includes('强势大货主')) return 'cat-big';
+  if (cat.includes('麻烦纠纷')) return 'cat-angry';
+  
+  // 兜底映射
+  const map = {
+      '精明比价手': 'cat-savvy',
+      '强势大货主': 'cat-big',
+      '物流白纸侠': 'cat-newbie',
+      '专业老油条': 'cat-pro',
+      '怒火投诉者': 'cat-angry'
+  };
+  return map[cat] || 'cat-default';
+}
+
+const truncate = (text, len) => {
+  if (!text) return ''
+  return text.length > len ? text.slice(0, len) + '...' : text
 }
 </script>
 
@@ -731,28 +782,138 @@ const sendMessage = async () => {
   border: 1px solid var(--glass-border);
   border-radius: 12px;
   padding: 16px;
-  width: 240px;
+  width: 280px;
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
   gap: 12px;
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
   text-align: left;
+  overflow: hidden;
 }
 .scenario-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 8px 16px rgba(16, 185, 129, 0.1);
   border-color: var(--accent-color);
 }
+.scenario-card .card-main-info {
+  width: 100%;
+}
+.scenario-card .emoji-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
 .scenario-card .emoji {
-  font-size: 28px;
-  margin-top: 2px;
+  font-size: 24px;
 }
 .scenario-card h4 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  flex: 1;
+  word-break: break-all;
+}
+.card-header-row {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.category-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  font-weight: 600;
+  display: inline-block;
+}
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.category-main-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  padding: 24px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: left;
+}
+
+.category-main-card:hover {
+  transform: translateY(-6px) scale(1.02);
+  border-color: var(--accent-color);
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 20px 40px rgba(16, 185, 129, 0.15);
+}
+
+.cat-emoji {
+  font-size: 48px;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.1));
+}
+
+.cat-info h3 {
   margin: 0 0 4px 0;
   color: var(--text-primary);
-  font-size: 16px;
+  font-size: 18px;
+  font-weight: 700;
 }
+
+.cat-info p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.scenario-list-view {
+  animation: slideIn 0.4s ease-out;
+}
+
+.list-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 0 16px;
+}
+
+.back-btn {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  color: #64748b;
+  transition: all 0.2s;
+}
+
+.back-btn:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
 .scenario-card p {
   margin: 0;
   color: var(--text-secondary);
@@ -1061,8 +1222,10 @@ const sendMessage = async () => {
   }
 
   .chat-nav {
-    margin: 12px 12px 0;
-    padding: 12px 16px;
+    margin: 8px 8px 0;
+    padding: 10px 12px;
+    flex-wrap: wrap;
+    justify-content: space-between;
   }
 
   .brand-divider {
@@ -1070,15 +1233,29 @@ const sendMessage = async () => {
   }
 
   .gradient-text {
-    font-size: 16px;
+    font-size: 14px;
   }
   
   .company-logo {
-    height: 24px;
+    height: 22px;
   }
 
   .mode-selector {
-    display: none; /* Hide mode selector on very small screens to save space */
+    order: 3;
+    width: 100%;
+    margin-top: 12px;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.03);
+    border-radius: 10px;
+    padding: 2px;
+  }
+
+  .mode-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 6px 10px;
+    font-size: 13px;
+    white-space: nowrap;
   }
 
   .chat-main {

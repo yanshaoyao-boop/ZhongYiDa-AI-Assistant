@@ -93,6 +93,46 @@
           </ul>
         </div>
       </section>
+
+      <!-- Coach Cases Section -->
+      <section class="upload-section glass-panel">
+        <div class="section-header">
+          <IconUserCheck class="icon-lg text-green" />
+          <h2>知识教练剧本库</h2>
+        </div>
+        <p class="section-desc">上传真实的客诉记录或历史聊天日志。系统将通过 AI 自动提取其中的<strong>客户人设、核心冲突点和入坑陷阱</strong>，生成实战演习剧本。</p>
+        
+        <div class="drop-zone" 
+             @dragover.prevent="isDraggingCase = true" 
+             @dragleave.prevent="isDraggingCase = false" 
+             @drop.prevent="onDropCase"
+             :class="{'drag-active': isDraggingCase}"
+             @click="triggerCaseSelect">
+          <IconUpload class="upload-icon" />
+          <p v-if="!caseFile">点击或拖拽真实谈单记录到此处 (txt/doc)</p>
+          <p v-else class="file-sel">{{ caseFile.name }}</p>
+          <input type="file" ref="caseInput" style="display:none" @change="onCaseSelected" accept=".pdf,.doc,.docx,.txt" />
+        </div>
+        
+        <button class="btn-primary coach-btn" :disabled="!caseFile || caseUploading" @click="uploadCase">
+          <span v-if="caseUploading">AI 正在深度拆解剧本逻辑...</span>
+          <span v-else>生成实战演练剧本</span>
+        </button>
+        <div v-if="caseMessage" class="status-msg" :class="caseStatus">{{ caseMessage }}</div>
+        
+        <!-- Structured Cases List -->
+        <div class="uploaded-list" v-if="coachCases.length > 0">
+          <h3>实战演练剧本库</h3>
+          <ul>
+            <li v-for="c in coachCases" :key="c.id">
+              <span class="file-name">
+                <small class="tag-sm">[{{ c.category }}]</small> {{ c.name }}
+              </span>
+              <button class="btn-delete" @click="deleteCase(c.id)" title="删除剧本">🗑️ 删除</button>
+            </li>
+          </ul>
+        </div>
+      </section>
     </div>
   </div>
 </template>
@@ -100,12 +140,13 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
-import { FileBox as IconFileBox, Database as IconDatabase, UploadCloud as IconUpload } from 'lucide-vue-next'
+import { FileBox as IconFileBox, Database as IconDatabase, UploadCloud as IconUpload, UserCheck as IconUserCheck } from 'lucide-vue-next'
 
 const BASE_URL = `http://${window.location.hostname}:8000/api/upload`
 
 const uploadedDocs = ref([])
 const uploadedQuotes = ref([])
+const coachCases = ref([])
 
 const fetchUploadedDocs = async () => {
   try {
@@ -125,9 +166,20 @@ const fetchUploadedQuotes = async () => {
   }
 }
 
+const fetchCoachCases = async () => {
+  try {
+    const res = await axios.get(`${BASE_URL}/coach-cases`)
+    // 后端现在直接返回数组
+    coachCases.value = Array.isArray(res.data) ? res.data : (res.data.cases || [])
+  } catch (err) {
+    console.error("Failed to fetch coach cases:", err)
+  }
+}
+
 onMounted(() => {
   fetchUploadedDocs()
   fetchUploadedQuotes()
+  fetchCoachCases()
 })
 
 // Docs logic
@@ -249,9 +301,116 @@ const deleteQuote = async (filename) => {
     alert(`删除失败: ${err.response?.data?.detail || err.message}`)
   }
 }
+
+// Coach Cases Logic
+const isDraggingCase = ref(false)
+const caseFile = ref(null)
+const caseInput = ref(null)
+const caseUploading = ref(false)
+const caseMessage = ref('')
+const caseStatus = ref('')
+
+const triggerCaseSelect = () => caseInput.value.click()
+const onCaseSelected = (e) => caseFile.value = e.target.files[0]
+const onDropCase = (e) => {
+  isDraggingCase.value = false
+  if (e.dataTransfer.files.length > 0) {
+    caseFile.value = e.dataTransfer.files[0]
+  }
+}
+
+const uploadCase = async () => {
+  if (!caseFile.value) return
+  caseUploading.value = true
+  caseMessage.value = ''
+  caseStatus.value = ''
+  
+  const formData = new FormData()
+  formData.append('file', caseFile.value)
+  
+  try {
+    await axios.post(`${BASE_URL}/coach-case`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    caseStatus.value = 'success'
+    caseMessage.value = '成功！AI 已根据上传记录生成了新的实战剧本。'
+    caseFile.value = null
+    fetchCoachCases()
+  } catch (err) {
+    caseStatus.value = 'error'
+    caseMessage.value = `生成失败: ${err.response?.data?.detail || err.message}`
+  } finally {
+    caseUploading.value = false
+  }
+}
+
+const deleteCase = async (id) => {
+  if (!confirm('确定要删除这个实战场景吗？')) return
+  try {
+    await axios.delete(`${BASE_URL}/coach-case/${id}`)
+    fetchCoachCases()
+  } catch (err) {
+    alert(`删除失败: ${err.response?.data?.detail || err.message}`)
+  }
+}
+
+const truncate = (text, len) => {
+  if (!text) return ''
+  return text.length > len ? text.slice(0, len) + '...' : text
+}
 </script>
 
 <style scoped>
+.text-green { color: #10b981; }
+
+.coach-btn {
+  background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+}
+
+.case-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.case-admin-card {
+  background: white;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.case-admin-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.case-emoji { font-size: 20px; }
+.case-name { font-weight: 700; flex: 1; color: var(--text-primary); }
+
+.case-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.btn-delete-small {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.btn-delete-small:hover {
+  opacity: 1;
+}
+
 .admin-container {
   height: 100vh;
   overflow-y: auto;

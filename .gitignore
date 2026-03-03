@@ -30,3 +30,15 @@ list_*.py
 价格表/
 *.txt
 parsed_quotes.json
+
+# Temporary files
+~$*
+.idea/
+.vscode/
+venv/
+__pycache__/
+*.pyc
+.env
+*.log
+node_modules/
+dist/
