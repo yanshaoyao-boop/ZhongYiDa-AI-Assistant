@@ -30,6 +30,7 @@ async def classify_intent(message: str, history: List[dict] = None) -> str:
     
     # 1. Remote address check (High Priority)
     remote_keywords = ["偏远", "加费", "超编", "极偏", "邮编", "地址库", "哪里", "远不远", "送吗", "偏吗", "超区"]
+    internal_keywords = ["赚钱", "发展", "工资", "提成", "奖金", "制度", "晋升", "怎么赚", "搞钱"]
     has_remote_kw = any(kw in message for kw in remote_keywords)
     has_zip = re.search(r'(?<!\d)\d{5}(?!\d)', message)
     has_wh = wh_pattern.search(message.upper())
@@ -50,8 +51,13 @@ async def classify_intent(message: str, history: List[dict] = None) -> str:
         if kw in message:
             return "quote"
             
-    # 3. Social/Chitchat check
-    social_keywords = ["你好", "哈喽", "笑话", "讲个", "唱个", "你是谁", "你会干啥", "调戏", "暖场", "开心", "好玩"]
+    # 3. Knowledge Base / Capabilities check (High Priority for self-intro)
+    kb_keywords = ["介绍", "你是谁", "你能做什么", "做哪些事", "你会干啥", "怎么用", "操作说明", "技巧", "什么事"]
+    if any(kw in message for kw in kb_keywords):
+        return "document"
+
+    # 4. Social/Chitchat check
+    social_keywords = ["你好", "哈喽", "笑话", "讲个", "唱个", "调戏", "暖场", "开心", "好玩"]
     continuation_keywords = ["换一个", "再来", "继续", "下一个", "换个"]
     if any(kw in message for kw in social_keywords):
         return "social"
@@ -70,7 +76,11 @@ async def classify_intent(message: str, history: List[dict] = None) -> str:
             if any(kw in last_ai_msg for kw in quote_keywords) or wh_pattern.search(last_ai_msg.upper()):
                 return "quote"
 
-    # 5. If it's a short message or followup, check recent history for context
+    # 5. Internal specific keywords (Bonus for document search)
+    if any(kw in message for kw in internal_keywords):
+        return "document"
+
+    # 6. If it's a short message or followup, check recent history for context
     if history and len(history) > 0:
         recent_msgs = [m.get("content", "") for m in history[-4:] if m.get("role") == "user"]
         for old_msg in recent_msgs:
@@ -312,7 +322,8 @@ async def chat_stream(request: ChatRequest):
                 "赔偿", "理赔", "丢件", "破损", "扣货", "没收", "罚款", "索赔",
                 "偏远费", "超重费", "带电费", "附加费", "明日之星", "锦联", "亿阳",
                 "工资", "绩效", "薪水", "薪酬", "提成", "奖金", "扣款", "考勤",
-                "请假", "找谁", "问谁", "联系谁", "哪个部门", "领导", "考核", "主管"
+                "请假", "找谁", "问谁", "联系谁", "哪个部门", "领导", "考核", "主管",
+                "赚钱", "发展", "搞钱", "晋升", "怎么赚", "分钱"
             ]
             search_keywords = ["汇率", "新闻", "动态", "今天", "现在", "最新的", "最新", "实时", "美元", "天气", "发生", "现状", "大涨", "暴跌"]
             

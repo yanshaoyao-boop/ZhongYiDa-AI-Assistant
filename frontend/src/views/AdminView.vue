@@ -109,14 +109,18 @@
              :class="{'drag-active': isDraggingCase}"
              @click="triggerCaseSelect">
           <IconUpload class="upload-icon" />
-          <p v-if="!caseFile">点击或拖拽真实谈单记录到此处 (txt/doc)</p>
-          <p v-else class="file-sel">{{ caseFile.name }}</p>
-          <input type="file" ref="caseInput" style="display:none" @change="onCaseSelected" accept=".pdf,.doc,.docx,.txt" />
+          <p v-if="caseFiles.length === 0">点击或多选拖拽真实谈单记录到此处 (txt/doc)</p>
+          <div v-else class="file-list">
+            <div v-for="(file, idx) in caseFiles" :key="idx" class="file-item">
+              <span class="file-sel">{{ file.name }}</span>
+            </div>
+          </div>
+          <input type="file" ref="caseInput" style="display:none" @change="onCaseSelected" accept=".pdf,.doc,.docx,.txt" multiple />
         </div>
         
-        <button class="btn-primary coach-btn" :disabled="!caseFile || caseUploading" @click="uploadCase">
-          <span v-if="caseUploading">AI 正在深度拆解剧本逻辑...</span>
-          <span v-else>生成实战演练剧本</span>
+        <button class="btn-primary coach-btn" :disabled="caseFiles.length === 0 || caseUploading" @click="uploadCases">
+          <span v-if="caseUploading">正在深度拆解剧本 ({{ currentCaseIndex + 1 }}/{{ caseFiles.length }})...</span>
+          <span v-else>批量生成实战演练剧本</span>
         </button>
         <div v-if="caseMessage" class="status-msg" :class="caseStatus">{{ caseMessage }}</div>
         
@@ -304,44 +308,52 @@ const deleteQuote = async (filename) => {
 
 // Coach Cases Logic
 const isDraggingCase = ref(false)
-const caseFile = ref(null)
+const caseFiles = ref([])
 const caseInput = ref(null)
 const caseUploading = ref(false)
 const caseMessage = ref('')
 const caseStatus = ref('')
+const currentCaseIndex = ref(0)
 
 const triggerCaseSelect = () => caseInput.value.click()
-const onCaseSelected = (e) => caseFile.value = e.target.files[0]
+const onCaseSelected = (e) => caseFiles.value = Array.from(e.target.files)
 const onDropCase = (e) => {
   isDraggingCase.value = false
   if (e.dataTransfer.files.length > 0) {
-    caseFile.value = e.dataTransfer.files[0]
+    caseFiles.value = Array.from(e.dataTransfer.files)
   }
 }
 
-const uploadCase = async () => {
-  if (!caseFile.value) return
+const uploadCases = async () => {
+  if (caseFiles.value.length === 0) return
   caseUploading.value = true
   caseMessage.value = ''
   caseStatus.value = ''
   
-  const formData = new FormData()
-  formData.append('file', caseFile.value)
-  
-  try {
-    await axios.post(`${BASE_URL}/coach-case`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
-    caseStatus.value = 'success'
-    caseMessage.value = '成功！AI 已根据上传记录生成了新的实战剧本。'
-    caseFile.value = null
-    fetchCoachCases()
-  } catch (err) {
-    caseStatus.value = 'error'
-    caseMessage.value = `生成失败: ${err.response?.data?.detail || err.message}`
-  } finally {
-    caseUploading.value = false
+  let successCount = 0
+  let totalCasesGenerated = 0
+
+  for (let i = 0; i < caseFiles.value.length; i++) {
+    currentCaseIndex.value = i
+    const formData = new FormData()
+    formData.append('file', caseFiles.value[i])
+    
+    try {
+      const res = await axios.post(`${BASE_URL}/coach-case`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      successCount++
+      totalCasesGenerated += (res.data.processed_count || 0)
+    } catch (err) {
+      console.error(`Failed to upload ${caseFiles.value[i].name}:`, err)
+    }
   }
+
+  caseStatus.value = 'success'
+  caseMessage.value = `成功处理 ${successCount} 份文件，共生成 ${totalCasesGenerated} 个实战剧本！`
+  caseFiles.value = []
+  caseUploading.value = false
+  fetchCoachCases()
 }
 
 const deleteCase = async (id) => {

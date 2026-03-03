@@ -90,7 +90,7 @@ async def parse_document(file_path: str) -> str:
         text = await extract_text_from_pdf(file_path)
     elif ext in [".doc", ".docx"]:
         text = extract_text_from_docx(file_path)
-    elif ext == ".txt":
+    elif ext in [".txt", ".md"]:
         with open(file_path, "r", encoding="utf-8") as f:
             text = f.read()
     else:

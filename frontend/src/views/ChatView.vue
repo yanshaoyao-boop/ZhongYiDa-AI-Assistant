@@ -60,7 +60,10 @@
             <h2 class="welcome-name">您好，我是小易，您的全能助手</h2>
             <h2 class="welcome-slogan">把繁琐的流程交给我，把专注留给真正重要的事情。</h2>
             <p>今天想先解决什么？</p>
-            <!-- 删除了建议卡片 -->
+            <div class="suggestion-chips">
+              <button @click="presetMsg('我能帮你做哪些事')">🤖 我能帮你做哪些事</button>
+              <button @click="presetMsg('如何正确的使用小易')">📖 如何正确的使用小易</button>
+            </div>
           </template>
           <template v-else>
             <h2 class="welcome-name">欢迎来到知识教练模式</h2>
