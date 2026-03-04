@@ -155,13 +155,14 @@ async def create_coach_case(file: UploadFile = File(...)):
         print(f">> Found {len(case_texts)} potential cases in file.")
         
         new_cases = []
-        # 限制单次批次处理数量，防止 HTTP 超时 (豆包分析一个案例约需 3-7s)
-        batch_limit = 10 
+        # 限制单次批次处理数量，防止 HTTP 超时 (增加到30，满足用户一次传20的需求)
+        batch_limit = 30 
         for i, text in enumerate(case_texts[:batch_limit]):
             try:
                 print(f">> Processing case {i+1}/{min(len(case_texts), batch_limit)}...")
-                # 深度清洗剧本
-                case_data = await analyze_coach_case(text)
+                # 深度清洗剧本，增加 filename 作为引导
+                case_data = await analyze_coach_case(text, hint=file.filename)
+                print(f">> Successfully analyzed case: {case_data.get('name')}")
                 case_data["id"] = uuid.uuid4().hex[:8]
                 case_data["source"] = file.filename
                 new_cases.append(case_data)

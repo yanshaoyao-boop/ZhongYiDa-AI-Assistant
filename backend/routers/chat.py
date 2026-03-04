@@ -410,6 +410,29 @@ async def chat_stream(request: ChatRequest):
             if intent in ["quote", "address", "tracking"]:
                 request.use_deepseek = True
 
+    # 注入全局输出格式规范
+    detail_keywords = ["详细", "具体", "完整", "展开", "多说点", "细说"]
+    wants_detail = any(kw in request.message for kw in detail_keywords)
+    
+    if wants_detail:
+        global_style_prompt = """
+
+⚠️【全局输出表达规范】（最高级别的核心指令）：
+1. **详尽解答**：用户要求详细说明，请提供完整、详尽的内容，可以分点细致展开，确保逻辑连贯、完整。不可遗漏重要细节。
+2. **关键标粗**：务必使用 Markdown 语法对【价格/金额】、【重量/尺寸/体积】、【关键地址/邮编】、【单号/最新状态】、【行动建议】等核心信息进行加粗（如：**核心结论**）。
+3. **结构清晰**：请使用 Markdown 的大纲结构和列表（-），确保排版专业、易读，重点突出。
+"""
+    else:
+        global_style_prompt = """
+
+⚠️【全局输出表达规范】（最高级别的核心指令）：
+1. **极致精简**：拒绝长篇大论、无意义的寒暄与废话，用最精准、直白、易读的短句迅速作答。能用30字说清的绝不用50字。
+2. **关键标粗**：务必使用 Markdown 语法对【价格/金额】、【重量/尺寸/体积】、【关键地址/邮编】、【单号/最新状态】、【行动建议】等核心信息进行加粗（如：**核心结论**）。
+3. **结构清晰**：第一行直给结论。并大量使用短句和项目列表（-），确保业务员只需看一眼就能提炼出全部价值。
+"""
+    if request.mode != "coach" or (request.mode == "coach" and request.message.startswith("【结束对练】")):
+        system_prompt += global_style_prompt
+
     # Build messages array
     messages = [{"role": "system", "content": system_prompt}]
     if request.image_base64 and "[系统提示" in request.message:

@@ -185,52 +185,59 @@ async def describe_image(image_base64: str) -> str:
         print(f"Describe image crash: {e}")
         return f"[解析图片时发生系统错误: {str(e)}]"
 
-async def analyze_coach_case(raw_text: str) -> dict:
-    """Analyze raw chat logs to generate a structured coach case.
-    Strictly classified into: [美国线, 欧洲线] AND [精明比价派, 强势大货主, 麻烦纠纷型].
-    Deeply 'washes' (expands) the content to add hidden professional details and market variables.
-    """
+async def analyze_coach_case(raw_text: str, hint: str = "") -> dict:
+    """Analyze raw chat logs to generate a structured coach case."""
     headers = {
         "Authorization": f"Bearer {DOUBAO_API_KEY}",
         "Content-Type": "application/json"
     }
     
-    prompt = f"""你是一个名为“老沈”的资深货代江湖分析师，眼光毒辣，深谙利润背后的算计。
-你需要把下面这段聊天记录，将其“深度重塑”为一个高难度的专业对练剧本。
+    hint_prompt = ""
+    if hint:
+        hint_prompt = f"【归类建议】：这段内容来自文本文件 '{hint}'，请在生成 'category' 字段时，严格优先从 [报价拉锯战, 异常纠纷处理, 业务挖坑排雷, 逼单客情维护] 中选择最符合文件名意图的标签。\n"
 
+    prompt = f"""你是一个名为“仲易达首席剧本架构师”的资深分析模型。
+你需要把下面这段聊天记录，将其“参数化”并“深度重塑”为一个具有高度博弈价值的【实战对练剧本】。
+
+{hint_prompt}
 【原始材料】：
 {raw_text}
 
-【深度重塑要求（核心指令）】：
-1. **强制注入“硬核货盘”**：
-   - 即使原记录没提，你也必须为本场景“脑补”出一套精准的货物参数：件数、单箱尺寸(cm)、单箱重量(kg)、货物品名（带点“坑”的品名，如：平衡车、纯电池、仿牌等）。
-   - 设计一个**计费重陷阱**：例如体积重刚好比实重大 30%，考察业务员是否发现并按体积计费。
+【重塑要求】：
+1. **去特定人名化**：
+   - ⚠️ **核心指令**：禁止在输出内容中出现“老沈”、“小王”、“老张”等具体姓名。
+   - 客户在开口时，如果是为了投诉或质问，应直接切入正题，或者称呼对方为“小老弟”、“你们家经理”、“你家”。
+   
+2. **参数化货物（Hidden Cargo Details）**：
+   - 你必须为本场景“脑补”一套极其精确的货物参数。包含：品名、件数(CTNS)、单件实重(KG)、单件尺寸(CM, L*W*H)。
+   - **设计逻辑陷阱**：例如品名属于“敏感货”但表面伪装成“普货”、或者“体积重大于实重”的泡货、或者地址属于“极偏远库房”。
 
-2. **强制注入“报价雷区”**：
-   - 如果是美国线/欧洲线，必须设定一个具体的**亚马逊仓库（如 ONT8/LGB8/TEB9）**或一个 5 位邮编。
-   - 设定这个地址是否为“偏远”或“极偏远”，考察业务员是否去查地址库。
-
-3. **设定客户性格与博弈深度**：
-   - 你的性格可以多变，但你的目的必须是：**套出底价、隐瞒货物属性、或者对计费重计算表示质疑**。
-   - 严禁做只有情绪的“泼妇”，要做懂行的、会压价的、甚至会拿别家虚假低价来诈你的“职业买手”。
-
-4. **输出格式**：JSON。
+3. **核心业务考点（Learning Focus）**：
+   - 明确本关考察业务员的什么能力。
 
 JSON 字段定义：
-- "name": 剧本标题（如：带磁平衡车的体积重罗生门）
-- "category": 线别 · 人设（如：美国线 · 精明比价派）
+- "name": 剧本标题
+- "difficulty": 难度等级 [Easy, Medium, Hard]
+- "category": 航线 · 人设 · 科目。
+  - **航线**：必须从 [美国线, 欧洲线] 中选一。
+  - **人设**：必须从 [行业小白, 江湖老手] 中选一。
+  - **科目**：必须从 [报价拉锯战, 异常纠纷处理, 业务挖坑排雷, 逼单客情维护] 中选一。
+  - **示例**：美国线 · 行业小白 · 报价拉锯战
 - "emoji": 代表该场景的 Emoji
-- "persona": 详细的人设（含性格地雷、其真实的隐藏货盘、拒绝配合的借口）
-- "background": 深度业务背景（含具体的 Piece/Weight/Dim 参数、目的地详细地址）
-- "conflict": 核心矛盾（本题的‘考点’：是要他加附加费？还是要他算体积重？还是发现瞒报？）
-- "success_criteria": 业务员必须问出的 3 个核心要素才算及格。
-- "prompt": 系统初始 Prompt（你以此身份直接开口，第一句必须带着模糊的货盘信息发起突袭，例如：‘老板，我这有 20 块滑板车，发美国 ONT8，给个数？’）
+- "persona": 详细人设描绘（性格、沟通雷点）。
+  ⚠️ **语气差异指令**：
+  - **行业小白**：礼貌、犹豫、爱问为什么、对缩写词（如CBM, DDP）感到困惑、容易被专业话术唬住但也容易因为听不懂而流失。
+  - **江湖老手**：语气简练、强势、满嘴专业黑话、随时拿别家低价压你、非常计较查验费/偏远费等细节、会钓鱼执法。
+- "background": 对话背景（禁止出现人称错乱，描述当前场景）
+- "cargo_details": {{"item": "品名", "qty": "件数", "gw_kg": "单件重量", "size_cm": "L*W*H", "destination": "目的仓库/邮编", "hidden_issue": "预测陷阱"}}
+- "success_criteria": 业务员必须做到的 3 件事。
+- "prompt": 【开场白】小易（买家）的第一句台词。要求：严格符合上述【语气差异指令】。江湖老手直接甩货盘问价格，小白先问能不能发货。
 """
 
     payload = {
         "model": DOUBAO_MODEL_ENDPOINT,
         "messages": [
-            {"role": "system", "content": "你是一个只输出 JSON 数据、深谙货代江湖的分析师。"},
+            {"role": "system", "content": "你是一个只输出 JSON 数据、深谙货代江湖的分析师。请确保输出是一个合法的 JSON 对象。"},
             {"role": "user", "content": prompt}
         ],
         "temperature": 0.8
@@ -239,13 +246,25 @@ JSON 字段定义：
     url = f"{BASE_URL}/chat/completions"
     
     client = get_client()
-    response = await client.post(url, headers=headers, json=payload, timeout=60.0)
-    response.raise_for_status()
-    content = response.json()["choices"][0]["message"]["content"]
-    
-    if "```json" in content:
-        content = content.split("```json")[1].split("```")[0].strip()
-    elif "```" in content:
-        content = content.split("```")[1].split("```")[0].strip()
+    try:
+        response = await client.post(url, headers=headers, json=payload, timeout=60.0)
+        response.raise_for_status()
+        content = response.json()["choices"][0]["message"]["content"]
         
-    return json.loads(content)
+        # 提取 JSON 部分
+        import re
+        json_match = re.search(r'\{.*\}', content, re.DOTALL)
+        if json_match:
+            content = json_match.group(0)
+        else:
+            # 如果没找到 {}，尝试清理 markdown 标记
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+        
+        return json.loads(content)
+    except Exception as e:
+        print(f"!! LLM Parsing Error: {str(e)}")
+        print(f"!! Raw Content: {content if 'content' in locals() else 'None'}")
+        raise e

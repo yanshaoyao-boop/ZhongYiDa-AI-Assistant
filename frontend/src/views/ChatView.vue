@@ -30,6 +30,13 @@
             <span class="brand-divider">|</span>
             <span class="gradient-text">小易智能助手</span>
           </div>
+          <!-- Mobile Intel Toggle -->
+          <button v-if="currentMode === 'coach' && currentScenario" 
+                  class="intel-toggle-mobile" 
+                  @click="isIntelOpen = !isIntelOpen"
+                  :class="{ active: isIntelOpen }">
+            <IconZap size="18" /> 实战情报
+          </button>
         </div>
 
         <!-- Mode Selector -->
@@ -53,73 +60,150 @@
         </div>
       </nav>
 
-      <!-- Chat Area -->
-      <main class="chat-main" ref="chatMain">
-        <div v-if="messages.length === 0" class="welcome-screen">
-          <template v-if="currentMode === 'general'">
-            <h2 class="welcome-name">您好，我是小易，您的全能助手</h2>
-            <h2 class="welcome-slogan">把繁琐的流程交给我，把专注留给真正重要的事情。</h2>
-            <p>今天想先解决什么？</p>
-            <div class="suggestion-chips">
-              <button @click="presetMsg('我能帮你做哪些事')">🤖 我能帮你做哪些事</button>
-              <button @click="presetMsg('如何正确的使用小易')">📖 如何正确的使用小易</button>
-            </div>
-          </template>
-          <template v-else>
-            <h2 class="welcome-name">欢迎来到知识教练模式</h2>
-            <h2 class="welcome-slogan">场景化沉浸式对练，打造金牌业务员。</h2>
-            <p>请选择一个演练场景开始实战，或直接请教基础知识：</p>
-            
-            <!-- 5 大盲盒分类入口 -->
-            <div class="category-grid">
-              <div v-for="cat in mainCategories" :key="cat.name" 
-                   class="category-main-card" 
-                   @click="startRandomCoachInCategory(cat.name)">
-                <span class="cat-emoji">{{ cat.emoji }}</span>
-                <div class="cat-info">
-                  <h3>{{ cat.name }}</h3>
-                  <p>{{ cat.desc }}</p>
+      <div class="main-body-wrapper">
+        <!-- Chat Area -->
+        <main class="chat-main" ref="chatMain">
+          <div v-if="messages.length === 0" class="welcome-screen">
+            <template v-if="currentMode === 'general'">
+              <h2 class="welcome-name">您好，我是小易，您的全能助手</h2>
+              <h2 class="welcome-slogan">把繁琐的流程交给我，把专注留给真正重要的事情。</h2>
+              <p>今天想先解决什么？</p>
+              <div class="suggestion-chips">
+                <button @click="presetMsg('我能帮你做哪些事')">🤖 我能帮你做哪些事</button>
+                <button @click="presetMsg('如何正确的使用小易')">📖 如何正确的使用小易</button>
+              </div>
+            </template>
+            <template v-else>
+              <h2 class="welcome-name">欢迎来到知识教练模式</h2>
+              <h2 class="welcome-slogan">场景化沉浸式对练，打造金牌业务员。</h2>
+              <!-- 第一级：选择航线/大区 -->
+              <div class="category-step-label" v-if="!selectedRegion">第一步：选择实战航线</div>
+              <div class="category-grid" v-if="!selectedRegion">
+                <div v-for="reg in coachRegions" :key="reg.name" 
+                     class="category-main-card region-card" 
+                     @click="selectedRegion = reg.name">
+                  <span class="cat-emoji">{{ reg.emoji }}</span>
+                  <div class="cat-info">
+                    <h3>{{ reg.name }}</h3>
+                    <p>{{ reg.desc }}</p>
+                  </div>
                 </div>
               </div>
-            </div>
-            
-            <div class="suggestion-chips" style="margin-top: 32px;">
-              <button @click="presetMsg('能通俗地给我讲解一下什么是DDP和DDU吗？')">📖 常见物流基础名词讲解</button>
-            </div>
-          </template>
-        </div>
 
-        <div class="message-list">
-          <div v-for="(msg, index) in messages" :key="index" 
-               class="message-wrapper" :class="msg.role">
-            <div class="avatar">
-              <template v-if="msg.role === 'assistant'">
-                <div class="avatar-container assistant">
-                  <img src="/logo-icon.png" alt="AI" class="ai-avatar-icon" />
-                </div>
-              </template>
-              <template v-else>
-                <div class="user-avatar">You</div>
-              </template>
-            </div>
-            <div class="message-content glass-panel" :class="{'is-typing': msg.isTyping}">
-              <div v-if="msg.image" class="message-image-container">
-                <img :src="msg.image" alt="用户上传图片" class="chat-message-image" @click="openImageModal(msg.image)" />
+              <!-- 第二层：选择客户身份 -->
+              <div class="category-step-header" v-if="selectedRegion && !selectedPersona">
+                <button class="back-link" @click="selectedRegion = null">← 返回重选航线</button>
+                <div class="category-step-label">第二步：选择【{{ selectedRegion }}】客户背景</div>
               </div>
-              <div class="markdown-body" v-html="renderMarkdown(msg.content)"></div>
-              <span v-if="msg.isTyping" class="cursor-blink"></span>
+              <div class="category-grid" v-if="selectedRegion && !selectedPersona">
+                <div v-for="per in coachPersonas" :key="per.name" 
+                     class="category-main-card persona-card" 
+                     @click="selectedPersona = per.name">
+                  <span class="cat-emoji">{{ per.emoji }}</span>
+                  <div class="cat-info">
+                    <h3>{{ per.name }}</h3>
+                    <p>{{ per.desc }}</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 第三层：选择练习科目 -->
+              <div class="category-step-header" v-if="selectedPersona">
+                <button class="back-link" @click="selectedPersona = null">← 返回重选身份</button>
+                <div class="category-step-label">第三步：选择【{{ selectedPersona }}】练习科目</div>
+              </div>
+              <div class="category-grid subjects" v-if="selectedPersona">
+                <div v-for="sub in coachSubjects" :key="sub.name" 
+                     class="category-main-card subject-card" 
+                     @click="startRandomCoachDetailed(sub.name)">
+                  <span class="cat-emoji">{{ sub.emoji }}</span>
+                  <div class="cat-info">
+                    <h3>{{ sub.name }}</h3>
+                    <p>{{ sub.desc }}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="suggestion-chips" style="margin-top: 32px;">
+                <button @click="presetMsg('能通俗地给我讲解一下什么是DDP和DDU吗？')">📖 常见物流基础名词讲解</button>
+              </div>
+            </template>
+          </div>
+
+          <div class="message-list">
+            <div v-for="(msg, index) in messages" :key="index" 
+                class="message-wrapper" :class="msg.role">
+              <div class="avatar">
+                <template v-if="msg.role === 'assistant'">
+                  <div class="avatar-container assistant">
+                    <img src="/logo-icon.png" alt="AI" class="ai-avatar-icon" />
+                  </div>
+                </template>
+                <template v-else>
+                  <div class="user-avatar">You</div>
+                </template>
+              </div>
+              <div class="message-content glass-panel" :class="{'is-typing': msg.isTyping}">
+                <div v-if="msg.image" class="message-image-container">
+                  <img :src="msg.image" alt="用户上传图片" class="chat-message-image" @click="openImageModal(msg.image)" />
+                </div>
+                <div class="markdown-body" v-html="renderMarkdown(msg.content)"></div>
+                <span v-if="msg.isTyping" class="cursor-blink"></span>
+              </div>
             </div>
           </div>
-        </div>
-      </main>
+        </main>
+
+        <!-- Combat Intel Panel (NEW) -->
+        <div v-if="currentMode === 'coach' && currentScenario" :class="['intel-overlay', { show: isIntelOpen }]" @click="isIntelOpen = false"></div>
+        <aside v-if="currentMode === 'coach' && currentScenario" 
+               :class="['combat-intel-panel', 'glass-panel', { 'show-mobile': isIntelOpen }]">
+          <div class="panel-header">
+            <IconZap class="icon-zap" />
+            <h3>实战情报中心</h3>
+          </div>
+          
+          <div class="intel-section">
+            <label>当前目标</label>
+            <p class="mission-goal">{{ currentScenario.name }}</p>
+          </div>
+
+          <div class="intel-section">
+            <label>客户情报 (Persona)</label>
+            <p class="persona-brief">{{ currentScenario.persona }}</p>
+          </div>
+
+          <div class="intel-section cargo-intel" v-if="currentScenario.cargo_details">
+            <label>隐藏货盘参数 (关键底牌)</label>
+            <div class="cargo-grid-mini">
+              <div class="cargo-item"><span>品名:</span> {{ currentScenario.cargo_details.item }}</div>
+              <div class="cargo-item"><span>件数:</span> {{ currentScenario.cargo_details.qty }} CTNS</div>
+              <div class="cargo-item"><span>规格:</span> {{ currentScenario.cargo_details.size_cm }} CM</div>
+              <div class="cargo-item"><span>重量:</span> {{ currentScenario.cargo_details.gw_kg }} KG</div>
+              <div class="cargo-item"><span>目的地:</span> {{ currentScenario.cargo_details.destination }}</div>
+            </div>
+            <div class="intel-warning" v-if="currentScenario.cargo_details.hidden_issue">
+              ⚠️ 陷阱提醒：{{ currentScenario.cargo_details.hidden_issue }}
+            </div>
+          </div>
+
+          <div class="intel-section">
+            <label>必杀技 / 通关条件</label>
+            <ul class="success-list">
+              <li v-for="(item, idx) in formatSuccessCriteria(currentScenario.success_criteria)" :key="idx">
+                {{ item }}
+              </li>
+            </ul>
+          </div>
+
+          <button class="quit-combat-btn" @click="requestCoachEvaluation">
+             结束对练并结算
+          </button>
+        </aside>
+      </div>
 
       <!-- Input Area -->
       <footer class="chat-footer">
-        <div class="coach-action-bar" v-if="currentMode === 'coach' && messages.length > 0">
-           <button class="evaluate-btn" @click="requestCoachEvaluation" :disabled="isGenerating">
-              <span class="icon">📈</span> 结束对练并获取导师点评
-           </button>
-        </div>
         <div class="input-container glass-panel" 
              :class="{'has-image': selectedImage}"
              @dragover.prevent="onDragOver"
@@ -161,6 +245,15 @@ import { ref, watch, nextTick, onMounted, computed } from 'vue'
 import axios from 'axios'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import { 
+  Menu as IconMenu, 
+  X as IconX, 
+  Send as IconSend, 
+  Image as IconImage, 
+  Square as IconSquare, 
+  XCircle as IconXCircle,
+  Zap as IconZap
+} from 'lucide-vue-next'
 const API_PORT = 8000
 const API_BASE = `http://${window.location.hostname}:${API_PORT}`
 
@@ -247,27 +340,71 @@ const closeImageModal = () => {
 const sessions = ref([])
 const currentSessionId = ref(null)
 const coachCases = ref([])
-const selectedCategory = ref(null)
-const mainCategories = [
-  { name: '精明比价派', emoji: '💰', desc: '应对价格敏感、反复试探底价的客户' },
-  { name: '强势大货主', emoji: '🏢', desc: '在舱位、时效与压迫式沟通中建立主权' },
-  { name: '麻烦纠纷型', emoji: '💢', desc: '处理计费重、查验费、小白理解等纠纷' },
-  { name: '美国线卖家', emoji: '🇺🇸', desc: '专注美森快船、海派、空派等美线实战' },
-  { name: '欧洲线卖家', emoji: '🇪🇺', desc: '聚焦税号、清关、欧洲延迟等欧线博弈' }
+const currentScenario = ref(null) 
+const selectedRegion = ref(null)
+const selectedPersona = ref(null)
+const isIntelOpen = ref(false)
+
+const formatSuccessCriteria = (criteria) => {
+  if (Array.isArray(criteria)) return criteria
+  if (typeof criteria === 'string') return criteria.split('\n').filter(t => t.trim())
+  return []
+}
+
+// L1: 大区
+const coachRegions = [
+  { name: '美国线', emoji: '🇺🇸', desc: '侧重美森、海派、邮编偏远、计费重规则' },
+  { name: '欧洲线', emoji: '🇪🇺', desc: '侧重铁路卡航、VAT税号、清关及递延规则' }
 ]
 
-const startRandomCoachInCategory = (categoryName) => {
+// L2: 人设背景
+const coachPersonas = [
+  { name: '行业小白', emoji: '🐣', desc: '礼貌客气但不懂行，需要你专业引导且极易流失' },
+  { name: '江湖老手', emoji: '😎', desc: '满嘴专业术语，深谙低价之道，极其挑剔计较' }
+]
+
+// L3: 练习科目
+const coachSubjects = [
+  { name: '报价拉锯战', emoji: '💰', desc: '模拟精明客户反复试价，考验利润把控力' },
+  { name: '异常纠纷处理', emoji: '💢', desc: '处理海关查验、计费纠纷、破损扣关等危机' },
+  { name: '业务挖坑排雷', emoji: '📦', desc: '看破客户隐藏的敏感货、超规格等行业深坑' },
+  { name: '逼单客情维护', emoji: '🤝', desc: '针对犹豫客户进行专业度展示与最终转化' }
+]
+
+const startRandomCoachDetailed = (subjectName) => {
+  if (!selectedRegion.value || !selectedPersona.value) return
+  
+  const region = selectedRegion.value
+  const persona = selectedPersona.value
+  
   const matchingCases = coachCases.value.filter(c => {
-    const cat = c.category || ''
-    return cat.includes(categoryName) || categoryName.substring(0,3) === cat.substring(0,3)
+    const cat = (c.category || '').toLowerCase()
+    
+    // 航线匹配 (用包含)
+    const rMatch = cat.includes(region.toLowerCase())
+    
+    // 人设匹配 (用包含，增加容错)
+    const pMatch = cat.includes(persona.toLowerCase()) || 
+                   (persona.includes('小白') && cat.includes('小白')) ||
+                   (persona.includes('老手') && cat.includes('老手'))
+    
+    // 科目匹配 (多关键词匹配)
+    const sMatch = cat.includes(subjectName.toLowerCase()) || 
+                   (subjectName === '报价拉锯战' && (cat.includes('报价') || cat.includes('比价') || cat.includes('拉锯'))) ||
+                   (subjectName === '异常纠纷处理' && (cat.includes('纠纷') || cat.includes('异常') || cat.includes('投诉') || cat.includes('处理'))) ||
+                   (subjectName === '业务挖坑排雷' && (cat.includes('挖坑') || cat.includes('排雷') || cat.includes('陷阱') || cat.includes('深坑') || cat.includes('风险'))) ||
+                   (subjectName === '逼单客情维护' && (cat.includes('逼单') || cat.includes('客情') || cat.includes('维护') || cat.includes('转化') || cat.includes('信任')))
+    
+    return rMatch && pMatch && sMatch
   })
   
   if (matchingCases.length === 0) {
-    alert(`库存里暂时没有【${categoryName}】类的案例，请管理员上传剧本素材。`)
+    alert(`暂无【${region} · ${persona} · ${subjectName}】分类的案例。请先通过管理后台上传解析记录。`)
     return
   }
   
   const randomCase = matchingCases[Math.floor(Math.random() * matchingCases.length)]
+  currentScenario.value = randomCase
   startCoachScenario(randomCase.name, randomCase.prompt)
 }
 
@@ -325,6 +462,13 @@ const loadSessionsForMode = (mode) => {
 const switchMode = (mode) => {
   if (currentMode.value === mode) return
   currentMode.value = mode
+  isIntelOpen.value = false
+  if (mode === 'general') {
+    currentScenario.value = null
+  } else {
+    selectedRegion.value = null 
+    selectedPersona.value = null // 重置 3 层选择
+  }
   loadSessionsForMode(mode)
 }
 
@@ -430,7 +574,15 @@ const requestCoachEvaluation = () => {
   if (isGenerating.value) return
   if (messages.value.length === 0) return
   
-  const content = "【结束对练】请现在切换为“资深销售总监/金牌导师”的人设，根据刚才的全部聊天记录，输出一份结构化的点评报告，必须包含：\n1. 整体评分(百分制)\n2. 闪光点(我做得好的地方)\n3. 踩坑或丢分项(报错价、过度承诺或遗漏项)\n4. 话术修正建议(对比原来话术和建议话术)\n请用Markdown格式输出，并给出下一步改进建议。"
+  let content = "【结束对练】请现在切换为“资深销售总监/金牌导师”的人设，根据刚才的全部聊天记录，输出一份结构化的点评报告。"
+  
+  if (currentScenario.value && currentScenario.value.cargo_details) {
+      const d = currentScenario.value.cargo_details
+      content += `\n\n【导师后台参考真实参数】：\n- 实际底价参考货物：${d.item}, ${d.qty}件, ${d.gw_kg}kg/件, 尺寸 ${d.size_cm}\n- 隐藏陷阱：${d.hidden_issue || '无'}`
+  }
+  
+  content += "\n\n要求报告必须包含：\n1. 战力评分(百分制)\n2. 询价功底(是否问全了参数、识破了陷阱)\n3. 盈利分析(对比底价，算算报亏了没)\n4. 金牌话术修正建议\n请用丰富的Markdown格式输出。"
+  
   inputMsg.value = content
   sendMessage()
 }
@@ -743,8 +895,157 @@ const truncate = (text, len) => {
 .chat-main {
   flex: 1;
   overflow-y: auto;
-  padding: 32px 15%;
+  padding: 32px 50px;
   scroll-behavior: smooth;
+}
+
+.main-body-wrapper {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+.combat-intel-panel {
+  width: 320px;
+  margin: 0 24px 24px 0;
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  animation: slideInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow-y: auto;
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.05);
+  z-index: 50;
+}
+
+.intel-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(2px);
+  z-index: 100;
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(30px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed var(--border-color);
+}
+
+.panel-header h3 {
+  font-size: 18px;
+  margin: 0;
+  color: var(--accent-color);
+  font-weight: 700;
+}
+
+.icon-zap {
+  color: #f59e0b;
+  fill: #f59e0b;
+  width: 20px;
+}
+
+.intel-section {
+  margin-bottom: 24px;
+}
+
+.intel-section label {
+  display: block;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  letter-spacing: 1px;
+}
+
+.mission-goal {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 16px;
+}
+
+.persona-brief {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.cargo-grid-mini {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  background: #f8fafc;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.cargo-item {
+  font-size: 13px;
+  color: #475569;
+}
+
+.cargo-item span {
+  color: #94a3b8;
+  width: 50px;
+  display: inline-block;
+}
+
+.intel-warning {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #dc2626;
+  background: #fef2f2;
+  padding: 8px;
+  border-radius: 4px;
+  border-left: 3px solid #dc2626;
+}
+
+.success-list {
+  padding-left: 20px;
+  margin: 0;
+}
+
+.success-list li {
+  font-size: 13px;
+  color: #047857;
+  margin-bottom: 6px;
+}
+
+.quit-combat-btn {
+  margin-top: auto;
+  width: 100%;
+  padding: 12px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.quit-combat-btn:hover {
+  background: #dc2626;
+  transform: translateY(-2px);
 }
 
 .welcome-screen {
@@ -865,6 +1166,42 @@ const truncate = (text, len) => {
   gap: 20px;
   max-width: 1000px;
   margin: 0 auto;
+}
+
+.category-grid.subjects {
+  grid-template-columns: repeat(2, 1fr);
+  max-width: 800px;
+}
+
+.category-step-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.category-step-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 800px;
+  margin: 0 auto 16px;
+}
+
+.back-link {
+  background: none;
+  border: none;
+  color: var(--accent-color);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+  font-weight: 500;
+}
+
+.back-link:hover {
+  text-decoration: underline;
 }
 
 .category-main-card {
@@ -1295,6 +1632,33 @@ const truncate = (text, len) => {
     font-size: 18px;
   }
 
+  .category-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .category-grid.subjects {
+    grid-template-columns: 1fr;
+  }
+
+  .category-main-card {
+    padding: 16px;
+    gap: 12px;
+  }
+
+  .cat-emoji {
+    font-size: 36px;
+  }
+
+  .cat-info h3 {
+    font-size: 16px;
+  }
+
+  .category-step-label {
+    font-size: 12px;
+    margin-bottom: 12px;
+  }
+
   .message-content {
     max-width: 90%;
     font-size: 15px;
@@ -1310,6 +1674,49 @@ const truncate = (text, len) => {
   
   .nav-links {
     display: none;
+  }
+
+  .intel-toggle-mobile {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: #ecfdf5;
+    color: #059669;
+    border: 1px solid #10b981;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-left: 10px;
+    cursor: pointer;
+  }
+
+  .intel-toggle-mobile.active {
+    background: #10b981;
+    color: white;
+  }
+
+  .intel-overlay.show {
+    display: block;
+  }
+
+  .combat-intel-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 85%;
+    max-width: 340px;
+    margin: 0;
+    border-radius: 20px 0 0 20px;
+    z-index: 1001;
+    transform: translateX(100%);
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: -20px 0 40px rgba(0,0,0,0.15);
+  }
+
+  .combat-intel-panel.show-mobile {
+    transform: translateX(0);
   }
 }
 </style>
