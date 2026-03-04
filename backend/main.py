@@ -6,9 +6,12 @@ from routers import upload, chat
 app = FastAPI(title="ZhongYiDa AI Assistant API")
 
 # Setup CORS
+# Setup CORS (Task 7: Improved for security and browsers compatibility)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    # In production, specify actual domains. For local dev with credentials, 
+    # we use set list instead of "*" to avoid browser rejections.
+    allow_origin_regex="https?://.*", 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

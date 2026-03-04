@@ -9,3 +9,8 @@ openpyxl
 python-docx
 PyPDF2
 httpx
+PyMuPDF
+lxml
+beautifulsoup4
+duckduckgo-search
+xlrd

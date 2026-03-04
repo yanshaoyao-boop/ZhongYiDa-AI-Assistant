@@ -122,19 +122,24 @@ def search_best_quotes(query: str, limit: int = 40) -> List[Dict]:
             
         return False
 
-    agent_keywords = ["明日之星", "锦联", "亿阳", "星夜", "腾信"]
-    service_keywords = ["14T", "16T", "18T", "20T", "OA", "普船", "快船", "海派", "卡派",
-                        "快递派", "美转加", "直航", "亚马逊", "限时达", "锦联", "空派", "空运"]
-    search_keywords = list(set(service_keywords + agent_keywords))
-    found_keywords = [k for k in search_keywords if k.lower() in query.lower()]
-
+    # 使用集合进行去重，通过 (渠道, 仓库代码, 目的地区) 组合作为唯一键，提速 O(n^2) -> O(n)
+    seen_keys = set()
+    
     # 遍历所有数据并根据匹配度分级
     for filename, records in QUOTES_CACHE.items():
+        is_prio_file = is_priority(filename)
         for r in records:
             if not passes_geography_filter(r):
                 continue
             
+            # 生成去重唯一键
+            unique_key = (r.get("渠道", ""), r.get("仓库代码", ""), r.get("目的地区", ""))
+            if unique_key in seen_keys:
+                continue
+            
             # 只有通过了地理位置过滤，才进行关键词匹配
+            search_keywords = ["海派", "海运", "空派", "空运", "美森", "限时达", "普货", "带电", "卡派"]
+            found_keywords = [k for k in search_keywords if k in query]
             matches_agent = any(a.lower() in filename.lower() or a.lower() in r.get("渠道", "").lower() for a in explicit_agents)
             matches_keyword = any(k.lower() in r.get("渠道", "").lower() for k in found_keywords)
             
@@ -142,13 +147,13 @@ def search_best_quotes(query: str, limit: int = 40) -> List[Dict]:
             matches_wh = any(wh in r.get("仓库代码", "").upper() for wh in found_whs) if found_whs else False
             
             if matches_wh or matches_agent or matches_keyword or all_found_regions:
-                if not is_duplicate(r, priority_results + other_results):
-                    r_copy = r.copy()
-                    r_copy["_source"] = filename
-                    if is_priority(filename):
-                        priority_results.append(r_copy)
-                    else:
-                        other_results.append(r_copy)
+                seen_keys.add(unique_key)
+                r_copy = r.copy()
+                r_copy["_source"] = filename
+                if is_prio_file:
+                    priority_results.append(r_copy)
+                else:
+                    other_results.append(r_copy)
 
     final_results = priority_results + other_results
     return final_results[:limit]

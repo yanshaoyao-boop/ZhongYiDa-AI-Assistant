@@ -85,14 +85,17 @@ def clean_text(text: str) -> str:
 async def parse_document(file_path: str) -> str:
     """Parse document based on its extension (Async support for Vision model)."""
     import os
+    import asyncio
     ext = os.path.splitext(file_path)[1].lower()
     if ext == ".pdf":
         text = await extract_text_from_pdf(file_path)
     elif ext in [".doc", ".docx"]:
-        text = extract_text_from_docx(file_path)
+        text = await asyncio.to_thread(extract_text_from_docx, file_path)
     elif ext in [".txt", ".md"]:
-        with open(file_path, "r", encoding="utf-8") as f:
-            text = f.read()
+        def read_txt():
+            with open(file_path, "r", encoding="utf-8") as f:
+                return f.read()
+        text = await asyncio.to_thread(read_txt)
     else:
         raise ValueError(f"Unsupported document format: {ext}")
     return clean_text(text)

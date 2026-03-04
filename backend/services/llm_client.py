@@ -20,6 +20,12 @@ DOUBAO_VISION_ENDPOINT = os.getenv("DOUBAO_VISION_ENDPOINT", DOUBAO_MODEL_ENDPOI
 DOUBAO_EMBEDDING_ENDPOINT = os.getenv("DOUBAO_EMBEDDING_ENDPOINT", "")
 BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 
+# 全局复用 HTTP 客户端平衡连接池 (Task 2)
+_http_client = httpx.AsyncClient(timeout=httpx.Timeout(90.0, connect=10.0))
+
+def get_client():
+    return _http_client
+
 class ChatMessage(BaseModel):
     role: str
     content: str
@@ -60,17 +66,19 @@ async def get_embedding(text: str) -> List[float]:
             }
         ]
     }
-    async with httpx.AsyncClient() as client:
-        response = await client.post(url, headers=headers, json=payload, timeout=30.0)
-        if response.status_code != 200:
-            print(f"Embedding API Error: {response.status_code} - {response.text}")
-        response.raise_for_status()
-        data = response.json()
-        # Multimodal response structure returns {"data": {"embedding": [...]}, ...} instead of a list inside "data"
-        if isinstance(data.get("data"), list):
-            return data["data"][0]["embedding"]
-        else:
-            return data["data"]["embedding"]
+    
+    # Improved: Just use the global client directly for better performance
+    client = get_client()
+    response = await client.post(url, headers=headers, json=payload, timeout=30.0)
+    if response.status_code != 200:
+        print(f"Embedding API Error: {response.status_code} - {response.text}")
+    response.raise_for_status()
+    data = response.json()
+    # Multimodal response structure returns {"data": {"embedding": [...]}, ...} instead of a list inside "data"
+    if isinstance(data.get("data"), list):
+        return data["data"][0]["embedding"]
+    else:
+        return data["data"]["embedding"]
 
 
 async def chat_completion_stream(messages: List[dict], use_bot: bool = False, use_search: bool = False, model_endpoint: str = None):
@@ -83,14 +91,12 @@ async def chat_completion_stream(messages: List[dict], use_bot: bool = False, us
     current_model = model_endpoint or DOUBAO_MODEL_ENDPOINT
     
     if use_search:
-        # Use Responses API as suggested by Volcengine support for models that have grayed out search in UI
+        # Use Responses API with full conversation history
         url = f"{BASE_URL}/responses"
-        # For Responses API, we use 'model', 'input', and 'tools'
-        # Responses API usually takes the last user message as 'input'
-        user_input = messages[-1]["content"] if messages else ""
+        # Corrected: Responses API uses 'input' instead of 'messages'
         payload = {
             "model": current_model,
-            "input": user_input,
+            "input": messages, 
             "tools": [{"type": "web_search"}],
             "stream": True
         }
@@ -114,16 +120,25 @@ async def chat_completion_stream(messages: List[dict], use_bot: bool = False, us
     # Clean None values in payload
     payload = {k: v for k, v in payload.items() if v is not None}
 
-    async with httpx.AsyncClient() as client:
-        async with client.stream("POST", url, headers=headers, json=payload, timeout=90.0) as response:
-            if response.status_code != 200:
-                body = await response.aread()
-                print(f"API Stream Error ({url}): {response.status_code} - {body.decode()}")
-                yield f"data: {json.dumps({'error': 'API call failed'})}\n\n"
-                return
+    client = get_client()
+    async with client.stream("POST", url, headers=headers, json=payload, timeout=90.0) as response:
+        if response.status_code != 200:
+            body = await response.aread()
+            error_text = body.decode()
+            print(f"API Stream Error ({url}): {response.status_code} - {error_text}")
+            
+            # Try to parse as JSON to get a cleaner message
+            try:
+                err_json = json.loads(error_text)
+                detail = err_json.get("error", {}).get("message", error_text)
+            except:
+                detail = error_text
+                
+            yield f"data: {json.dumps({'error': {'message': f'API Error {response.status_code}: {detail}'}})}\n\n"
+            return
 
-            async for chunk in response.aiter_text():
-                yield chunk
+        async for chunk in response.aiter_text():
+            yield chunk
 
 async def describe_image(image_base64: str) -> str:
     """Use Doubao Vision model to describe an image for better OCR/understanding"""
@@ -156,19 +171,19 @@ async def describe_image(image_base64: str) -> str:
     
     url = f"{BASE_URL}/chat/completions"
     
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(url, headers=headers, json=payload, timeout=60.0)
-            if response.status_code != 200:
-                error_body = response.text
-                print(f"Vision API Error ({url}): {response.status_code} - {error_body}")
-                return f"[识别失败：模型接入点({DOUBAO_VISION_ENDPOINT})返回了错误。请确认该接入点是否支持视觉问答。]"
-            
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
-        except Exception as e:
-            print(f"Describe image crash: {e}")
-            return f"[解析图片时发生系统错误: {str(e)}]"
+    client = get_client()
+    try:
+        response = await client.post(url, headers=headers, json=payload, timeout=60.0)
+        if response.status_code != 200:
+            error_body = response.text
+            print(f"Vision API Error ({url}): {response.status_code} - {error_body}")
+            return f"[识别失败：模型接入点({DOUBAO_VISION_ENDPOINT})返回了错误。请确认该接入点是否支持视觉问答。]"
+        
+        data = response.json()
+        return data["choices"][0]["message"]["content"]
+    except Exception as e:
+        print(f"Describe image crash: {e}")
+        return f"[解析图片时发生系统错误: {str(e)}]"
 
 async def analyze_coach_case(raw_text: str) -> dict:
     """Analyze raw chat logs to generate a structured coach case.
@@ -180,32 +195,36 @@ async def analyze_coach_case(raw_text: str) -> dict:
         "Content-Type": "application/json"
     }
     
-    prompt = f"""你是一个名为“老沈”的资深货代江湖分析师，性格辛辣、眼光毒辣。
-你需要把下面这段干巴巴的对练记录，将其“深度清洗”并“暴力扩充”为一个真实的实战剧本。
+    prompt = f"""你是一个名为“老沈”的资深货代江湖分析师，眼光毒辣，深谙利润背后的算计。
+你需要把下面这段聊天记录，将其“深度重塑”为一个高难度的专业对练剧本。
 
 【原始材料】：
 {raw_text}
 
-【深度重塑要求】：
-1. **严格分类**：
-   - 航线：必须判定为 [美国线] 或 [欧洲线] 之一。
-   - 客户人设：必须从以下三类中选一：
-     * 【精明比价派】：核心冲突是价格、杂费、利润点。
-     * 【强势大货主】：核心冲突是舱位保证、时效赔偿、月结账期。
-     * 【麻烦纠纷型】：核心冲突是计费重争议、查验费分摊、小白客户的理解障碍。
+【深度重塑要求（核心指令）】：
+1. **强制注入“硬核货盘”**：
+   - 即使原记录没提，你也必须为本场景“脑补”出一套精准的货物参数：件数、单箱尺寸(cm)、单箱重量(kg)、货物品名（带点“坑”的品名，如：平衡车、纯电池、仿牌等）。
+   - 设计一个**计费重陷阱**：例如体积重刚好比实重大 30%，考察业务员是否发现并按体积计费。
 
-2. **补完逻辑**：脑补出背后完整的业务逻辑：航线、品名、具体的市场实时变数（如LA罢工、红海绕寄等）。
-3. **输出格式**：JSON 格式。
+2. **强制注入“报价雷区”**：
+   - 如果是美国线/欧洲线，必须设定一个具体的**亚马逊仓库（如 ONT8/LGB8/TEB9）**或一个 5 位邮编。
+   - 设定这个地址是否为“偏远”或“极偏远”，考察业务员是否去查地址库。
+
+3. **设定客户性格与博弈深度**：
+   - 你的性格可以多变，但你的目的必须是：**套出底价、隐瞒货物属性、或者对计费重计算表示质疑**。
+   - 严禁做只有情绪的“泼妇”，要做懂行的、会压价的、甚至会拿别家虚假低价来诈你的“职业买手”。
+
+4. **输出格式**：JSON。
 
 JSON 字段定义：
-- "name": 剧本标题（如：加派费纠纷、带磁瞒报、体积重罗生门）
-- "category": 格式必须为“线别 · 客户人设”（如：美国线 · 精明比价派）
+- "name": 剧本标题（如：带磁平衡车的体积重罗生门）
+- "category": 线别 · 人设（如：美国线 · 精明比价派）
 - "emoji": 代表该场景的 Emoji
-- "persona": 详细的人设描述（基于分类特征，描述其性格、沟通地雷、隐藏动机）
-- "background": 深度业务背景（详细模拟：航线、季节、具体的货盘信息）
-- "conflict": 核心矛盾点（陷阱所在，考察业务员的什么能力，给出的江湖策略）
-- "success_criteria": 成功/避坑标准
-- "prompt": 系统初始 Prompt（要求AI以此身份开始对话，第一句话直接开战，不要废话）
+- "persona": 详细的人设（含性格地雷、其真实的隐藏货盘、拒绝配合的借口）
+- "background": 深度业务背景（含具体的 Piece/Weight/Dim 参数、目的地详细地址）
+- "conflict": 核心矛盾（本题的‘考点’：是要他加附加费？还是要他算体积重？还是发现瞒报？）
+- "success_criteria": 业务员必须问出的 3 个核心要素才算及格。
+- "prompt": 系统初始 Prompt（你以此身份直接开口，第一句必须带着模糊的货盘信息发起突袭，例如：‘老板，我这有 20 块滑板车，发美国 ONT8，给个数？’）
 """
 
     payload = {
@@ -219,14 +238,14 @@ JSON 字段定义：
     
     url = f"{BASE_URL}/chat/completions"
     
-    async with httpx.AsyncClient() as client:
-        response = await client.post(url, headers=headers, json=payload, timeout=60.0)
-        response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
+    client = get_client()
+    response = await client.post(url, headers=headers, json=payload, timeout=60.0)
+    response.raise_for_status()
+    content = response.json()["choices"][0]["message"]["content"]
+    
+    if "```json" in content:
+        content = content.split("```json")[1].split("```")[0].strip()
+    elif "```" in content:
+        content = content.split("```")[1].split("```")[0].strip()
         
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0].strip()
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0].strip()
-            
-        return json.loads(content)
+    return json.loads(content)

@@ -7,6 +7,7 @@ from services.llm_client import get_embedding, analyze_coach_case
 from services.quote_service import parse_quote_file, load_all_quotes, DATA_DIR as QUOTE_DIR
 import uuid
 import json
+import asyncio
 
 router = APIRouter(prefix="/api/upload", tags=["upload"])
 
@@ -18,10 +19,8 @@ os.makedirs(QUOTE_DIR, exist_ok=True)
 @router.post("/document")
 async def upload_document(file: UploadFile = File(...)):
     """Upload and process a knowledge base document (Word/PDF/TXT)."""
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="No file uploaded")
-        
-    file_path = os.path.join(UPLOAD_DOCS_DIR, file.filename)
+    safe_filename = os.path.basename(file.filename)
+    file_path = os.path.join(UPLOAD_DOCS_DIR, safe_filename)
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
@@ -38,13 +37,14 @@ async def upload_document(file: UploadFile = File(...)):
         source_name = file.filename
         
         # DELETE old overlapping chunks if they exist to prevent memory duplication and conflict
-        delete_documents_by_source(source_name)
+        await asyncio.to_thread(delete_documents_by_source, source_name)
         
         # Get embeddings and save to ChromaDB
         for i, chunk in enumerate(chunks):
             embedding = await get_embedding(chunk)
             doc_id = f"{file.filename}_chunk_{i}_{uuid.uuid4().hex[:8]}"
-            add_documents_to_db(
+            await asyncio.to_thread(
+                add_documents_to_db,
                 ids=[doc_id],
                 texts=[chunk],
                 embeddings=[embedding],
@@ -58,21 +58,19 @@ async def upload_document(file: UploadFile = File(...)):
 @router.post("/quote")
 async def upload_quote(file: UploadFile = File(...)):
     """Upload and process a quote spreadsheet (Excel/CSV)."""
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="No file uploaded")
-        
-    file_path = os.path.join(QUOTE_DIR, file.filename)
+    safe_filename = os.path.basename(file.filename)
+    file_path = os.path.join(QUOTE_DIR, safe_filename)
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
     try:
         # Validate format parseable
-        df = parse_quote_file(file_path)
-        if df.empty:
+        data_list = await asyncio.to_thread(parse_quote_file, file_path)
+        if not data_list:
             return {"status": "error", "message": "Failed to parse spreadsheet or file is empty."}
             
         # Reload cache
-        load_all_quotes()
+        await asyncio.to_thread(load_all_quotes)
         return {"status": "success", "message": f"Quote file {file.filename} uploaded and parsed successfully."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -94,12 +92,13 @@ async def list_documents():
 async def delete_document(filename: str):
     """Delete a document and its knowledge base chunks."""
     try:
-        file_path = os.path.join(UPLOAD_DOCS_DIR, filename)
+        safe_filename = os.path.basename(filename)
+        file_path = os.path.join(UPLOAD_DOCS_DIR, safe_filename)
         if os.path.exists(file_path):
             os.remove(file_path)
             
         # Delete from ChromaDB
-        delete_documents_by_source(filename)
+        await asyncio.to_thread(delete_documents_by_source, filename)
         return {"status": "success", "message": f"Document {filename} deleted successfully."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -121,7 +120,8 @@ async def list_quotes():
 async def delete_quote(filename: str):
     """Delete a quote file from the system."""
     try:
-        file_path = os.path.join(QUOTE_DIR, filename)
+        safe_filename = os.path.basename(filename)
+        file_path = os.path.join(QUOTE_DIR, safe_filename)
         if os.path.exists(file_path):
             os.remove(file_path)
             
@@ -227,7 +227,8 @@ async def delete_coach_case(case_id: str):
 
 async def parse_document_content(file: UploadFile):
     """Temporary helper to get text content from upload."""
-    temp_path = f"temp_{file.filename}"
+    safe_filename = os.path.basename(file.filename)
+    temp_path = os.path.join(os.path.dirname(UPLOAD_DOCS_DIR), f"temp_{uuid.uuid4().hex}_{safe_filename}")
     with open(temp_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     try:

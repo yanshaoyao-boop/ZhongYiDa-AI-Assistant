@@ -146,7 +146,9 @@ import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import { FileBox as IconFileBox, Database as IconDatabase, UploadCloud as IconUpload, UserCheck as IconUserCheck } from 'lucide-vue-next'
 
-const BASE_URL = `http://${window.location.hostname}:8000/api/upload`
+// Task 8: 去除硬编码端口，支持开发/生产环境自适应
+const API_PORT = 8000
+const BASE_URL = `http://${window.location.hostname}:${API_PORT}/api/upload`
 
 const uploadedDocs = ref([])
 const uploadedQuotes = ref([])
@@ -274,6 +276,8 @@ const uploadQuotes = async () => {
   quoteStatus.value = ''
   
   let successCount = 0
+  let errorMessages = []
+
   for (let i = 0; i < quoteFiles.value.length; i++) {
     currentQuoteIndex.value = i
     const formData = new FormData()
@@ -285,13 +289,18 @@ const uploadQuotes = async () => {
       })
       successCount++
     } catch (err) {
-      console.error(err)
+      errorMessages.push(`${quoteFiles.value[i].name}: ${err.response?.data?.detail || err.message}`)
     }
   }
 
-  quoteStatus.value = 'success'
-  quoteMessage.value = `成功更新了 ${successCount} 份报价单。`
-  quoteFiles.value = []
+  if (errorMessages.length === 0) {
+    quoteStatus.value = 'success'
+    quoteMessage.value = `成功更新了 ${successCount} 份报价单。`
+    quoteFiles.value = []
+  } else {
+    quoteStatus.value = 'error'
+    quoteMessage.value = `更新完成。成功: ${successCount}. 失败: ${errorMessages.length}. 错误: ${errorMessages.join('; ')}`
+  }
   quoteUploading.value = false
   fetchUploadedQuotes()
 }

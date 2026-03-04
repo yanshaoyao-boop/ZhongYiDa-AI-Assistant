@@ -161,7 +161,8 @@ import { ref, watch, nextTick, onMounted, computed } from 'vue'
 import axios from 'axios'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { Send as IconSend, Menu as IconMenu, X as IconX, Image as IconImage, XCircle as IconXCircle, Square as IconSquare } from 'lucide-vue-next'
+const API_PORT = 8000
+const API_BASE = `http://${window.location.hostname}:${API_PORT}`
 
 const messages = ref([])
 const inputMsg = ref('')
@@ -272,7 +273,7 @@ const startRandomCoachInCategory = (categoryName) => {
 
 const fetchCoachCases = async () => {
   try {
-    const res = await axios.get(`http://${window.location.hostname}:8000/api/upload/coach-cases`)
+    const res = await axios.get(`${API_BASE}/api/upload/coach-cases`)
     // 后端现在直接返回数组
     if (Array.isArray(res.data)) {
       coachCases.value = res.data
@@ -378,7 +379,28 @@ const deleteSession = (id) => {
 }
 
 const saveSessions = () => {
-  localStorage.setItem(`zyd_chat_sessions_${currentMode.value}`, JSON.stringify(sessions.value))
+  // 简单的容量保护：每个模式只保留最近 15 个有效会话，防止 LocalStorage 溢出 (Task 6)
+  if (sessions.value.length > 15) {
+    sessions.value = sessions.value.slice(0, 15)
+  }
+  
+  try {
+    localStorage.setItem(`zyd_chat_sessions_${currentMode.value}`, JSON.stringify(sessions.value))
+  } catch (err) {
+    if (err.name === 'QuotaExceededError') {
+      console.warn('LocalStorage quota exceeded, trying to clear oldest session...')
+      sessions.value.pop()
+      saveSessions()
+    }
+  }
+}
+
+let saveTimeout = null
+const debouncedSaveSessions = () => {
+  if (saveTimeout) clearTimeout(saveTimeout)
+  saveTimeout = setTimeout(() => {
+    saveSessions()
+  }, 1000) // 1秒防抖，避免流式响应时频繁触发磁盘IO
 }
 
 watch(() => messages.value, () => {
@@ -390,7 +412,7 @@ watch(() => messages.value, () => {
     if (firstUser && session.title === '新对话') {
       session.title = firstUser.content.slice(0, 15) + (firstUser.content.length > 15 ? '...' : '')
     }
-    saveSessions()
+    debouncedSaveSessions() // 改为防抖保存
   }
 }, { deep: true })
 
@@ -455,7 +477,7 @@ const sendMessage = async () => {
   scrollToBottom()
 
   try {
-    const response = await fetch(`http://${window.location.hostname}:8000/api/chat/stream`, {
+    const response = await fetch(`${API_BASE}/api/chat/stream`, {
       method: 'POST',
       signal: abortController.value.signal,
       headers: {
