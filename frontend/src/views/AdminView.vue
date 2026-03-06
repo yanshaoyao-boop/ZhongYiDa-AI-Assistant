@@ -10,43 +10,83 @@
     </header>
     
     <div class="admin-content">
-      <!-- Document Upload Section -->
+      <!-- Admin Docs Upload Section -->
       <section class="upload-section glass-panel">
         <div class="section-header">
           <IconFileBox class="icon-lg text-blue" />
-          <h2>企业制度与文档库</h2>
+          <h2>行政规章制度 (HR/报销/考勤)</h2>
         </div>
-        <p class="section-desc">上传 PDF、Word。上传后系统将自动进行分块并向量化存储，供大模型检索学习。</p>
+        <p class="section-desc">上传行政规章制度 PDF、Word。上传后自动归入【行政库】。</p>
         
         <div class="drop-zone" 
-             @dragover.prevent="isDraggingDoc = true" 
-             @dragleave.prevent="isDraggingDoc = false" 
-             @drop.prevent="onDropDoc"
-             :class="{'drag-active': isDraggingDoc}"
-             @click="triggerDocSelect">
+             @dragover.prevent="isDraggingAdmin = true" 
+             @dragleave.prevent="isDraggingAdmin = false" 
+             @drop.prevent="onDropAdmin"
+             :class="{'drag-active': isDraggingAdmin}"
+             @click="triggerAdminSelect">
           <IconUpload class="upload-icon" />
-          <p v-if="docFiles.length === 0">点击或多选拖拽文件到此处 (PDF / Word)</p>
+          <p v-if="adminFiles.length === 0">拖拽行政规章资料到此处</p>
           <div v-else class="file-list">
-            <div v-for="(file, idx) in docFiles" :key="idx" class="file-item">
+            <div v-for="(file, idx) in adminFiles" :key="idx" class="file-item">
               <span class="file-sel">{{ file.name }}</span>
             </div>
           </div>
-          <input type="file" ref="docInput" style="display:none" @change="onDocSelected" accept=".pdf,.doc,.docx,.txt" multiple />
+          <input type="file" ref="adminInput" style="display:none" @change="onAdminSelected" accept=".pdf,.doc,.docx,.txt" multiple />
         </div>
         
-        <button class="btn-primary" :disabled="docFiles.length === 0 || docUploading" @click="uploadDocuments">
-          <span v-if="docUploading">正在批量学习中 ({{ currentFileIndex + 1 }}/{{ docFiles.length }})...</span>
-          <span v-else>开始批量上传学习</span>
+        <button class="btn-primary" :disabled="adminFiles.length === 0 || adminUploading" @click="uploadAdmin">
+          <span v-if="adminUploading">上传中 ({{ currentAdminIndex + 1 }}/{{ adminFiles.length }})...</span>
+          <span v-else>批量上传到行政库</span>
         </button>
-        <div v-if="docMessage" class="status-msg" :class="docStatus">{{ docMessage }}</div>
+        <div v-if="adminMessage" class="status-msg" :class="adminStatus">{{ adminMessage }}</div>
         
-        <!-- Uploaded Docs List -->
-        <div class="uploaded-list" v-if="uploadedDocs.length > 0">
-          <h3>已学习的资料库</h3>
+        <div class="uploaded-list" v-if="uploadedAdmin.length > 0">
+          <h3>行政资料库</h3>
           <ul>
-            <li v-for="file in uploadedDocs" :key="file">
+            <li v-for="file in uploadedAdmin" :key="file">
               <span class="file-name">{{ file }}</span>
-              <button class="btn-delete" @click="deleteDoc(file)" title="从记忆中删除">🗑️ 删除</button>
+              <button class="btn-delete" @click="deleteDoc(file)" title="删除">🗑️</button>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Biz Docs Upload Section -->
+      <section class="upload-section glass-panel">
+        <div class="section-header">
+          <IconFileBox class="icon-lg text-green" />
+          <h2>业务技能与资料 (术语/话术)</h2>
+        </div>
+        <p class="section-desc">上传业务技能、报关、销售手册。归入【业务库】供针对性检索。</p>
+        
+        <div class="drop-zone" 
+             @dragover.prevent="isDraggingBiz = true" 
+             @dragleave.prevent="isDraggingBiz = false" 
+             @drop.prevent="onDropBiz"
+             :class="{'drag-active': isDraggingBiz}"
+             @click="triggerBizSelect">
+          <IconUpload class="upload-icon" />
+          <p v-if="bizFiles.length === 0">拖拽业务培训资料到此处</p>
+          <div v-else class="file-list">
+            <div v-for="(file, idx) in bizFiles" :key="idx" class="file-item">
+              <span class="file-sel">{{ file.name }}</span>
+            </div>
+          </div>
+          <input type="file" ref="bizInput" style="display:none" @change="onBizSelected" accept=".pdf,.doc,.docx,.txt" multiple />
+        </div>
+        
+        <button class="btn-primary biz-btn" :disabled="bizFiles.length === 0 || bizUploading" @click="uploadBiz">
+          <span v-if="bizUploading">上传中 ({{ currentBizIndex + 1 }}/{{ bizFiles.length }})...</span>
+          <span v-else>批量上传到业务库</span>
+        </button>
+        <div v-if="bizMessage" class="status-msg" :class="bizStatus">{{ bizMessage }}</div>
+        
+        <div class="uploaded-list" v-if="uploadedBiz.length > 0">
+          <h3>业务资料库</h3>
+          <ul>
+            <li v-for="file in uploadedBiz" :key="file">
+              <span class="file-name">{{ file }}</span>
+              <button class="btn-delete" @click="deleteDoc(file)" title="删除">🗑️</button>
             </li>
           </ul>
         </div>
@@ -150,14 +190,17 @@ import { FileBox as IconFileBox, Database as IconDatabase, UploadCloud as IconUp
 const API_PORT = 8000
 const BASE_URL = `http://${window.location.hostname}:${API_PORT}/api/upload`
 
-const uploadedDocs = ref([])
+const uploadedAdmin = ref([])
+const uploadedBiz = ref([])
 const uploadedQuotes = ref([])
 const coachCases = ref([])
 
 const fetchUploadedDocs = async () => {
   try {
-    const res = await axios.get(`${BASE_URL}/documents`)
-    uploadedDocs.value = res.data.files || []
+    const resA = await axios.get(`${BASE_URL}/documents?category=admin`)
+    uploadedAdmin.value = resA.data.files || []
+    const resB = await axios.get(`${BASE_URL}/documents?category=biz`)
+    uploadedBiz.value = resB.data.files || []
   } catch (err) {
     console.error("Failed to fetch documents:", err)
   }
@@ -175,7 +218,6 @@ const fetchUploadedQuotes = async () => {
 const fetchCoachCases = async () => {
   try {
     const res = await axios.get(`${BASE_URL}/coach-cases`)
-    // 后端现在直接返回数组
     coachCases.value = Array.isArray(res.data) ? res.data : (res.data.cases || [])
   } catch (err) {
     console.error("Failed to fetch coach cases:", err)
@@ -188,56 +230,91 @@ onMounted(() => {
   fetchCoachCases()
 })
 
-// Docs logic
-const isDraggingDoc = ref(false)
-const docFiles = ref([])
-const docInput = ref(null)
-const docUploading = ref(false)
-const docMessage = ref('')
-const docStatus = ref('')
-const currentFileIndex = ref(0)
-
-const triggerDocSelect = () => docInput.value.click()
-const onDocSelected = (e) => docFiles.value = Array.from(e.target.files)
-const onDropDoc = (e) => {
-  isDraggingDoc.value = false
-  if (e.dataTransfer.files.length > 0) {
-    docFiles.value = Array.from(e.dataTransfer.files)
-  }
+// === Admin logic ===
+const isDraggingAdmin = ref(false)
+const adminFiles = ref([])
+const adminInput = ref(null)
+const adminUploading = ref(false)
+const adminMessage = ref('')
+const adminStatus = ref('')
+const currentAdminIndex = ref(0)
+const triggerAdminSelect = () => adminInput.value.click()
+const onAdminSelected = (e) => adminFiles.value = Array.from(e.target.files)
+const onDropAdmin = (e) => {
+  isDraggingAdmin.value = false
+  if (e.dataTransfer.files.length > 0) adminFiles.value = Array.from(e.dataTransfer.files)
 }
-const uploadDocuments = async () => {
-  if (docFiles.value.length === 0) return
-  docUploading.value = true
-  docMessage.value = ''
-  docStatus.value = ''
-  
+const uploadAdmin = async () => {
+  if (adminFiles.value.length === 0) return
+  adminUploading.value = true
+  adminMessage.value = ''
+  adminStatus.value = ''
   let successCount = 0
   let errorMessages = []
-
-  for (let i = 0; i < docFiles.value.length; i++) {
-    currentFileIndex.value = i
+  for (let i = 0; i < adminFiles.value.length; i++) {
+    currentAdminIndex.value = i
     const formData = new FormData()
-    formData.append('file', docFiles.value[i])
-    
+    formData.append('file', adminFiles.value[i])
     try {
-      await axios.post(`${BASE_URL}/document`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
+      await axios.post(`${BASE_URL}/document?category=admin`, formData, { headers: { 'Content-Type': 'multipart/form-data' }})
       successCount++
     } catch (err) {
-      errorMessages.push(`${docFiles.value[i].name}: ${err.response?.data?.detail || err.message}`)
+      errorMessages.push(`${adminFiles.value[i].name}: ${err.response?.data?.detail || err.message}`)
     }
   }
-
   if (errorMessages.length === 0) {
-    docStatus.value = 'success'
-    docMessage.value = `成功处理并学习了 ${successCount} 份文档。`
-    docFiles.value = []
+    adminStatus.value = 'success'
+    adminMessage.value = `成功处理并学习了 ${successCount} 份行政文档。`
+    adminFiles.value = []
   } else {
-    docStatus.value = 'error'
-    docMessage.value = `处理完成。成功: ${successCount}. 失败: ${errorMessages.length}. 错误信息: ${errorMessages.join('; ')}`
+    adminStatus.value = 'error'
+    adminMessage.value = `处理完成。成功: ${successCount}. 失败: ${errorMessages.length}.`
   }
-  docUploading.value = false
+  adminUploading.value = false
+  fetchUploadedDocs()
+}
+
+// === Biz logic ===
+const isDraggingBiz = ref(false)
+const bizFiles = ref([])
+const bizInput = ref(null)
+const bizUploading = ref(false)
+const bizMessage = ref('')
+const bizStatus = ref('')
+const currentBizIndex = ref(0)
+const triggerBizSelect = () => bizInput.value.click()
+const onBizSelected = (e) => bizFiles.value = Array.from(e.target.files)
+const onDropBiz = (e) => {
+  isDraggingBiz.value = false
+  if (e.dataTransfer.files.length > 0) bizFiles.value = Array.from(e.dataTransfer.files)
+}
+const uploadBiz = async () => {
+  if (bizFiles.value.length === 0) return
+  bizUploading.value = true
+  bizMessage.value = ''
+  bizStatus.value = ''
+  let successCount = 0
+  let errorMessages = []
+  for (let i = 0; i < bizFiles.value.length; i++) {
+    currentBizIndex.value = i
+    const formData = new FormData()
+    formData.append('file', bizFiles.value[i])
+    try {
+      await axios.post(`${BASE_URL}/document?category=biz`, formData, { headers: { 'Content-Type': 'multipart/form-data' }})
+      successCount++
+    } catch (err) {
+      errorMessages.push(`${bizFiles.value[i].name}: ${err.response?.data?.detail || err.message}`)
+    }
+  }
+  if (errorMessages.length === 0) {
+    bizStatus.value = 'success'
+    bizMessage.value = `成功处理并学习了 ${successCount} 份业务资料。`
+    bizFiles.value = []
+  } else {
+    bizStatus.value = 'error'
+    bizMessage.value = `处理完成。成功: ${successCount}. 失败: ${errorMessages.length}.`
+  }
+  bizUploading.value = false
   fetchUploadedDocs()
 }
 

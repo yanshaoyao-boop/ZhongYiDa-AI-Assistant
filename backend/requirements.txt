@@ -14,3 +14,5 @@ lxml
 beautifulsoup4
 duckduckgo-search
 xlrd
+playwright
+playwright-stealth

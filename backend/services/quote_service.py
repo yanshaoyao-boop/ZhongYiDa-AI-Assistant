@@ -33,6 +33,15 @@ def parse_quote_file(file_path: str) -> List[Dict]:
             elif "腾信" in filename:
                 from services.tengxin_parser import parse_tengxin_excel
                 return parse_tengxin_excel(file_path)
+            elif "商壹" in filename:
+                from services.shangyi_parser import parse_shangyi_excel
+                return parse_shangyi_excel(file_path)
+            elif "澳鑫" in filename:
+                from services.aoxin_parser import parse_aoxin_excel
+                return parse_aoxin_excel(file_path)
+            elif "商壹" in filename:
+                from services.shangyi_parser import parse_shangyi_excel
+                return parse_shangyi_excel(file_path)
             else:
                 from services.excel_parser import parse_complex_excel
                 return parse_complex_excel(file_path)
@@ -59,7 +68,7 @@ def load_all_quotes():
                 QUOTES_CACHE[filename] = records
     return list(QUOTES_CACHE.keys())
 
-def search_best_quotes(query: str, limit: int = 40) -> List[Dict]:
+def search_best_quotes(query: str, limit: int = 60) -> List[Dict]:
     """Search for relevant quotes based on warehouse codes or channel names in the query."""
     if not QUOTES_CACHE:
         load_all_quotes()
@@ -84,7 +93,9 @@ def search_best_quotes(query: str, limit: int = 40) -> List[Dict]:
             extra_regions.append(wh_to_region[wh])
 
     region_map = {"美东": "美东", "美中": "美中", "美西": "美西",
-                  "东部": "美东", "中部": "美中", "西部": "美西"}
+                  "东部": "美东", "中部": "美中", "西部": "美西",
+                  "新加坡": "新加坡", "马来西亚": "马来西亚", "马代": "马来西亚", "西马": "西马", "东马": "东马",
+                  "泰国": "泰国", "菲律宾": "菲律宾", "越南": "越南", "印尼": "印尼", "澳洲": "澳洲", "澳大利亚": "澳洲"}
     found_regions_from_query = [v for k, v in region_map.items() if k in query]
     all_found_regions = list(set(found_regions_from_query + extra_regions))
 
@@ -93,7 +104,7 @@ def search_best_quotes(query: str, limit: int = 40) -> List[Dict]:
     
     # 识别查询中是否指名道姓要某一家
     explicit_agents = []
-    for agent in ["锦联", "亿阳", "星夜", "腾信", "明日之星"]:
+    for agent in ["锦联", "亿阳", "星夜", "腾信", "明日之星", "商壹", "澳鑫"]:
         if agent in query:
             explicit_agents.append(agent)
 

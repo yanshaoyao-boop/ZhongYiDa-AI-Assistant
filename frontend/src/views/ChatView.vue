@@ -53,6 +53,12 @@
           >
             <span class="icon">📚</span> 知识教练
           </button>
+          <button 
+            :class="['mode-btn', { active: currentMode === 'expert' }]"
+            @click="switchMode('expert')"
+          >
+            <span class="icon">💡</span> 专家指导
+          </button>
         </div>
 
         <div class="nav-links">
@@ -72,6 +78,10 @@
                 <button @click="presetMsg('我能帮你做哪些事')">🤖 我能帮你做哪些事</button>
                 <button @click="presetMsg('如何正确的使用小易')">📖 如何正确的使用小易</button>
               </div>
+            </template>
+            <template v-else-if="currentMode === 'expert'">
+              <h2 class="welcome-name">欢迎来到专家指导模式</h2>
+              <h2 class="welcome-slogan">请描述您遇到的模糊或复杂的问题，我会通过 1-2 轮追问帮你理清思路并提供专业建议。</h2>
             </template>
             <template v-else>
               <h2 class="welcome-name">欢迎来到知识教练模式</h2>
@@ -720,6 +730,17 @@ const truncate = (text, len) => {
   --accent-hover: #047857;
   --glass-bg: rgba(255, 255, 255, 0.7);
   --glass-border: rgba(16, 185, 129, 0.2);
+}
+
+.expert-mode {
+  --bg-primary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  --primary-gradient: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+  --text-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  --accent-color: #3b82f6;
+  --accent-hover: #2563eb;
+  --glass-bg: rgba(255, 255, 255, 0.8);
+  --glass-border: rgba(59, 130, 246, 0.2);
 }
 
 .sidebar {

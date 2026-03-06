@@ -17,8 +17,8 @@ os.makedirs(UPLOAD_DOCS_DIR, exist_ok=True)
 os.makedirs(QUOTE_DIR, exist_ok=True)
 
 @router.post("/document")
-async def upload_document(file: UploadFile = File(...)):
-    """Upload and process a knowledge base document (Word/PDF/TXT)."""
+async def upload_document(file: UploadFile = File(...), category: str = "biz"):
+    """Upload and process a knowledge base document (Word/PDF/TXT), with category."""
     safe_filename = os.path.basename(file.filename)
     file_path = os.path.join(UPLOAD_DOCS_DIR, safe_filename)
     with open(file_path, "wb") as buffer:
@@ -48,7 +48,7 @@ async def upload_document(file: UploadFile = File(...)):
                 ids=[doc_id],
                 texts=[chunk],
                 embeddings=[embedding],
-                metadatas=[{"source": file.filename}]
+                metadatas=[{"source": file.filename, "category": category}]
             )
             
         return {"status": "success", "message": f"Document {file.filename} processed successfully. Extracted {len(chunks)} chunks."}
@@ -76,13 +76,27 @@ async def upload_quote(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/documents")
-async def list_documents():
+async def list_documents(category: str = None):
     """List all uploaded knowledge base documents."""
     try:
         if not os.path.exists(UPLOAD_DOCS_DIR):
             return {"files": []}
-        files = [f for f in os.listdir(UPLOAD_DOCS_DIR) if os.path.isfile(os.path.join(UPLOAD_DOCS_DIR, f))]
-        # Sort by modification time, newest first
+        
+        # We need to query chromadb or just list files. 
+        # Since files are mixed in the directory, returning all is fine if we don't have a DB tracker, 
+        # but to filter by category we must query ChromaDB to see what files belong to what category.
+        import chromadb
+        from services.rag_service import collection
+        
+        if category:
+            # Get distinct sources for this category
+            results = collection.get(where={"category": category}, include=["metadatas"])
+            files = list(set([m["source"] for m in results["metadatas"]]))
+        else:
+            files = [f for f in os.listdir(UPLOAD_DOCS_DIR) if os.path.isfile(os.path.join(UPLOAD_DOCS_DIR, f))]
+        
+        # Sort by modification time, newest first (if file exists locally)
+        files = [f for f in files if os.path.exists(os.path.join(UPLOAD_DOCS_DIR, f))]
         files.sort(key=lambda x: os.path.getmtime(os.path.join(UPLOAD_DOCS_DIR, x)), reverse=True)
         return {"files": files}
     except Exception as e:

@@ -1,94 +1,96 @@
-import httpx
-from bs4 import BeautifulSoup
-import re
 import asyncio
+from playwright.async_api import async_playwright
+from playwright_stealth import Stealth
+import re
 
 TRACKING_URL = "http://mrzx.rtb56.com/track_query.aspx"
 
 async def fetch_tracking_info(track_number: str) -> dict:
     """
-    爬取 mrzx.rtb56.com 的单号轨迹
-    返回一个包含轨迹列表或错误信息的字典
+    使用 Playwright 模拟真人行为爬取轨迹，绕过简单的验证码拦截。
     """
-    # 使用独立的 client ，因为这个站点可能是 http
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+            viewport={'width': 1280, 'height': 800}
+        )
+        
+        page = await context.new_page()
+        # 使用 stealth_async 专门为异步 Playwright 设计的隐藏接口
+        await Stealth().apply_stealth_async(page)
+        
         try:
-            # 1. 发送 GET 请求，获取验证凭据 __VIEWSTATE 和 __EVENTVALIDATION
-            response = await client.get(TRACKING_URL, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"})
-            if response.status_code != 200:
-                return {"status": "error", "message": f"无法访问查询网站，状态码: {response.status_code}"}
+            print(f">> 正在打开查询页面: {TRACKING_URL}")
+            # 缩短等待时间，加速响应
+            await page.goto(TRACKING_URL, wait_until="domcontentloaded", timeout=30000)
             
-            html = response.text
-            soup = BeautifulSoup(html, "html.parser")
+            # 使用更宽泛的选择器寻找单号输入框
+            print(f">> 填充单号: {track_number}")
+            # 找到那个有规律的文本域，使用原生 JS 强制赋值（绕过可见性检查）
+            textarea = await page.wait_for_selector("textarea, #track_number", timeout=10000, state="attached")
+            await textarea.evaluate("(el, val) => el.value = val", track_number)
             
-            viewstate_input = soup.find("input", {"id": "__VIEWSTATE"})
-            eventvalidation_input = soup.find("input", {"id": "__EVENTVALIDATION"})
-            viewstategenerator_input = soup.find("input", {"id": "__VIEWSTATEGENERATOR"})
+            print(">> 点击查询按钮...")
+            # 使用 evaluate 强制点击，防止按钮被遮挡或不可见
+            await page.evaluate("document.querySelector('#btnSearch').click()")
             
-            if not viewstate_input or not eventvalidation_input:
-                return {"status": "error", "message": "无法从查询页面解析必要的验证凭据。"}
-                
-            viewstate = viewstate_input.get("value", "")
-            eventvalidation = eventvalidation_input.get("value", "")
-            viewstategenerator = viewstategenerator_input.get("value", "") if viewstategenerator_input else ""
+            # 强制等待一会儿，让数据飞一会儿
+            await asyncio.sleep(5)
+            
+            # 等待结果或验证码 (速递管家通常会弹出一个 layui 的层或者 order-list)
+            try:
+                await page.wait_for_selector(".layui-table-body, .order-list, .empty-cont-hint, #labMessage", timeout=15000)
+            except:
+                pass
+            
+            # 检查验证码 (如果有 layer-content 通常是弹窗拦截)
+            if await page.is_visible("#divVerify") or await page.is_visible(".layui-layer-content"):
+                # 如果有具体的错误文本，抓下来
+                err_msg = await page.get_by_text("验证码").is_visible()
+                if err_msg:
+                    return {"status": "error", "message": "被验证码拦截了。建议由于单号敏感建议您先在网页端查核。"}
+                return {"status": "error", "message": "被系统安全机制拦截。"}
 
-            # 2. 构造 POST 请求提单
-            payload = {
-                "__VIEWSTATE": viewstate,
-                "__VIEWSTATEGENERATOR": viewstategenerator,
-                "__EVENTVALIDATION": eventvalidation,
-                "track_number": track_number,
-                "btnSearch": "查 询"
-            }
+            # 深度爬取：layui 表格提取 (这种系统常用的框架)
+            layui_tables = await page.query_selector_all(".layui-table")
+            track_data = []
+            for table in layui_tables:
+                rows = await table.query_selector_all("tr")
+                for row in rows:
+                    cells = await row.query_selector_all("td")
+                    row_data = [re.sub(r'\s+', ' ', (await c.inner_text()).strip()) for c in cells]
+                    if row_data:
+                        track_data.append(" | ".join(row_data))
             
-            # 使用获取到的 cookies 继续发 POST
-            response_post = await client.post(
-                TRACKING_URL,
-                data=payload,
-                cookies=response.cookies,
-                headers={
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                    "Referer": TRACKING_URL
-                }
-            )
+            if track_data:
+                return {"status": "success", "data": "\n".join(track_data)}
+
+            # 提取数据：传统 order-list
+            content_element = await page.query_selector(".order-list")
+            if content_element:
+                text = await content_element.inner_text()
+                clean_text = re.sub(r'\n\s*\n', '\n', text).strip()
+                if clean_text and "请输入单号" not in clean_text:
+                    return {"status": "success", "data": clean_text}
+
+            # 最后的保底，提取整个页面文本
+            body_text = await page.inner_text("body")
+            if "未查询到" in body_text:
+                return {"status": "success", "data": "暂未查询到轨迹信息，请确认单号是否有误。"}
             
-            if response_post.status_code != 200:
-                return {"status": "error", "message": f"提交查询失败，状态码: {response_post.status_code}"}
+            # 如果文字里包含明显的物流关键词和日期，尝试返回
+            if "状态" in body_text and re.search(r'\d{4}-\d{2}-\d{2}', body_text):
+                return {"status": "success", "data": "查到了部分轨迹，但格式不规整，建议您核实单号。"}
                 
-            result_html = response_post.text
-            result_soup = BeautifulSoup(result_html, "html.parser")
-            
-            # 由于不知道对方具体的 DOM 结构，先尝试找带有 tracking 字样的或 table
-            # 首先检查是否有错误提示
-            error_hint = result_soup.find("div", {"class": "empty-cont-hint"})
-            if error_hint and "未查询到" in error_hint.text:
-                return {"status": "success", "data": "暂未查询到该单号的轨迹信息，请确认单号是否正确。"}
-            
-            # 假设轨迹是个 table 或者 ul，我们需要抽取所有的文字。由于速递管家的常见结构是 class="track-list" 或者类似的表格
-            track_table = result_soup.find("table", {"class": "table"}) or result_soup.find("div", {"class": "track-list"})
-            
-            if track_table:
-                # 简单清洗 HTML 转换为纯文本
-                import re
-                text_content = re.sub(r'\s+', ' ', track_table.get_text()).strip()
-                return {"status": "success", "data": text_content, "raw_html": str(track_table)}
-            else:
-                # 没有找到典型的表格结构，返回整体 body 中间的关键部分或给大模型清洗
-                body_content = result_soup.find("body")
-                if body_content:
-                    # 摘取内容较长或包含日期的块
-                    text = body_content.get_text(separator="\n").strip()
-                    # 做一些简单的压缩
-                    lines = [line.strip() for line in text.split("\n") if len(line.strip()) > 5]
-                    return {"status": "success", "data": "提取到的页面信息：\n" + "\n".join(lines[:30])} # 截取前 30 行防爆炸
-                
-                return {"status": "success", "data": "页面成功返回，但未找到预设的轨迹结构，请人工核查页面。"}
-                
+            return {"status": "error", "message": "未能识别查询结果展示区域。"}
+
         except Exception as e:
-            return {"status": "error", "message": f"爬虫解析异常: {str(e)}"}
+            return {"status": "error", "message": f"自动化链路异常: {str(e)}"}
+        finally:
+            await browser.close()
 
-# 用于本地直接运行测试
+
 if __name__ == "__main__":
-    result = asyncio.run(fetch_tracking_info("FBA1967S283C"))
-    print(result)
+    res = asyncio.run(fetch_tracking_info("FBA1967S283C"))
+    print(res)

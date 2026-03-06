@@ -38,12 +38,18 @@ def delete_documents_by_source(source_name: str):
         print(f"Error deleting previous chunks for {source_name}: {e}")
 
 
-def search_similar_documents(query_embedding: list[float], n_results: int = 3):
+def search_similar_documents(query_embedding: list[float], n_results: int = 3, category: str = None):
     """Search for the most similar document chunks given a query embedding"""
-    results = collection.query(
-        query_embeddings=[query_embedding],
-        n_results=n_results
-    )
+    
+    query_params = {
+        "query_embeddings": [query_embedding],
+        "n_results": n_results
+    }
+    
+    if category:
+        query_params["where"] = {"category": category}
+
+    results = collection.query(**query_params)
     
     # Return formatted results
     formatted_results = []
