@@ -43,37 +43,37 @@ async def classify_intent(message: str, history: List[dict] = None) -> str:
     has_wh = WH_PATTERN.search(msg_upper)
     
     if has_remote_kw and (has_zip or has_wh):
-        return "address"
+        return "address", message
     
     # 1.5 Tracking check (单号查询拦截)
     # 检测类似 FBA+数字, YT+数字, 或者纯长串数字(大于10位)
     track_pattern = re.compile(r'(?:FBA|YT|UJ|LP|AG|SF|TB|JD)\d+[A-Z0-9]*|\b\d{10,20}\b', re.IGNORECASE)
     if track_pattern.search(message) and not any(kw in message for kw in ["怎么算", "多少钱"]):
-        return "tracking"
+        return "tracking", message
     
     # 特殊情况：如果用户直接甩一个 5 位邮编过来，也极大概率是问偏远
     if re.match(r'^\d{5}$', message.strip()):
-        return "address"
+        return "address", message
 
     # 2. Quote check
     if has_wh:
-        return "quote"
+        return "quote", message
     
     quote_keywords = ["报价", "价格", "运费", "多少钱", "航线", "时效", "价目", "单价", "仓位"]
     for kw in quote_keywords:
         if kw in message:
-            return "quote"
+            return "quote", message
             
     # 3. Knowledge Base / Capabilities check (High Priority for self-intro)
     kb_keywords = ["介绍", "你是谁", "你能做什么", "做哪些事", "你会干啥", "怎么用", "操作说明", "技巧", "什么事"]
     if any(kw in message for kw in kb_keywords):
-        return "document"
+        return "document", message
 
     # 4. Social/Chitchat check
     social_keywords = ["你好", "哈喽", "笑话", "讲个", "唱个", "调戏", "暖场", "开心", "好玩"]
     continuation_keywords = ["换一个", "再来", "继续", "下一个", "换个"]
     if any(kw in message for kw in social_keywords):
-        return "social"
+        return "social", message
 
     # 4. Contextual inheritance for short commands
     if len(message.strip()) <= 4 and any(kw in message for kw in continuation_keywords):
@@ -85,20 +85,20 @@ async def classify_intent(message: str, history: List[dict] = None) -> str:
                     break
             # 如果 AI 上一句话看起来像是在讲笑话或闲聊（简单启发式判断）
             if any(kw in last_ai_msg for kw in ["笑话", "哈", "有趣", "嘿嘿", "故事"]):
-                return "social"
+                return "social", message
             if any(kw in last_ai_msg for kw in quote_keywords) or WH_PATTERN.search(last_ai_msg.upper()):
-                return "quote"
+                return "quote", message
 
     # 5. Internal specific keywords (Bonus for document search)
     if any(kw in message for kw in internal_keywords):
-        return "document"
+        return "document", message
 
     # 6. If it's a short message or followup, check recent history for context
     if history and len(history) > 0:
         recent_msgs = [m.get("content", "") for m in history[-4:] if m.get("role") == "user"]
         for old_msg in recent_msgs:
             if WH_PATTERN.search(old_msg.upper()) or any(kw in old_msg for kw in quote_keywords):
-                return "quote"
+                return "quote", message
     
     # --- 重量/体积自动提取辅助逻辑 (尝试从消息中抠出 200kg, 5cbm 等) ---
     weight_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:KG|公斤)', message, re.IGNORECASE)
@@ -108,7 +108,7 @@ async def classify_intent(message: str, history: List[dict] = None) -> str:
     if volume_match:
         message += f" [系统备注：用户关注体积为 {volume_match.group(1)}CBM]"
 
-    return "document"
+    return "document", message
 
 @router.post("/stream")
 async def chat_stream(request: ChatRequest):
@@ -279,7 +279,7 @@ async def chat_stream(request: ChatRequest):
 """
 
     else:
-        intent = await classify_intent(request.message, request.history)
+        intent, request.message = await classify_intent(request.message, request.history)
         if intent == "quote":
             # Handle Quote Query
             search_query = request.message
@@ -505,8 +505,14 @@ async def chat_stream(request: ChatRequest):
         except:
             pass
 
+    # 安全过滤：只允许 user / assistant 角色进入上下文，防止 Prompt Injection
+    _ALLOWED_ROLES = {"user", "assistant"}
     if request.history:
-        messages.extend(request.history[-20:])
+        safe_history = [
+            m for m in request.history[-20:]
+            if m.get("role") in _ALLOWED_ROLES and isinstance(m.get("content"), str)
+        ]
+        messages.extend(safe_history)
         
     messages.append({"role": "user", "content": request.message})
 

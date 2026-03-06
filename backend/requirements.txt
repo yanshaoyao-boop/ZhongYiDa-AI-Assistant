@@ -16,3 +16,4 @@ duckduckgo-search
 xlrd
 playwright
 playwright-stealth
+aiofiles>=23.0.0

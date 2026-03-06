@@ -141,7 +141,7 @@
           </div>
 
           <div class="message-list">
-            <div v-for="(msg, index) in messages" :key="index" 
+            <div v-for="msg in messages" :key="msg.id"
                 class="message-wrapper" :class="msg.role">
               <div class="avatar">
                 <template v-if="msg.role === 'assistant'">
@@ -251,7 +251,7 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick, onMounted, computed } from 'vue'
+import { ref, watch, nextTick, onMounted, onUnmounted, computed } from 'vue'
 import axios from 'axios'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -264,8 +264,9 @@ import {
   XCircle as IconXCircle,
   Zap as IconZap
 } from 'lucide-vue-next'
-const API_PORT = 8000
-const API_BASE = `http://${window.location.hostname}:${API_PORT}`
+// 使用相对路径，配合 vite.config.js 中的 dev proxy 转发到后端
+// 生产环境由 nginx/反向代理处理 /api 路由
+const API_BASE = ''
 
 const messages = ref([])
 const inputMsg = ref('')
@@ -491,6 +492,13 @@ onMounted(() => {
   fetchCoachCases()
 })
 
+onUnmounted(() => {
+  // 清理防抖定时器，防止组件卸载后仍写 localStorage
+  if (saveTimeout) clearTimeout(saveTimeout)
+  // 中断未完成的网络请求，防止内存泄漏
+  if (abortController.value) abortController.value.abort()
+})
+
 const startNewChat = () => {
   const newId = Date.now().toString()
   sessions.value.unshift({
@@ -615,9 +623,10 @@ const sendMessage = async () => {
   }
   
   messages.value.push({
+    id: `user-${Date.now()}`,
     role: 'user',
     content: content,
-    image: selectedImage.value // Store image in history
+    image: selectedImage.value
   })
   
   inputMsg.value = ''
@@ -629,8 +638,9 @@ const sendMessage = async () => {
   isGenerating.value = true
   abortController.value = new AbortController()
   
-  const aiMsgIdx = messages.value.length
+  const aiMsgId = `ai-${Date.now()}`
   messages.value.push({
+    id: aiMsgId,
     role: 'assistant',
     content: '',
     isTyping: true
@@ -669,20 +679,24 @@ const sendMessage = async () => {
       
       const chunk = decoder.decode(value, { stream: true })
       if (chunk) {
-        messages.value[aiMsgIdx].content += chunk
+        const aiMsg = messages.value.find(m => m.id === aiMsgId)
+        if (aiMsg) aiMsg.content += chunk
         scrollToBottom()
       }
     }
   } catch (err) {
     if (err.name === 'AbortError') {
       console.log('Generation stopped by user')
-      messages.value[aiMsgIdx].content += '\n\n*[用户已终止生成]*'
+      const aiMsg = messages.value.find(m => m.id === aiMsgId)
+      if (aiMsg) aiMsg.content += '\n\n*[用户已终止生成]*'
     } else {
       console.error('Chat error:', err)
-      messages.value[aiMsgIdx].content = `**Error**: ${err.message}. 请检查后端服务是否启动以及 API KEY 是否正确配置。`
+      const aiMsg = messages.value.find(m => m.id === aiMsgId)
+      if (aiMsg) aiMsg.content = `**Error**: ${err.message}. 请检查后端服务是否启动以及 API KEY 是否正确配置。`
     }
   } finally {
-    messages.value[aiMsgIdx].isTyping = false
+    const aiMsg = messages.value.find(m => m.id === aiMsgId)
+    if (aiMsg) aiMsg.isTyping = false
     isGenerating.value = false
   }
 }

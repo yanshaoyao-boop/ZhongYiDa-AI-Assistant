@@ -8,6 +8,10 @@ from services.quote_service import parse_quote_file, load_all_quotes, DATA_DIR a
 import uuid
 import json
 import asyncio
+import aiofiles
+
+# 全局文件锁，防止并发请求同时覆盖 coach_cases.json
+_coach_cases_lock = asyncio.Lock()
 
 router = APIRouter(prefix="/api/upload", tags=["upload"])
 
@@ -21,37 +25,39 @@ async def upload_document(file: UploadFile = File(...), category: str = "biz"):
     """Upload and process a knowledge base document (Word/PDF/TXT), with category."""
     safe_filename = os.path.basename(file.filename)
     file_path = os.path.join(UPLOAD_DOCS_DIR, safe_filename)
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    # 使用异步 I/O 写入，防止阻塞事件循环
+    content = await file.read()
+    async with aiofiles.open(file_path, "wb") as buffer:
+        await buffer.write(content)
         
     try:
-        # Parse document
+        # 解捸文档
         text = await parse_document(file_path)
         if not text.strip():
             return {"status": "error", "message": "No text could be extracted from the document."}
             
-        # Chunk text
+        # 分块文本
         chunks = chunk_text(text)
         
-        # Determine unique source name
-        source_name = file.filename
+        # 统一使用 safe_filename 作为向量库的唯一键（相比原始 file.filename 可能带路径）
+        source_name = safe_filename
         
-        # DELETE old overlapping chunks if they exist to prevent memory duplication and conflict
+        # 删除旧片段，防止重复入库
         await asyncio.to_thread(delete_documents_by_source, source_name)
         
-        # Get embeddings and save to ChromaDB
+        # 获取 embedding 并保存到 ChromaDB
         for i, chunk in enumerate(chunks):
             embedding = await get_embedding(chunk)
-            doc_id = f"{file.filename}_chunk_{i}_{uuid.uuid4().hex[:8]}"
+            doc_id = f"{safe_filename}_chunk_{i}_{uuid.uuid4().hex[:8]}"
             await asyncio.to_thread(
                 add_documents_to_db,
                 ids=[doc_id],
                 texts=[chunk],
                 embeddings=[embedding],
-                metadatas=[{"source": file.filename, "category": category}]
+                metadatas=[{"source": safe_filename, "category": category}]
             )
             
-        return {"status": "success", "message": f"Document {file.filename} processed successfully. Extracted {len(chunks)} chunks."}
+        return {"status": "success", "message": f"Document {safe_filename} processed successfully. Extracted {len(chunks)} chunks."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -60,8 +66,10 @@ async def upload_quote(file: UploadFile = File(...)):
     """Upload and process a quote spreadsheet (Excel/CSV)."""
     safe_filename = os.path.basename(file.filename)
     file_path = os.path.join(QUOTE_DIR, safe_filename)
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    # 异步写入
+    content = await file.read()
+    async with aiofiles.open(file_path, "wb") as buffer:
+        await buffer.write(content)
         
     try:
         # Validate format parseable
@@ -71,7 +79,7 @@ async def upload_quote(file: UploadFile = File(...)):
             
         # Reload cache
         await asyncio.to_thread(load_all_quotes)
-        return {"status": "success", "message": f"Quote file {file.filename} uploaded and parsed successfully."}
+        return {"status": "success", "message": f"Quote file {safe_filename} uploaded and parsed successfully."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -184,16 +192,18 @@ async def create_coach_case(file: UploadFile = File(...)):
                 print(f"!! Error processing case block {i}: {e}")
                 continue
         
-        # 加载现有剧本
-        cases = []
-        if os.path.exists(COACH_CASES_FILE):
-            with open(COACH_CASES_FILE, "r", encoding="utf-8") as f:
-                cases = json.load(f)
-        
-        # 合并 (新生成的排在前面)
-        combined = new_cases + cases
-        with open(COACH_CASES_FILE, "w", encoding="utf-8") as f:
-            json.dump(combined, f, ensure_ascii=False, indent=2)
+        # 加锁，防止并发请求丢失数据
+        async with _coach_cases_lock:
+            # 加载现有剧本
+            cases = []
+            if os.path.exists(COACH_CASES_FILE):
+                with open(COACH_CASES_FILE, "r", encoding="utf-8") as f:
+                    cases = json.load(f)
+            
+            # 合并 (新生成的排在前面)
+            combined = new_cases + cases
+            with open(COACH_CASES_FILE, "w", encoding="utf-8") as f:
+                json.dump(combined, f, ensure_ascii=False, indent=2)
             
         print(f">> Successfully processed {len(new_cases)} cases.")
         return {
@@ -225,17 +235,18 @@ async def list_coach_cases(category: str = None):
 async def delete_coach_case(case_id: str):
     """Delete a specific coach case."""
     try:
-        if not os.path.exists(COACH_CASES_FILE):
-            return {"status": "error", "message": "No cases found"}
+        async with _coach_cases_lock:
+            if not os.path.exists(COACH_CASES_FILE):
+                return {"status": "error", "message": "No cases found"}
+                
+            with open(COACH_CASES_FILE, "r", encoding="utf-8") as f:
+                cases = json.load(f)
+                
+            cases = [c for c in cases if c.get("id") != case_id]
             
-        with open(COACH_CASES_FILE, "r", encoding="utf-8") as f:
-            cases = json.load(f)
-            
-        cases = [c for c in cases if c.get("id") != case_id]
-        
-        with open(COACH_CASES_FILE, "w", encoding="utf-8") as f:
-            json.dump(cases, f, ensure_ascii=False, indent=2)
-            
+            with open(COACH_CASES_FILE, "w", encoding="utf-8") as f:
+                json.dump(cases, f, ensure_ascii=False, indent=2)
+                
         return {"status": "success", "message": f"Case {case_id} deleted."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -244,8 +255,10 @@ async def parse_document_content(file: UploadFile):
     """Temporary helper to get text content from upload."""
     safe_filename = os.path.basename(file.filename)
     temp_path = os.path.join(os.path.dirname(UPLOAD_DOCS_DIR), f"temp_{uuid.uuid4().hex}_{safe_filename}")
-    with open(temp_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    # 异步写入临时文件
+    content = await file.read()
+    async with aiofiles.open(temp_path, "wb") as buffer:
+        await buffer.write(content)
     try:
         text = await parse_document(temp_path)
         return text

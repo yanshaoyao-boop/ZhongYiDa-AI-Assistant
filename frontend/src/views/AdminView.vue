@@ -186,9 +186,8 @@ import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import { FileBox as IconFileBox, Database as IconDatabase, UploadCloud as IconUpload, UserCheck as IconUserCheck } from 'lucide-vue-next'
 
-// Task 8: 去除硬编码端口，支持开发/生产环境自适应
-const API_PORT = 8000
-const BASE_URL = `http://${window.location.hostname}:${API_PORT}/api/upload`
+// 使用相对路径，利用 vite proxy 转发
+const BASE_URL = '/api/upload'
 
 const uploadedAdmin = ref([])
 const uploadedBiz = ref([])
@@ -417,6 +416,7 @@ const uploadCases = async () => {
   caseStatus.value = ''
   
   let successCount = 0
+  let failCount = 0  // 新增失败计数
   let totalCasesGenerated = 0
 
   for (let i = 0; i < caseFiles.value.length; i++) {
@@ -431,12 +431,19 @@ const uploadCases = async () => {
       successCount++
       totalCasesGenerated += (res.data.processed_count || 0)
     } catch (err) {
+      failCount++  // 记录失败，而不是默默吃掉
       console.error(`Failed to upload ${caseFiles.value[i].name}:`, err)
     }
   }
 
-  caseStatus.value = 'success'
-  caseMessage.value = `成功处理 ${successCount} 份文件，共生成 ${totalCasesGenerated} 个实战剧本！`
+  // 根据实际结果显示状态，而不是始终 success
+  if (failCount === 0) {
+    caseStatus.value = 'success'
+    caseMessage.value = `成功处理 ${successCount} 份文件，共生成 ${totalCasesGenerated} 个实战剧本！`
+  } else {
+    caseStatus.value = failCount === caseFiles.value.length ? 'error' : 'warning'
+    caseMessage.value = `处理完成。成功: ${successCount} 份，失败: ${failCount} 份。共生成 ${totalCasesGenerated} 个剧本。`
+  }
   caseFiles.value = []
   caseUploading.value = false
   fetchCoachCases()
