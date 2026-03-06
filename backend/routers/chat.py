@@ -172,18 +172,24 @@ async def chat_stream(request: ChatRequest):
                 except Exception as e:
                     print(f"Error loading coach cases: {e}")
 
-        query_embedding = await get_embedding(request.message)
-        similar_docs = await asyncio.to_thread(search_similar_documents, query_embedding, 5)
-        
-        context_text = ""
-        for i, doc in enumerate(similar_docs):
-            context_text += f"---\n[参考来源: {doc['metadata'].get('source', '未知文档')}]\n{doc['document']}\n"
-            
         if request.message.startswith("【结束对练】"):
             # 获取历史对话用于检索报价
             history_text = " ".join([m.get("content", "") for m in request.history if m.get("content")])
             query_text = history_text[-500:] if len(history_text) > 500 else history_text
-            quote_data = await asyncio.to_thread(get_quote_data_as_string, query_text)
+            
+            # 复盘阶段：并发获取内部知识库与报价数据
+            async def fetch_docs():
+                emb = await get_embedding(request.message)
+                return await asyncio.to_thread(search_similar_documents, emb, 5)
+                
+            async def fetch_quotes():
+                return await asyncio.to_thread(get_quote_data_as_string, query_text)
+                
+            similar_docs, quote_data = await asyncio.gather(fetch_docs(), fetch_quotes())
+            
+            context_text = ""
+            for i, doc in enumerate(similar_docs):
+                context_text += f"---\n[参考来源: {doc['metadata'].get('source', '未知文档')}]\n{doc['document']}\n"
             
             system_prompt = f"""你当前处于【导师复盘与点评】阶段。
 作为曾带出过无数销冠、性格幽默调皮且说话带点“损”的【王牌教练】，你需要对刚才的实战记录进行深度复盘。
@@ -217,16 +223,29 @@ async def chat_stream(request: ChatRequest):
             
             history_text = " ".join([m.get("content", "") for m in request.history if m.get("content")])
             query_text = (background_text + " " + history_text)[-500:]
-            # 为 AI 注入其所在场景对应的真实底价
-            quote_data = await asyncio.to_thread(get_quote_data_as_string, query_text)
+            
+            # 只有当对话进行到一定程度（比如2轮以后）或者包含具体的询价词，才注入报价表，极致压缩 prefill 开销
+            quote_data = ""
+            if len(request.history) > 4 or any(kw in request.message for kw in ["多少钱", "运费", "报价", "价格", "单价"]):
+                # 对练阶段不需要全量搜索向量库，只并发获取报价和汇率
+                async def fetch_quotes():
+                    return await asyncio.to_thread(get_quote_data_as_string, query_text, limit=10) # 进一步降到 10 条
+                
+                async def fetch_rate():
+                    try:
+                        from services.web_search import get_realtime_exchange_rate
+                        return await asyncio.to_thread(get_realtime_exchange_rate)
+                    except:
+                        return ""
+                
+                quote_data, rate = await asyncio.gather(fetch_quotes(), fetch_rate())
+            else:
+                rate = ""
 
             # 注入实时变量
             market_context = ""
-            try:
-                from services.web_search import get_realtime_exchange_rate
-                rate = get_realtime_exchange_rate()
+            if rate:
                 market_context += f"- 当前美元汇率：{rate}\n"
-            except: pass
             
             market_context += "- 市场动态：近期美线罢工风险上升，舱位极其紧张，查验率有所提高。\n"
 
@@ -315,19 +334,19 @@ async def chat_stream(request: ChatRequest):
 *   💰 **计费重警示**：如果发现体积重远大于实重（泡货），要幽默地提醒同事别报亏了。
 
 【报价展示核心规则】：
-* **必须使用表格**：展示报价时，必须使用 Markdown 表格。
-* **精准锁定**：如果用户提到了具体重量（如 200kg），请在表格中【高亮】或【加粗】显示对应的阶梯价格。
+* **必须使用完整表格**：展示报价时，必须使用 Markdown 表格，且**必须展示所有重量阶梯的价格**（以便同事对比），禁止随意删除表格行。
+* **精准锁定（高亮）**：如果用户提到了具体重量（如 200kg），请在完整表格中【高亮】或【加粗】显示最匹配的那个阶梯单价。
 * **渠道推荐**：默认【必须优先】展示咱自家的“明日之星”系列。
-* **仓位智能选择（本次核心更新）**：
-    - **双重展示**：如果用户仅询问价格而未说明货在何处，你【必须同时】报出“明日之星”的**华东仓**（义乌/宁波）和**华南仓**（深圳/东莞）的价格。
-    - **智能判断**：如果用户明确了公司位置或货物所在位置（例如提到：义乌、上海、浙江、宁波），则优先并重点展示“华东仓”报价；若提到：深圳、广州、东莞、华南、广东，则优先展示“华南仓”报价。
-    - **区分来源**：请通过数据中的 `_source` 字段来辨别仓位（包含“华东”字样的为华东仓，包含“深圳”或“华南”的为华南仓），并在表格中明确标出“出发仓”。
+* **仓位智能选择**：
+    - **双重展示**：如果用户仅询问价格而未说明货在何处，你【必须同时】报出“明日之星”的**华东仓**和**华南仓**的价格。
+    - **智能判断**：如果用户明确了位置，则优先并重点展示对应仓库报价。
+    - **区分来源**：请通过数据中的 `_source` 字段来辨别仓位并在表格中明确标出“出发仓”。
 
 【主动识别的地址风险分析（必读并提醒）】：
 {address_probe_context if address_probe_context else "（本次消息中未识别到明确的仓库或邮编，请按常规报价回复）"}
 
 【对话引导】：
-* **在结尾，你【必须】附上一句极其暖心的引导**，提示同事补充箱规、重/方、具体品类。
+* **在结尾，你【必须】附上一句引导**，提示同事补充箱规、重/方、具体品类。
 
 【💡 老鸟碎碎念】：
 结合具体行情，给同事1-2句成交心理学、规避海关风险或拉高利润的干货。
@@ -389,7 +408,7 @@ async def chat_stream(request: ChatRequest):
 
 你的任务：
 1. **解构并润色**：像一位专业客服一样把上述后台结果翻译成“人话”告诉用户。
-2. **处理报错**：如果后台返回了“验证码错误,请重试”或其它报错，坦白告诉用户：“老板，刚才我去速递管家系统里查【{track_num}】，但是系统弹出了滑动验证码拦截了我！目前小易还在进化中，暂不支持破解验证码。如果实在着急，您可以先去网页端核实一下。”
+2. **处理报错**：如果后台返回了“验证码错误,请重试”或其它报错，坦白告诉用户。
 3. **如果是正常轨迹**：梳理出最新的时间线和进度。
 """
 
@@ -417,15 +436,20 @@ async def chat_stream(request: ChatRequest):
             if not similar_docs or best_distance > 0.58:
                  needs_realtime = True
             
-            system_prompt = f"""你是一个名为“小易”的企业级高级助理，现在的身份是【仲易达内部专家】。
-你拥有【仲易达独家内部知识库】、【外部联网搜索】以及即将推出的【定时职能消息推送】三项能力。
+            system_prompt = f"""你是一个名为“小易”的企业级高级助理，现在的身份是【仲易达内部专家顾问】。
+你拥有以下 **6 大核心能力**，能够全方位支持业务同事：
+1. **【全自动底价/卖价查询】**：实时同步公司最新 Excel 报价表，支持阶梯价查询、双仓对比报价。
+2. **【地址详情与偏远排雷】**：智能识别 FBA 仓库、邮编，秒查 UPS/FedEx 偏远等级与极偏远提醒。
+3. **【内部知识库精准检索】**：涵盖公司制度、操作流程、标准话术、岗位职责。
+4. **【物流轨迹黑科技查询】**：直接抓取第三方网站最新路由，翻译成易懂的客服语言。
+5. **【外部实时联网搜索】**：实时补充查询公司资料之外的全球宏观新闻、汇率、天气。
+6. **【模拟实战训练（知识教练）】**：支持场景化对练，帮同事磨练谈单技巧。
 
-### 核心执行指令（优先级最高）：
-1. **绝对优先权**：下方的【内部知识检索参考材料】中包含的是公司最新的、最权威的信息。**只要其中有任何相关信息，哪怕只有几个关键句子，你也必须直接采纳！**
-2. **禁止拒绝回答**：如果有参考材料，绝对不能说“我需要联网”或“暂无资料”，要用最专业的口吻总结出来。
-3. **区分来源**：告诉同事这些信息是根据“公司内部资料”生成的，这会增加回答的权威性。
-4. **联网补充**：只有在内部资料完全对不上号时，才启动联网。
-5. **歧义拦截处理**：如果你发现用户提到的关键词在不同国家或领域有完全不同的含义（例如“5H”，在美国是海关查验指令代码，而在中国是跨境电商简化归类政策），**严禁直接默认其中一种含义进行回答**。你必须先礼貌地询问并确认：“您问的是美国的5H指令，还是中国的5H政策？”。只有在用户明确语境或你的上下文非常清晰时才可直接作答。
+### 核心执行指令：
+1. **绝对优先权**：下方的【内部知识检索参考材料】中包含的是公司最新的、最权威的信息。
+2. **组合能力**：当用户问及“你能做什么”时，请务必全面展示上述 6 项能力，并结合参考材料给出具体的例子。
+3. **区分来源**：告诉同事这些信息是根据“公司内部资料”生成的。
+4. **歧义拦截**：遇到多义词先追问确认。
 
 【北京时间】：{datetime.now().strftime('%Y年%m月%d日')}
 
@@ -463,12 +487,14 @@ async def chat_stream(request: ChatRequest):
                 request.use_deepseek = True
 
     # 注入全局输出格式规范
-    detail_keywords = ["详细", "具体", "完整", "展开", "多说点", "细说"]
+    detail_keywords = ["详细", "具体", "完整", "展开", "多说点", "细说", "列表", "全部"]
     company_intro_keywords = ["公司", "介绍", "简介", "概况", "你是谁", "你们是谁", "仲易达", "发展历程", "背景", "能做哪些事", "怎么用", "正确的使用", "功能", "用法", "技巧", "操作说明"]
+    quote_keywords = ["报价", "门点", "价格", "运费", "多少钱", "多少", "计费", "卖价", "舱位", "单价"]
     
-    # 如果用户明确要求详细，或者是在询问公司介绍、功能说明相关内容，则开启详尽模式
+    # 如果用户明确要求详细，或者是在询问功能说明、报价相关内容，则开启详尽模式
     wants_detail = any(kw in request.message for kw in detail_keywords) or \
-                   any(kw in request.message for kw in company_intro_keywords)
+                   any(kw in request.message for kw in company_intro_keywords) or \
+                   any(kw in request.message for kw in quote_keywords)
     
     if wants_detail:
         global_style_prompt = """
@@ -508,8 +534,9 @@ async def chat_stream(request: ChatRequest):
     # 安全过滤：只允许 user / assistant 角色进入上下文，防止 Prompt Injection
     _ALLOWED_ROLES = {"user", "assistant"}
     if request.history:
+        # 缩减上下文窗口到 10 条（5轮对话），大幅降低每次请求的 Token 数
         safe_history = [
-            m for m in request.history[-20:]
+            m for m in request.history[-10:]
             if m.get("role") in _ALLOWED_ROLES and isinstance(m.get("content"), str)
         ]
         messages.extend(safe_history)

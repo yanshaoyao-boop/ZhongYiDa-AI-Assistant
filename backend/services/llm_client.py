@@ -26,6 +26,10 @@ _http_client = httpx.AsyncClient(timeout=httpx.Timeout(90.0, connect=10.0))
 def get_client():
     return _http_client
 
+async def close_client():
+    """优雅关闭全局 AsyncClient 连接池"""
+    await _http_client.aclose()
+
 class ChatMessage(BaseModel):
     role: str
     content: str
@@ -137,8 +141,9 @@ async def chat_completion_stream(messages: List[dict], use_bot: bool = False, us
             yield f"data: {json.dumps({'error': {'message': f'API Error {response.status_code}: {detail}'}})}\n\n"
             return
 
-        async for chunk in response.aiter_text():
-            yield chunk
+        async for line in response.aiter_lines():
+            if line:
+                yield line + "\n"
 
 async def describe_image(image_base64: str) -> str:
     """Use Doubao Vision model to describe an image for better OCR/understanding"""

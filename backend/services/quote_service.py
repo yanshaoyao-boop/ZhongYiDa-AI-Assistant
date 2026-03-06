@@ -39,9 +39,6 @@ def parse_quote_file(file_path: str) -> List[Dict]:
             elif "澳鑫" in filename:
                 from services.aoxin_parser import parse_aoxin_excel
                 return parse_aoxin_excel(file_path)
-            elif "商壹" in filename:
-                from services.shangyi_parser import parse_shangyi_excel
-                return parse_shangyi_excel(file_path)
             else:
                 from services.excel_parser import parse_complex_excel
                 return parse_complex_excel(file_path)
@@ -68,7 +65,7 @@ def load_all_quotes():
                 QUOTES_CACHE[filename] = records
     return list(QUOTES_CACHE.keys())
 
-def search_best_quotes(query: str, limit: int = 60) -> List[Dict]:
+def search_best_quotes(query: str, limit: int = 15) -> List[Dict]:
     """Search for relevant quotes based on warehouse codes or channel names in the query."""
     if not QUOTES_CACHE:
         load_all_quotes()
@@ -113,48 +110,31 @@ def search_best_quotes(query: str, limit: int = 60) -> List[Dict]:
             return any(a in filename for a in explicit_agents)
         return "明日之星" in filename
 
-    def is_duplicate(r: Dict, results_list: List[Dict]) -> bool:
-        return any(res["渠道"] == r["渠道"] and res.get("仓库代码") == r.get("仓库代码") and res.get("目的地区") == r.get("目的地区") for res in results_list)
-
     def passes_geography_filter(r: Dict) -> bool:
-        # 如果用户没有限制地理位置，直接放行
         if not found_whs and not all_found_regions:
             return True
-        
         wh_code = r.get("仓库代码", "").upper()
         region = r.get("目的地区", "")
-        
-        # 精确仓库匹配
         if any(wh in wh_code for wh in found_whs):
             return True
-        # 区域匹配（锦联等区域报价）
         if any(rg in region for rg in all_found_regions):
             return True
-            
         return False
 
-    # 使用集合进行去重，通过 (渠道, 仓库代码, 目的地区) 组合作为唯一键，提速 O(n^2) -> O(n)
     seen_keys = set()
-    
-    # 遍历所有数据并根据匹配度分级
     for filename, records in QUOTES_CACHE.items():
         is_prio_file = is_priority(filename)
         for r in records:
             if not passes_geography_filter(r):
                 continue
-            
-            # 生成去重唯一键
             unique_key = (r.get("渠道", ""), r.get("仓库代码", ""), r.get("目的地区", ""))
             if unique_key in seen_keys:
                 continue
             
-            # 只有通过了地理位置过滤，才进行关键词匹配
             search_keywords = ["海派", "海运", "空派", "空运", "美森", "限时达", "普货", "带电", "卡派"]
             found_keywords = [k for k in search_keywords if k in query]
             matches_agent = any(a.lower() in filename.lower() or a.lower() in r.get("渠道", "").lower() for a in explicit_agents)
             matches_keyword = any(k.lower() in r.get("渠道", "").lower() for k in found_keywords)
-            
-            # 如果是指定仓库查询，默认任何包含该仓库的都是匹配的
             matches_wh = any(wh in r.get("仓库代码", "").upper() for wh in found_whs) if found_whs else False
             
             if matches_wh or matches_agent or matches_keyword or all_found_regions:
@@ -169,7 +149,7 @@ def search_best_quotes(query: str, limit: int = 60) -> List[Dict]:
     final_results = priority_results + other_results
     return final_results[:limit]
 
-def get_quote_data_as_string(query: str = None) -> str:
+def get_quote_data_as_string(query: str = None, limit: int = 15) -> str:
     """Return quote data as formatted structured JSON text for the LLM to read."""
     if not QUOTES_CACHE:
         load_all_quotes()
@@ -177,22 +157,19 @@ def get_quote_data_as_string(query: str = None) -> str:
     result = ""
     # If a query is provided, we search for specific relevant records instead of just showing the first 50
     if query:
-        relevant_records = search_best_quotes(query)
+        relevant_records = search_best_quotes(query, limit=limit)
         if relevant_records:
-            result += f"--- 已为您精准锁定与“{query}”最匹配的报价数据 ({len(relevant_records)} 条) ---\n"
-            result += "注意：以下价格均为【单价】（元/KG 或 元/CBM），绝非整票货的总价。\n"
+            result += f"--- 已为您锁定与“{query}”最相关的报价数据 ({len(relevant_records)} 条) ---\n"
             result += json.dumps(relevant_records, ensure_ascii=False, indent=2)
             return result
         else:
-            result += "--- 未在最新报价表中找到与您搜索条件直接相关的仓库。以下展示几个常见渠道供参考： ---\n"
+            result += "--- 未找到直接匹配仓库。以下展示部分参考渠道： ---\n"
 
-    # Default fallback
+    # Default fallback - very conservative
     for name, records in QUOTES_CACHE.items():
-        result += f"--- 报价表预览: {name} (共 {len(records)} 条) ---\n"
-        sample = records[:40]
+        result += f"--- 报价表预览: {name} ---\n"
+        sample = records[:3]
         result += json.dumps(sample, ensure_ascii=False, indent=2)
-        if len(records) > 40:
-            result += f"\n*... (还有 {len(records) - 40} 条未展示) ...*\n"
         result += "\n\n"
             
     return result

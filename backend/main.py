@@ -29,5 +29,15 @@ app.include_router(chat.router)
 def read_root():
     return {"message": "ZhongYiDa AI Assistant API is running"}
 
+@app.on_event("shutdown")
+async def shutdown_event():
+    """应用强制关闭时，释放全局网络连接池"""
+    from services.llm_client import close_client
+    try:
+        await close_client()
+        print("Closed LLM HTTP client connection pool.")
+    except Exception as e:
+        print(f"Error closing HTTP client: {e}")
+
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
