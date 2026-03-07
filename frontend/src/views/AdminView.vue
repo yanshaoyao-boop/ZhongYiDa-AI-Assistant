@@ -1,12 +1,26 @@
 <template>
   <div class="admin-container">
     <header class="admin-header glass-panel">
-      <div class="admin-brand">
-        <img src="/logo.png" alt="仲易达集团" class="admin-logo" />
-        <span class="brand-divider">|</span>
-        <span class="gradient-text">智能助手后台管理</span>
+      <div class="header-main">
+        <div class="admin-brand">
+          <img src="/logo.png" alt="仲易达集团" class="admin-logo" />
+          <span class="brand-divider">|</span>
+          <span class="gradient-text">小易助手后台管理</span>
+        </div>
+        <div class="admin-user-nav">
+          <div class="user-profile">
+            <span class="user-info">
+              <span class="user-name">{{ auth.userName }}</span>
+              <span class="user-role">{{ auth.user?.role === 'super_admin' ? '总管' : '分公司管理员' }}</span>
+            </span>
+            <button @click="auth.logout(); router.push('/login')" class="logout-btn">退出登录</button>
+          </div>
+          <router-link to="/admin/staff" class="nav-btn">账号管理</router-link>
+          <router-link to="/admin/lab" class="nav-btn">小易实验室</router-link>
+          <router-link to="/" class="nav-btn-outline">返回助手</router-link>
+        </div>
       </div>
-      <p>管理业务知识库与最新报价表数据</p>
+      <p class="header-desc">管理业务知识库与最新报价表数据</p>
     </header>
     
     <div class="admin-content">
@@ -183,8 +197,13 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '../store/auth'
 import axios from 'axios'
 import { FileBox as IconFileBox, Database as IconDatabase, UploadCloud as IconUpload, UserCheck as IconUserCheck } from 'lucide-vue-next'
+
+const router = useRouter()
+const auth = useAuthStore()
 
 // 使用相对路径，利用 vite proxy 转发
 const BASE_URL = '/api/upload'

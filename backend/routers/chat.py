@@ -7,11 +7,23 @@ import asyncio
 from datetime import datetime
 import os
 import re
+from dependencies import get_current_user, User
+from fastapi import Depends
 
 from services.llm_client import chat_completion_stream, get_embedding, DOUBAO_MODEL_ENDPOINT
 from services.rag_service import search_similar_documents
 from services.quote_service import get_quote_data_as_string
 from services.tracking_service import fetch_tracking_info
+from database import SessionLocal
+from models.user import SystemSetting
+
+def get_config(key: str, default: str) -> str:
+    db = SessionLocal()
+    try:
+        setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
+        return setting.value if setting else default
+    finally:
+        db.close()
 
 # 定义全局正则模式，避免重复编译
 WH_PATTERN = re.compile(r'[A-Z]{3,4}\d+[A-Z]?')
@@ -42,7 +54,7 @@ async def classify_intent(message: str, history: List[dict] = None) -> str:
     has_zip = ZIP_PATTERN.search(message)
     has_wh = WH_PATTERN.search(msg_upper)
     
-    if has_remote_kw and (has_zip or has_wh):
+    if has_remote_kw and (has_zip or has_wh or len(message) > 8):
         return "address", message
     
     # 1.5 Tracking check (单号查询拦截)
@@ -111,7 +123,10 @@ async def classify_intent(message: str, history: List[dict] = None) -> str:
     return "document", message
 
 @router.post("/stream")
-async def chat_stream(request: ChatRequest):
+async def chat_stream(
+    request: ChatRequest,
+    current_user: User = Depends(get_current_user)
+):
     """Stream chat response based on mode, RAG, and quote tables."""
     
     # Process image if present
@@ -420,17 +435,24 @@ async def chat_stream(request: ChatRequest):
             if len(search_query) < 15 and any(kw in search_query for kw in company_intro_keywords):
                 search_query += " 仲易达集团公司简介、发展历程、核心业务、企业文化、优势特色"
             
-            # 执行检索：增加召回数量到 8 条，确保覆盖面
-            query_embedding = await get_embedding(search_query)
-            similar_docs = await asyncio.to_thread(search_similar_documents, query_embedding, 8)
-            
+            # 执行检索：由后台设置决定是否开启 RAG
             context_text = ""
             best_distance = 1.0
-            if similar_docs:
-                best_distance = similar_docs[0]["distance"]
-                print(f">> RAG Hit! Best distance: {best_distance:.4f}, Chunks: {len(similar_docs)}")
-                for i, doc in enumerate(similar_docs):
-                    context_text += f"---\n[内部资料片段 {i+1} | 来源: {doc['metadata'].get('source', '未知文档')}]\n{doc['document']}\n"
+            similar_docs = []
+            
+            enable_rag = get_config("ai_enable_rag", "true").lower() == "true"
+            if enable_rag:
+                query_embedding = await get_embedding(search_query)
+                top_k = int(get_config("ai_search_top_k", "5"))
+                similar_docs = await asyncio.to_thread(search_similar_documents, query_embedding, top_k)
+                
+                if similar_docs:
+                    best_distance = similar_docs[0]["distance"]
+                    print(f">> RAG Hit! Best distance: {best_distance:.4f}, Chunks: {len(similar_docs)}")
+                    for i, doc in enumerate(similar_docs):
+                        context_text += f"---\n[内部资料片段 {i+1} | 来源: {doc['metadata'].get('source', '未知文档')}]\n{doc['document']}\n"
+            else:
+                print(">> RAG is disabled by system settings.")
             
             # 标记 RAG 结果是否较差 (阈值微调为 0.58)
             if not similar_docs or best_distance > 0.58:
@@ -533,10 +555,11 @@ async def chat_stream(request: ChatRequest):
 
     # 安全过滤：只允许 user / assistant 角色进入上下文，防止 Prompt Injection
     _ALLOWED_ROLES = {"user", "assistant"}
+    # 动态上下文窗口：从设置中读取
+    max_history = int(get_config("ai_max_history", "10"))
     if request.history:
-        # 缩减上下文窗口到 10 条（5轮对话），大幅降低每次请求的 Token 数
         safe_history = [
-            m for m in request.history[-10:]
+            m for m in request.history[-max_history:]
             if m.get("role") in _ALLOWED_ROLES and isinstance(m.get("content"), str)
         ]
         messages.extend(safe_history)
@@ -553,11 +576,13 @@ async def chat_stream(request: ChatRequest):
         final_endpoint = DEEPSEEK_ENDPOINT if request.use_deepseek else DOUBAO_MODEL_ENDPOINT
         
         try:
+            temp = float(get_config("ai_temperature", "0.3"))
             async for raw_chunk in chat_completion_stream(
                 messages, 
                 use_bot=False, 
                 use_search=needs_realtime,
-                model_endpoint=final_endpoint
+                model_endpoint=final_endpoint,
+                temperature=temp
             ):
                 line_buffer += raw_chunk
                 while "\n" in line_buffer:

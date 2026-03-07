@@ -1,8 +1,10 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 import os
 import shutil
 from services.doc_parser import parse_document, chunk_text
 from services.rag_service import add_documents_to_db, delete_documents_by_source
+from dependencies import get_current_user, get_admin_user, User
+from typing import List, Optional
 from services.llm_client import get_embedding, analyze_coach_case
 from services.quote_service import parse_quote_file, load_all_quotes, DATA_DIR as QUOTE_DIR
 import uuid
@@ -21,7 +23,11 @@ os.makedirs(UPLOAD_DOCS_DIR, exist_ok=True)
 os.makedirs(QUOTE_DIR, exist_ok=True)
 
 @router.post("/document")
-async def upload_document(file: UploadFile = File(...), category: str = "biz"):
+async def upload_document(
+    file: UploadFile = File(...), 
+    category: str = "biz",
+    admin: User = Depends(get_admin_user)
+):
     """Upload and process a knowledge base document (Word/PDF/TXT), with category."""
     safe_filename = os.path.basename(file.filename)
     file_path = os.path.join(UPLOAD_DOCS_DIR, safe_filename)
@@ -62,7 +68,10 @@ async def upload_document(file: UploadFile = File(...), category: str = "biz"):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/quote")
-async def upload_quote(file: UploadFile = File(...)):
+async def upload_quote(
+    file: UploadFile = File(...),
+    admin: User = Depends(get_admin_user)
+):
     """Upload and process a quote spreadsheet (Excel/CSV)."""
     safe_filename = os.path.basename(file.filename)
     file_path = os.path.join(QUOTE_DIR, safe_filename)
@@ -84,7 +93,10 @@ async def upload_quote(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/documents")
-async def list_documents(category: str = None):
+async def list_documents(
+    category: str = None,
+    user: User = Depends(get_current_user)
+):
     """List all uploaded knowledge base documents."""
     try:
         if not os.path.exists(UPLOAD_DOCS_DIR):
@@ -111,7 +123,10 @@ async def list_documents(category: str = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/document/{filename}")
-async def delete_document(filename: str):
+async def delete_document(
+    filename: str,
+    admin: User = Depends(get_admin_user)
+):
     """Delete a document and its knowledge base chunks."""
     try:
         safe_filename = os.path.basename(filename)
@@ -126,7 +141,9 @@ async def delete_document(filename: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/quotes")
-async def list_quotes():
+async def list_quotes(
+    user: User = Depends(get_current_user)
+):
     """List all uploaded quote files."""
     try:
         if not os.path.exists(QUOTE_DIR):
@@ -139,7 +156,10 @@ async def list_quotes():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/quote/{filename}")
-async def delete_quote(filename: str):
+async def delete_quote(
+    filename: str,
+    admin: User = Depends(get_admin_user)
+):
     """Delete a quote file from the system."""
     try:
         safe_filename = os.path.basename(filename)
@@ -154,7 +174,10 @@ async def delete_quote(filename: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/coach-case")
-async def create_coach_case(file: UploadFile = File(...)):
+async def create_coach_case(
+    file: UploadFile = File(...),
+    admin: User = Depends(get_admin_user)
+):
     """Upload raw records, split multiple cases if exists, wash them with LLM, and save."""
     try:
         content = await parse_document_content(file)
@@ -217,7 +240,10 @@ async def create_coach_case(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/coach-cases")
-async def list_coach_cases(category: str = None):
+async def list_coach_cases(
+    category: str = None,
+    user: User = Depends(get_current_user)
+):
     """List structured coach cases, optionally filtered by category."""
     try:
         if not os.path.exists(COACH_CASES_FILE):
@@ -232,7 +258,10 @@ async def list_coach_cases(category: str = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/coach-case/{case_id}")
-async def delete_coach_case(case_id: str):
+async def delete_coach_case(
+    case_id: str,
+    admin: User = Depends(get_admin_user)
+):
     """Delete a specific coach case."""
     try:
         async with _coach_cases_lock:

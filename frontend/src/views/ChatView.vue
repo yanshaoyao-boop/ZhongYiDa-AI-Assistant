@@ -15,6 +15,19 @@
           <button class="delete-btn" @click.stop="deleteSession(session.id)" title="删除对话">×</button>
         </div>
       </div>
+
+      <div class="sidebar-footer">
+        <a v-if="auth.isAdmin" href="/admin" target="_blank" class="sidebar-admin-btn">
+          <IconShieldCheck size="18" /> 管理员入口
+        </a>
+        <div class="sidebar-user-info">
+          <div class="user-avatar-sidebar">{{ auth.userName?.[0]?.toUpperCase() }}</div>
+          <div class="user-details">
+            <span class="user-name-sidebar">{{ auth.userName }}</span>
+            <button class="logout-link-sidebar" @click="handleLogout">退出登录</button>
+          </div>
+        </div>
+      </div>
     </aside>
 
     <div class="chat-container">
@@ -61,9 +74,6 @@
           </button>
         </div>
 
-        <div class="nav-links">
-          <a href="/admin" class="nav-btn" target="_blank">管理员入口</a>
-        </div>
       </nav>
 
       <div class="main-body-wrapper">
@@ -71,7 +81,7 @@
         <main class="chat-main" ref="chatMain">
           <div v-if="messages.length === 0" class="welcome-screen">
             <template v-if="currentMode === 'general'">
-              <h2 class="welcome-name">您好，我是小易，您的全能助手</h2>
+              <h2 class="welcome-name">{{ welcomeMsg }}</h2>
               <h2 class="welcome-slogan">把繁琐的流程交给我，把专注留给真正重要的事情。</h2>
               <p>今天想先解决什么？</p>
               <div class="suggestion-chips">
@@ -252,7 +262,9 @@
 
 <script setup>
 import { ref, watch, nextTick, onMounted, onUnmounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import axios from 'axios'
+import { useAuthStore } from '../store/auth'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { 
@@ -262,7 +274,8 @@ import {
   Image as IconImage, 
   Square as IconSquare, 
   XCircle as IconXCircle,
-  Zap as IconZap
+  Zap as IconZap,
+  ShieldCheck as IconShieldCheck
 } from 'lucide-vue-next'
 // 使用相对路径，配合 vite.config.js 中的 dev proxy 转发到后端
 // 生产环境由 nginx/反向代理处理 /api 路由
@@ -282,6 +295,25 @@ const chatMain = ref(null)
 const inputRef = ref(null)
 const currentMode = ref('general')
 const isSidebarOpen = ref(false)
+const welcomeMsg = ref('您好，我是小易，您的全能助手')
+const auth = useAuthStore()
+const router = useRouter()
+
+const handleLogout = () => {
+  auth.logout()
+  router.push('/login')
+}
+
+const fetchPublicSettings = async () => {
+  try {
+    const res = await axios.get('/api/settings/public')
+    if (res.data.ai_welcome_message) {
+      welcomeMsg.value = res.data.ai_welcome_message
+    }
+  } catch (err) {
+    console.error("Failed to fetch public settings:", err)
+  }
+}
 
 const selectedImage = ref(null)
 const fileInput = ref(null)
@@ -490,6 +522,7 @@ onMounted(() => {
   }
   loadSessionsForMode(currentMode.value)
   fetchCoachCases()
+  fetchPublicSettings()
 })
 
 onUnmounted(() => {
@@ -653,7 +686,8 @@ const sendMessage = async () => {
       method: 'POST',
       signal: abortController.value.signal,
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${auth.token}`
       },
       body: JSON.stringify({
         message: content,
@@ -789,10 +823,85 @@ const truncate = (text, len) => {
 .session-list {
   flex: 1;
   overflow-y: auto;
-  padding: 0 12px 20px;
+  padding: 0 12px 10px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.sidebar-footer {
+  padding: 16px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.sidebar-admin-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  background: #4f46e5;
+  color: white;
+  border-radius: 8px;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.sidebar-admin-btn:hover {
+  background: #4338ca;
+  transform: translateY(-1px);
+}
+
+.sidebar-user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px;
+}
+
+.user-avatar-sidebar {
+  width: 36px;
+  height: 36px;
+  background: var(--primary-gradient);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 700;
+  font-size: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.user-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-name-sidebar {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.logout-link-sidebar {
+  background: none;
+  border: none;
+  color: #ef4444;
+  font-size: 12px;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.logout-link-sidebar:hover {
+  text-decoration: underline;
 }
 .session-item {
   display: flex;

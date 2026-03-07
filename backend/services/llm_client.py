@@ -85,7 +85,13 @@ async def get_embedding(text: str) -> List[float]:
         return data["data"]["embedding"]
 
 
-async def chat_completion_stream(messages: List[dict], use_bot: bool = False, use_search: bool = False, model_endpoint: str = None):
+async def chat_completion_stream(
+    messages: List[dict], 
+    use_bot: bool = False, 
+    use_search: bool = False, 
+    model_endpoint: str = None,
+    temperature: float = 0.7
+):
     """Generator for streaming Chat Completions (Using standard OpenAI compatible format or Responses API)"""
     headers = {
         "Authorization": f"Bearer {DOUBAO_API_KEY}",
@@ -97,12 +103,13 @@ async def chat_completion_stream(messages: List[dict], use_bot: bool = False, us
     if use_search:
         # Use Responses API with full conversation history
         url = f"{BASE_URL}/responses"
-        # Corrected: Responses API uses 'input' instead of 'messages'
+        # Ark-Responses API typically doesn't use the 'parameters' wrapping field
         payload = {
             "model": current_model,
             "input": messages, 
             "tools": [{"type": "web_search"}],
-            "stream": True
+            "stream": True,
+            "temperature": temperature
         }
     elif use_bot and DOUBAO_BOT_ID:
         url = f"{BASE_URL}/bots/chat/completions"
@@ -111,14 +118,16 @@ async def chat_completion_stream(messages: List[dict], use_bot: bool = False, us
             "model": model,
             "messages": messages,
             "stream": True,
-            "stream_options": {"include_usage": True}
+            "stream_options": {"include_usage": True},
+            "temperature": temperature
         }
     else:
         url = f"{BASE_URL}/chat/completions"
         payload = {
             "model": current_model,
             "messages": messages,
-            "stream": True
+            "stream": True,
+            "temperature": temperature
         }
 
     # Clean None values in payload

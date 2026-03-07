@@ -17,3 +17,6 @@ xlrd
 playwright
 playwright-stealth
 aiofiles>=23.0.0
+sqlalchemy
+passlib[bcrypt]
+python-jose[cryptography]

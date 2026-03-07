@@ -9,7 +9,7 @@ export default defineConfig({
     proxy: {
       // 开发环境：将所有 /api 请求代理到后端，避免硬编码地址和跨域问题
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       }
     }
