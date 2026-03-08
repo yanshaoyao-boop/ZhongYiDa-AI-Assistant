@@ -7,6 +7,7 @@ import asyncio
 from datetime import datetime
 import os
 import re
+import time
 from dependencies import get_current_user, User
 from fastapi import Depends
 
@@ -17,13 +18,35 @@ from services.tracking_service import fetch_tracking_info
 from database import SessionLocal
 from models.user import SystemSetting
 
-def get_config(key: str, default: str) -> str:
+import time as _time
+
+_config_cache = {}
+_config_cache_ts = 0
+_CONFIG_TTL = 60  # 缓存有效期 60 秒
+
+def get_all_config() -> dict:
+    """一次性读取所有配置，带 60 秒 TTL 缓存"""
+    global _config_cache, _config_cache_ts
+    now = _time.time()
+    if _config_cache and (now - _config_cache_ts) < _CONFIG_TTL:
+        return _config_cache
     db = SessionLocal()
     try:
-        setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
-        return setting.value if setting else default
+        settings = db.query(SystemSetting).all()
+        _config_cache = {s.key: s.value for s in settings}
+        _config_cache_ts = now
+        return _config_cache
     finally:
         db.close()
+
+def get_config(key: str, default: str) -> str:
+    return get_all_config().get(key, default)
+
+def invalidate_config_cache():
+    """清空配置缓存，供管理员修改配置后调用"""
+    global _config_cache, _config_cache_ts
+    _config_cache = {}
+    _config_cache_ts = 0
 
 # 定义全局正则模式，避免重复编译
 WH_PATTERN = re.compile(r'[A-Z]{3,4}\d+[A-Z]?')
@@ -32,6 +55,15 @@ ZIP_PATTERN = re.compile(r'(?<!\d)\d{5}(?!\d)')
 
 # 定义 DeepSeek 接入点
 DEEPSEEK_ENDPOINT = os.getenv("DEEPSEEK_MODEL_ENDPOINT", DOUBAO_MODEL_ENDPOINT)
+
+# 公司介绍关键词 (用于触发 RAG 补全或详尽输出模式)
+COMPANY_INTRO_KEYWORDS = [
+    "公司", "介绍", "简介", "概况", "你是谁", "你们是谁", "仲易达", "发展历程", "背景", 
+    "能做哪些事", "怎么用", "正确的使用", "功能", "用法", "技巧", "操作说明", "业务"
+]
+
+# 报价查询关键词
+QUOTE_KEYWORDS = ["报价", "价格", "多少钱", "费", "门点", "计费", "卖价", "舱位", "单价", "运费"]
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -45,6 +77,14 @@ class ChatRequest(BaseModel):
 async def classify_intent(message: str, history: List[dict] = None) -> str:
     """Classify user intent to determine routing (simple heuristic or LLM based)"""
     msg_upper = message.upper()
+    
+    # ====== 前置：重量/体积自动提取（必须在所有 return 之前） ======
+    weight_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:KG|公斤)', message, re.IGNORECASE)
+    volume_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:CBM|方|立方)', message, re.IGNORECASE)
+    if weight_match:
+        message += f" [系统备注：用户关注重量为 {weight_match.group(1)}KG]"
+    if volume_match:
+        message += f" [系统备注：用户关注体积为 {volume_match.group(1)}CBM]"
     
     # 1. Remote address check (High Priority)
     remote_keywords = ["偏远", "加费", "超编", "极偏", "邮编", "地址库", "哪里", "远不远", "送吗", "偏吗", "超区"]
@@ -71,8 +111,7 @@ async def classify_intent(message: str, history: List[dict] = None) -> str:
     if has_wh:
         return "quote", message
     
-    quote_keywords = ["报价", "价格", "运费", "多少钱", "航线", "时效", "价目", "单价", "仓位"]
-    for kw in quote_keywords:
+    for kw in QUOTE_KEYWORDS:
         if kw in message:
             return "quote", message
             
@@ -98,7 +137,7 @@ async def classify_intent(message: str, history: List[dict] = None) -> str:
             # 如果 AI 上一句话看起来像是在讲笑话或闲聊（简单启发式判断）
             if any(kw in last_ai_msg for kw in ["笑话", "哈", "有趣", "嘿嘿", "故事"]):
                 return "social", message
-            if any(kw in last_ai_msg for kw in quote_keywords) or WH_PATTERN.search(last_ai_msg.upper()):
+            if any(kw in last_ai_msg for kw in QUOTE_KEYWORDS) or WH_PATTERN.search(last_ai_msg.upper()):
                 return "quote", message
 
     # 5. Internal specific keywords (Bonus for document search)
@@ -109,17 +148,8 @@ async def classify_intent(message: str, history: List[dict] = None) -> str:
     if history and len(history) > 0:
         recent_msgs = [m.get("content", "") for m in history[-4:] if m.get("role") == "user"]
         for old_msg in recent_msgs:
-            if WH_PATTERN.search(old_msg.upper()) or any(kw in old_msg for kw in quote_keywords):
+            if WH_PATTERN.search(old_msg.upper()) or any(kw in old_msg for kw in QUOTE_KEYWORDS):
                 return "quote", message
-    
-    # --- 重量/体积自动提取辅助逻辑 (尝试从消息中抠出 200kg, 5cbm 等) ---
-    weight_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:KG|公斤)', message, re.IGNORECASE)
-    volume_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:CBM|方|立方)', message, re.IGNORECASE)
-    if weight_match:
-        message += f" [系统备注：用户关注重量为 {weight_match.group(1)}KG]"
-    if volume_match:
-        message += f" [系统备注：用户关注体积为 {volume_match.group(1)}CBM]"
-
     return "document", message
 
 @router.post("/stream")
@@ -431,8 +461,7 @@ async def chat_stream(
             # Handle RAG Document Query 
             # --- 智能查询改写 (针对公司介绍类短查询) ---
             search_query = request.message
-            company_intro_keywords = ["公司", "介绍", "简介", "概况", "简介", "你们是谁", "你是谁", "干什么的", "业务"]
-            if len(search_query) < 15 and any(kw in search_query for kw in company_intro_keywords):
+            if len(search_query) < 15 and any(kw in search_query for kw in COMPANY_INTRO_KEYWORDS):
                 search_query += " 仲易达集团公司简介、发展历程、核心业务、企业文化、优势特色"
             
             # 执行检索：由后台设置决定是否开启 RAG
@@ -510,13 +539,10 @@ async def chat_stream(
 
     # 注入全局输出格式规范
     detail_keywords = ["详细", "具体", "完整", "展开", "多说点", "细说", "列表", "全部"]
-    company_intro_keywords = ["公司", "介绍", "简介", "概况", "你是谁", "你们是谁", "仲易达", "发展历程", "背景", "能做哪些事", "怎么用", "正确的使用", "功能", "用法", "技巧", "操作说明"]
-    quote_keywords = ["报价", "门点", "价格", "运费", "多少钱", "多少", "计费", "卖价", "舱位", "单价"]
-    
     # 如果用户明确要求详细，或者是在询问功能说明、报价相关内容，则开启详尽模式
     wants_detail = any(kw in request.message for kw in detail_keywords) or \
-                   any(kw in request.message for kw in company_intro_keywords) or \
-                   any(kw in request.message for kw in quote_keywords)
+                   any(kw in request.message for kw in COMPANY_INTRO_KEYWORDS) or \
+                   any(kw in request.message for kw in QUOTE_KEYWORDS)
     
     if wants_detail:
         global_style_prompt = """
@@ -571,6 +597,8 @@ async def chat_stream(
         流式输出：根据任务属性选择最优模型发动机。
         """
         line_buffer = ""
+        full_response = ""
+        start_time = time.time()
         # 确定最终使用的模型接入点
         # 如果 request.use_deepseek 为 True，则强行使用理性的推理接入点
         final_endpoint = DEEPSEEK_ENDPOINT if request.use_deepseek else DOUBAO_MODEL_ENDPOINT
@@ -590,7 +618,8 @@ async def chat_stream(
                     line = line.strip()
                     
                     if not line: continue
-                    if line == "data:[DONE]": return
+                    if line == "data:[DONE]": 
+                        break
                     if not line.startswith("data:"): continue
                     
                     data_str = line[5:].strip()
@@ -602,31 +631,64 @@ async def chat_stream(
                         if "error" in data:
                             err_obj = data["error"]
                             error_msg = err_obj.get("message", "API Error") if isinstance(err_obj, dict) else str(err_obj)
-                            yield f"\n[模型服务错误：{error_msg}]"
-                            return
+                            error_res = f"\n[模型服务错误：{error_msg}]"
+                            full_response += error_res
+                            yield error_res
+                            break
                         
                         # Standard OpenAI compatible
                         if "choices" in data and len(data["choices"]) > 0:
                             delta = data["choices"][0].get("delta", {})
                             content = delta.get("content", "")
                             if content:
+                                full_response += content
                                 yield content
                         # Volcengine Responses API Streaming
                         elif "type" in data and data["type"] == "response.output_text.delta":
                             content = data.get("delta", "")
                             if content:
+                                full_response += content
                                 yield content
                         # Volcengine Responses API Error or Other types
                         elif "type" in data and data["type"] == "error":
                             err_info = data.get("error", {})
                             error_msg = err_info.get("message", "Unknown error") if isinstance(err_info, dict) else str(err_info)
-                            yield f"\n[实时搜索服务错误：{error_msg}]"
-                            return
+                            error_res = f"\n[实时搜索服务错误：{error_msg}]"
+                            full_response += error_res
+                            yield error_res
+                            break
                     except json.JSONDecodeError:
                         continue
         except Exception as e:
             import traceback
             traceback.print_exc()
-            yield f"\n[系统提示：后端处理发生异常 {str(e)}]"
+            error_res = f"\n[系统提示：后端处理发生异常 {str(e)}]"
+            full_response += error_res
+            yield error_res
+        finally:
+            # Save history to DB
+            processing_time = time.time() - start_time
+            db = SessionLocal()
+            try:
+                from models.chat_history import ChatHistory
+                user_id = current_user.id if current_user else None
+                # Omit image_base64 from logged message if too large, simply note it
+                msg_to_store = request.message
+                if request.image_base64:
+                    msg_to_store = f"[附带图片] {msg_to_store}"
+
+                history_record = ChatHistory(
+                    user_id=user_id,
+                    user_message=msg_to_store,
+                    ai_response=full_response,
+                    processing_time=processing_time,
+                    mode=request.mode
+                )
+                db.add(history_record)
+                db.commit()
+            except Exception as db_e:
+                print(f"Error saving chat history: {db_e}")
+            finally:
+                db.close()
 
     return StreamingResponse(stream_generator(), media_type="text/plain; charset=utf-8")

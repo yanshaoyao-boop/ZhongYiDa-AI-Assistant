@@ -100,53 +100,6 @@ def create_user(
     db.refresh(new_user)
     return {"message": "创建用户成功", "id": new_user.id}
 
-@router.patch("/users/{user_id}")
-def update_user(
-    user_id: int,
-    data: UserUpdate,
-    db: Session = Depends(get_db),
-    admin: User = Depends(get_admin_user)
-):
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="用户未找到")
-
-    # 权限检查
-    if admin.role == "branch_admin" and user.branch_id != admin.branch_id:
-        raise HTTPException(status_code=403, detail="无权修改其他分公司的员工")
-
-    if data.full_name is not None: user.full_name = data.full_name
-    if data.role: user.role = data.role
-    if data.branch_id is not None: user.branch_id = data.branch_id
-    if data.department_id is not None: user.department_id = data.department_id
-    if data.is_active is not None: user.is_active = data.is_active
-    if data.password:
-        user.hashed_password = get_password_hash(data.password)
-
-    db.commit()
-    return {"message": "更新成功"}
-
-@router.delete("/users/{user_id}")
-def delete_user(
-    user_id: int,
-    db: Session = Depends(get_db),
-    admin: User = Depends(get_admin_user)
-):
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="用户未找到")
-    
-    # 不能删自己
-    if user.id == admin.id:
-        raise HTTPException(status_code=400, detail="不能删除当前登录账号")
-
-    if admin.role == "branch_admin" and user.branch_id != admin.branch_id:
-        raise HTTPException(status_code=403, detail="无权删除其他分公司的员工")
-
-    db.delete(user)
-    db.commit()
-    return {"message": "删除成功"}
-
 @router.get("/users/export")
 def export_users(
     db: Session = Depends(get_db),
@@ -259,6 +212,56 @@ async def import_users(
         "message": f"成功导入 {success_count} 个账号",
         "errors": errors
     }
+
+
+@router.patch("/users/{user_id}")
+def update_user(
+    user_id: int,
+    data: UserUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户未找到")
+
+    # 权限检查
+    if admin.role == "branch_admin" and user.branch_id != admin.branch_id:
+        raise HTTPException(status_code=403, detail="无权修改其他分公司的员工")
+
+    if data.full_name is not None: user.full_name = data.full_name
+    if data.role: user.role = data.role
+    if data.branch_id is not None: user.branch_id = data.branch_id
+    if data.department_id is not None: user.department_id = data.department_id
+    if data.is_active is not None: user.is_active = data.is_active
+    if data.password:
+        user.hashed_password = get_password_hash(data.password)
+
+    db.commit()
+    return {"message": "更新成功"}
+
+@router.delete("/users/{user_id}")
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user)
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户未找到")
+    
+    # 不能删自己
+    if user.id == admin.id:
+        raise HTTPException(status_code=400, detail="不能删除当前登录账号")
+
+    if admin.role == "branch_admin" and user.branch_id != admin.branch_id:
+        raise HTTPException(status_code=403, detail="无权删除其他分公司的员工")
+
+    db.delete(user)
+    db.commit()
+    return {"message": "删除成功"}
+
+
 
 # --- 结构管理接口 ---
 

@@ -36,6 +36,9 @@ def update_settings(
             setting.value = str(value)
     
     db.commit()
+    # 管理员修改配置后立即清除缓存
+    from routers.chat import invalidate_config_cache
+    invalidate_config_cache()
     return {"message": "设置已更新"}
 
 # 也可以提供一个公共接口给 ChatView 使用（如果需要一些前台展示配置）

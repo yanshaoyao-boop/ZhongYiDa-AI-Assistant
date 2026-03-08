@@ -265,8 +265,7 @@ import { ref, watch, nextTick, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '../store/auth'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
+import { renderMarkdown } from '@/utils/markdown'
 import { 
   Menu as IconMenu, 
   X as IconX, 
@@ -468,13 +467,6 @@ const fetchCoachCases = async () => {
   }
 }
 
-const renderMarkdown = (text) => {
-  if (!text) return ''
-  let cleaned = text.replace(/~~([\s\S]*?)~~/g, '$1')
-  cleaned = cleaned.replace(/~+/g, '')
-  return DOMPurify.sanitize(marked(cleaned))
-}
-
 const scrollToBottom = async () => {
   await nextTick()
   if (chatMain.value) {
@@ -598,7 +590,7 @@ const debouncedSaveSessions = () => {
   }, 1000) // 1秒防抖，避免流式响应时频繁触发磁盘IO
 }
 
-watch(() => messages.value, () => {
+watch(() => messages.value.length, () => {
   scrollToBottom()
   const session = sessions.value.find(s => s.id === currentSessionId.value)
   if (session) {
@@ -607,9 +599,16 @@ watch(() => messages.value, () => {
     if (firstUser && session.title === '新对话') {
       session.title = firstUser.content.slice(0, 15) + (firstUser.content.length > 15 ? '...' : '')
     }
-    debouncedSaveSessions() // 改为防抖保存
+    debouncedSaveSessions()
   }
-}, { deep: true })
+})
+
+watch(isGenerating, (newVal, oldVal) => {
+  if (oldVal === true && newVal === false) {
+    saveSessions()
+    scrollToBottom()
+  }
+})
 
 const presetMsg = (msg) => {
   inputMsg.value = msg

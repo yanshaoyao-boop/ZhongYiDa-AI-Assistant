@@ -75,14 +75,18 @@ def search_best_quotes(query: str, limit: int = 15) -> List[Dict]:
     found_whs = wh_pattern.findall(query.upper())
     
     # 建立仓库到区域的隐式映射
-    wh_to_region = {
-        "ONT8": "美西", "LGB8": "美西", "LAX9": "美西", "PHX5": "美西", "SBD1": "美西",
-        "SMF3": "美西", "LAS1": "美西", "OAK3": "美西", "SCK4": "美西", "FAT1": "美西",
-        "GEG1": "美西", "FTW1": "美中", "IND9": "美中", "MDW2": "美中", "MEM1": "美中",
-        "MQJ1": "美中", "OKL2": "美中", "TPA2": "美中", "SDF8": "美中", "TEB9": "美东",
-        "ABE2": "美东", "PHL7": "美东", "CLT2": "美东", "SAV3": "美东", "BWI2": "美东",
-        "EWR4": "美东", "LGA9": "美东"
-    }
+    import json
+    map_file = os.path.join(DATA_DIR, "..", "warehouse_region_map.json")
+    try:
+        with open(map_file, "r", encoding="utf-8") as f:
+            wh_to_region = json.load(f)
+    except Exception as e:
+        print(f"Error loading warehouse_region_map: {e}")
+        wh_to_region = {
+            "ONT8": "美西", "LGB8": "美西", "LAX9": "美西",
+            "FTW1": "美中", "IND9": "美中", "MDW2": "美中",
+            "TEB9": "美东", "ABE2": "美东", "PHL7": "美东"
+        }
     
     extra_regions = []
     for wh in found_whs:

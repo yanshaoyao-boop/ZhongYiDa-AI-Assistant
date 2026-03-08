@@ -12,6 +12,19 @@ axios.interceptors.request.use((config) => {
     return Promise.reject(error)
 })
 
+// 拦截器：统一处理 401 鉴权失败，自动跳转登录页
+axios.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response?.status === 401 && window.location.pathname !== '/login') {
+            localStorage.removeItem('token')
+            localStorage.removeItem('user')
+            window.location.href = '/login'
+        }
+        return Promise.reject(error)
+    }
+)
+
 export const useAuthStore = defineStore('auth', {
     state: () => ({
         token: localStorage.getItem('token') || null,

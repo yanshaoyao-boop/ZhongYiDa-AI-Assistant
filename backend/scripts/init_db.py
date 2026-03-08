@@ -7,6 +7,7 @@ sys.path.append(backend_dir)
 
 from database import engine, SessionLocal, Base
 from models.user import Branch, Department, User
+from models.chat_history import ChatHistory
 import bcrypt
 
 def get_password_hash(password: str) -> str:

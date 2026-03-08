@@ -24,7 +24,7 @@ async def extract_text_from_pdf(file_path: str) -> str:
                 image_bytes = base_image["image"]
                 
                 # 转换 Base64
-                image_b64 = base_64_encode = base64.b64encode(image_bytes).decode('utf-8')
+                image_b64 = base64.b64encode(image_bytes).decode('utf-8')
                 
                 # 调用 Vision 模型描述图片
                 print(f"Detecting image on page {page_num+1}, calling Vision model...")

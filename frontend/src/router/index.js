@@ -30,6 +30,12 @@ const routes = [
     name: 'Lab',
     component: () => import('../views/LabView.vue'),
     meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
+    path: '/admin/chat-logs',
+    name: 'ChatLogs',
+    component: () => import('../views/ChatLogsView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true }
   }
 ]
 

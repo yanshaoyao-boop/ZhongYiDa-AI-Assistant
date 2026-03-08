@@ -1,5 +1,7 @@
-import urllib.request
 import json
+import urllib.request
+import urllib.parse
+from datetime import datetime
 
 def get_realtime_exchange_rate(pair="USDCNH=X"):
     """
@@ -15,8 +17,6 @@ def get_realtime_exchange_rate(pair="USDCNH=X"):
     except Exception as e:
         return f"无法获取实时汇率 ({str(e)})"
 
-import urllib.request
-import urllib.parse
 from bs4 import BeautifulSoup
 import traceback
 
@@ -28,7 +28,7 @@ def get_realtime_news(query, max_results=5):
         # First try DDGS
         from ddgs import DDGS
         ddgs = DDGS()
-        results = ddgs.text(query + " 2026", max_results=max_results)
+        results = ddgs.text(query + f" {datetime.now().year}", max_results=max_results)
         if results:
             news_text = ""
             for i, r in enumerate(results):

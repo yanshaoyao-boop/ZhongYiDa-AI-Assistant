@@ -51,16 +51,21 @@ async def upload_document(
         # 删除旧片段，防止重复入库
         await asyncio.to_thread(delete_documents_by_source, source_name)
         
-        # 获取 embedding 并保存到 ChromaDB
-        for i, chunk in enumerate(chunks):
-            embedding = await get_embedding(chunk)
-            doc_id = f"{safe_filename}_chunk_{i}_{uuid.uuid4().hex[:8]}"
+        # 并发获取 embeddings（控制并发数为 5，防止 API 限流）
+        BATCH_SIZE = 5
+        for batch_start in range(0, len(chunks), BATCH_SIZE):
+            batch = chunks[batch_start:batch_start + BATCH_SIZE]
+            embeddings = await asyncio.gather(*[get_embedding(chunk) for chunk in batch])
+            
+            ids = [f"{safe_filename}_chunk_{batch_start + i}_{uuid.uuid4().hex[:8]}" for i in range(len(batch))]
+            metadatas = [{"source": safe_filename, "category": category}] * len(batch)
+            
             await asyncio.to_thread(
                 add_documents_to_db,
-                ids=[doc_id],
-                texts=[chunk],
-                embeddings=[embedding],
-                metadatas=[{"source": safe_filename, "category": category}]
+                ids=ids,
+                texts=list(batch),
+                embeddings=list(embeddings),
+                metadatas=metadatas
             )
             
         return {"status": "success", "message": f"Document {safe_filename} processed successfully. Extracted {len(chunks)} chunks."}
@@ -135,7 +140,7 @@ async def delete_document(
             os.remove(file_path)
             
         # Delete from ChromaDB
-        await asyncio.to_thread(delete_documents_by_source, filename)
+        await asyncio.to_thread(delete_documents_by_source, safe_filename)
         return {"status": "success", "message": f"Document {filename} deleted successfully."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -233,7 +238,7 @@ async def create_coach_case(
             "status": "success", 
             "processed_count": len(new_cases),
             "total_found": len(case_texts),
-            "note": "为了保证分析质量，系统单次批量处理前10条。如有更多，请分批上传或联系管理员。" if len(case_texts) > batch_limit else ""
+            "note": f"为了保证分析质量，系统单次批量处理前{batch_limit}条。如有更多，请分批上传或联系管理员。" if len(case_texts) > batch_limit else ""
         }
     except Exception as e:
         print(f"!! Global error in create_coach_case: {e}")

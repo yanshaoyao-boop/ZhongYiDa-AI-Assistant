@@ -61,7 +61,6 @@ const auth = useAuthStore()
 
 const username = ref('')
 const password = ref('')
-const hasLogo = ref(true)
 
 const handleLogin = async () => {
   if (!username.value || !password.value) return

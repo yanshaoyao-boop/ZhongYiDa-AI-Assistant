@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 
 from database import Base
 
@@ -36,7 +36,7 @@ class User(Base):
     # role 取值为: super_admin, branch_admin, user
     role = Column(String, nullable=False, default="user")
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # 外键
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
@@ -45,6 +45,9 @@ class User(Base):
     # 关系映射
     branch = relationship("Branch", back_populates="users")
     department = relationship("Department", back_populates="users")
+
+    def __repr__(self):
+        return f"<User(username='{self.username}', role='{self.role}')>"
 
 class SystemSetting(Base):
     __tablename__ = "system_settings"

@@ -17,6 +17,7 @@
           </div>
           <router-link to="/admin/staff" class="nav-btn">账号管理</router-link>
           <router-link to="/admin/lab" class="nav-btn">小易实验室</router-link>
+          <router-link to="/admin/chat-logs" class="nav-btn">会话审计</router-link>
           <router-link to="/" class="nav-btn-outline">返回助手</router-link>
         </div>
       </div>
@@ -201,13 +202,14 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../store/auth'
 import axios from 'axios'
 import { FileBox as IconFileBox, Database as IconDatabase, UploadCloud as IconUpload, UserCheck as IconUserCheck } from 'lucide-vue-next'
+import { useUploader } from '../composables/useUploader'
 
 const router = useRouter()
 const auth = useAuthStore()
 
-// 使用相对路径，利用 vite proxy 转发
 const BASE_URL = '/api/upload'
 
+// ─── 已上传文件列表 ────────────────────────────────────────────
 const uploadedAdmin = ref([])
 const uploadedBiz = ref([])
 const uploadedQuotes = ref([])
@@ -215,12 +217,14 @@ const coachCases = ref([])
 
 const fetchUploadedDocs = async () => {
   try {
-    const resA = await axios.get(`${BASE_URL}/documents?category=admin`)
+    const [resA, resB] = await Promise.all([
+      axios.get(`${BASE_URL}/documents?category=admin`),
+      axios.get(`${BASE_URL}/documents?category=biz`)
+    ])
     uploadedAdmin.value = resA.data.files || []
-    const resB = await axios.get(`${BASE_URL}/documents?category=biz`)
     uploadedBiz.value = resB.data.files || []
   } catch (err) {
-    console.error("Failed to fetch documents:", err)
+    console.error('Failed to fetch documents:', err)
   }
 }
 
@@ -229,7 +233,7 @@ const fetchUploadedQuotes = async () => {
     const res = await axios.get(`${BASE_URL}/quotes`)
     uploadedQuotes.value = res.data.files || []
   } catch (err) {
-    console.error("Failed to fetch quotes:", err)
+    console.error('Failed to fetch quotes:', err)
   }
 }
 
@@ -238,7 +242,7 @@ const fetchCoachCases = async () => {
     const res = await axios.get(`${BASE_URL}/coach-cases`)
     coachCases.value = Array.isArray(res.data) ? res.data : (res.data.cases || [])
   } catch (err) {
-    console.error("Failed to fetch coach cases:", err)
+    console.error('Failed to fetch coach cases:', err)
   }
 }
 
@@ -248,94 +252,33 @@ onMounted(() => {
   fetchCoachCases()
 })
 
-// === Admin logic ===
-const isDraggingAdmin = ref(false)
-const adminFiles = ref([])
-const adminInput = ref(null)
-const adminUploading = ref(false)
-const adminMessage = ref('')
-const adminStatus = ref('')
-const currentAdminIndex = ref(0)
-const triggerAdminSelect = () => adminInput.value.click()
-const onAdminSelected = (e) => adminFiles.value = Array.from(e.target.files)
-const onDropAdmin = (e) => {
-  isDraggingAdmin.value = false
-  if (e.dataTransfer.files.length > 0) adminFiles.value = Array.from(e.dataTransfer.files)
-}
-const uploadAdmin = async () => {
-  if (adminFiles.value.length === 0) return
-  adminUploading.value = true
-  adminMessage.value = ''
-  adminStatus.value = ''
-  let successCount = 0
-  let errorMessages = []
-  for (let i = 0; i < adminFiles.value.length; i++) {
-    currentAdminIndex.value = i
-    const formData = new FormData()
-    formData.append('file', adminFiles.value[i])
-    try {
-      await axios.post(`${BASE_URL}/document?category=admin`, formData, { headers: { 'Content-Type': 'multipart/form-data' }})
-      successCount++
-    } catch (err) {
-      errorMessages.push(`${adminFiles.value[i].name}: ${err.response?.data?.detail || err.message}`)
-    }
-  }
-  if (errorMessages.length === 0) {
-    adminStatus.value = 'success'
-    adminMessage.value = `成功处理并学习了 ${successCount} 份行政文档。`
-    adminFiles.value = []
-  } else {
-    adminStatus.value = 'error'
-    adminMessage.value = `处理完成。成功: ${successCount}. 失败: ${errorMessages.length}.`
-  }
-  adminUploading.value = false
-  fetchUploadedDocs()
-}
+// ─── Admin 文档上传 ────────────────────────────────────────────
+const {
+  files: adminFiles, inputRef: adminInput, uploading: adminUploading,
+  message: adminMessage, status: adminStatus, currentIndex: currentAdminIndex,
+  isDragging: isDraggingAdmin,
+  triggerSelect: triggerAdminSelect, onSelected: onAdminSelected,
+  onDrop: onDropAdmin, upload: uploadAdmin
+} = useUploader({
+  url: `${BASE_URL}/document?category=admin`,
+  onSuccess: (n) => { fetchUploadedDocs(); return `成功处理并学习了 ${n} 份行政文档。` },
+  onError: (n, errs) => { fetchUploadedDocs(); return `处理完成。成功: ${n}，失败: ${errs.length}。` }
+})
 
-// === Biz logic ===
-const isDraggingBiz = ref(false)
-const bizFiles = ref([])
-const bizInput = ref(null)
-const bizUploading = ref(false)
-const bizMessage = ref('')
-const bizStatus = ref('')
-const currentBizIndex = ref(0)
-const triggerBizSelect = () => bizInput.value.click()
-const onBizSelected = (e) => bizFiles.value = Array.from(e.target.files)
-const onDropBiz = (e) => {
-  isDraggingBiz.value = false
-  if (e.dataTransfer.files.length > 0) bizFiles.value = Array.from(e.dataTransfer.files)
-}
-const uploadBiz = async () => {
-  if (bizFiles.value.length === 0) return
-  bizUploading.value = true
-  bizMessage.value = ''
-  bizStatus.value = ''
-  let successCount = 0
-  let errorMessages = []
-  for (let i = 0; i < bizFiles.value.length; i++) {
-    currentBizIndex.value = i
-    const formData = new FormData()
-    formData.append('file', bizFiles.value[i])
-    try {
-      await axios.post(`${BASE_URL}/document?category=biz`, formData, { headers: { 'Content-Type': 'multipart/form-data' }})
-      successCount++
-    } catch (err) {
-      errorMessages.push(`${bizFiles.value[i].name}: ${err.response?.data?.detail || err.message}`)
-    }
-  }
-  if (errorMessages.length === 0) {
-    bizStatus.value = 'success'
-    bizMessage.value = `成功处理并学习了 ${successCount} 份业务资料。`
-    bizFiles.value = []
-  } else {
-    bizStatus.value = 'error'
-    bizMessage.value = `处理完成。成功: ${successCount}. 失败: ${errorMessages.length}.`
-  }
-  bizUploading.value = false
-  fetchUploadedDocs()
-}
+// ─── Biz 文档上传 ──────────────────────────────────────────────
+const {
+  files: bizFiles, inputRef: bizInput, uploading: bizUploading,
+  message: bizMessage, status: bizStatus, currentIndex: currentBizIndex,
+  isDragging: isDraggingBiz,
+  triggerSelect: triggerBizSelect, onSelected: onBizSelected,
+  onDrop: onDropBiz, upload: uploadBiz
+} = useUploader({
+  url: `${BASE_URL}/document?category=biz`,
+  onSuccess: (n) => { fetchUploadedDocs(); return `成功处理并学习了 ${n} 份业务资料。` },
+  onError: (n, errs) => { fetchUploadedDocs(); return `处理完成。成功: ${n}，失败: ${errs.length}。` }
+})
 
+// ─── 删除文档 ─────────────────────────────────────────────────
 const deleteDoc = async (filename) => {
   if (!confirm(`确定要从系统记忆中删除【${filename}】吗？删除后不可恢复。`)) return
   try {
@@ -346,59 +289,21 @@ const deleteDoc = async (filename) => {
   }
 }
 
-
-// Quote logic
-const isDraggingQuote = ref(false)
-const quoteFiles = ref([])
-const quoteInput = ref(null)
-const quoteUploading = ref(false)
-const quoteMessage = ref('')
-const quoteStatus = ref('')
-const currentQuoteIndex = ref(0)
-
-const triggerQuoteSelect = () => quoteInput.value.click()
-const onQuoteSelected = (e) => quoteFiles.value = Array.from(e.target.files)
-const onDropQuote = (e) => {
-  isDraggingQuote.value = false
-  if (e.dataTransfer.files.length > 0) {
-    quoteFiles.value = Array.from(e.dataTransfer.files)
+// ─── 报价表上传 ────────────────────────────────────────────────
+const {
+  files: quoteFiles, inputRef: quoteInput, uploading: quoteUploading,
+  message: quoteMessage, status: quoteStatus, currentIndex: currentQuoteIndex,
+  isDragging: isDraggingQuote,
+  triggerSelect: triggerQuoteSelect, onSelected: onQuoteSelected,
+  onDrop: onDropQuote, upload: uploadQuotes
+} = useUploader({
+  url: `${BASE_URL}/quote`,
+  onSuccess: (n) => { fetchUploadedQuotes(); return `成功更新了 ${n} 份报价单。` },
+  onError: (n, errs) => {
+    fetchUploadedQuotes()
+    return `更新完成。成功: ${n}，失败: ${errs.length}。错误: ${errs.join('; ')}`
   }
-}
-const uploadQuotes = async () => {
-  if (quoteFiles.value.length === 0) return
-  quoteUploading.value = true
-  quoteMessage.value = ''
-  quoteStatus.value = ''
-  
-  let successCount = 0
-  let errorMessages = []
-
-  for (let i = 0; i < quoteFiles.value.length; i++) {
-    currentQuoteIndex.value = i
-    const formData = new FormData()
-    formData.append('file', quoteFiles.value[i])
-    
-    try {
-      await axios.post(`${BASE_URL}/quote`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
-      successCount++
-    } catch (err) {
-      errorMessages.push(`${quoteFiles.value[i].name}: ${err.response?.data?.detail || err.message}`)
-    }
-  }
-
-  if (errorMessages.length === 0) {
-    quoteStatus.value = 'success'
-    quoteMessage.value = `成功更新了 ${successCount} 份报价单。`
-    quoteFiles.value = []
-  } else {
-    quoteStatus.value = 'error'
-    quoteMessage.value = `更新完成。成功: ${successCount}. 失败: ${errorMessages.length}. 错误: ${errorMessages.join('; ')}`
-  }
-  quoteUploading.value = false
-  fetchUploadedQuotes()
-}
+})
 
 const deleteQuote = async (filename) => {
   if (!confirm(`确定要从系统中删除报价表【${filename}】吗？`)) return
@@ -410,63 +315,26 @@ const deleteQuote = async (filename) => {
   }
 }
 
-// Coach Cases Logic
-const isDraggingCase = ref(false)
-const caseFiles = ref([])
-const caseInput = ref(null)
-const caseUploading = ref(false)
-const caseMessage = ref('')
-const caseStatus = ref('')
-const currentCaseIndex = ref(0)
-
-const triggerCaseSelect = () => caseInput.value.click()
-const onCaseSelected = (e) => caseFiles.value = Array.from(e.target.files)
-const onDropCase = (e) => {
-  isDraggingCase.value = false
-  if (e.dataTransfer.files.length > 0) {
-    caseFiles.value = Array.from(e.dataTransfer.files)
+// ─── 教练剧本上传（特殊逻辑：需要统计生成数量） ───────────────
+const {
+  files: caseFiles, inputRef: caseInput, uploading: caseUploading,
+  message: caseMessage, status: caseStatus, currentIndex: currentCaseIndex,
+  isDragging: isDraggingCase,
+  triggerSelect: triggerCaseSelect, onSelected: onCaseSelected,
+  onDrop: onDropCase, upload: uploadCases
+} = useUploader({
+  url: `${BASE_URL}/coach-case`,
+  onSuccess: (n, _errs, dataList) => {
+    const total = dataList.reduce((sum, d) => sum + (d.processed_count || 0), 0)
+    fetchCoachCases()
+    return `成功处理 ${n} 份文件，共生成 ${total} 个实战剧本！`
+  },
+  onError: (n, errs, dataList) => {
+    const total = (dataList || []).reduce((sum, d) => sum + (d.processed_count || 0), 0)
+    fetchCoachCases()
+    return `处理完成。成功: ${n} 份，失败: ${errs.length} 份。共生成 ${total} 个剧本。`
   }
-}
-
-const uploadCases = async () => {
-  if (caseFiles.value.length === 0) return
-  caseUploading.value = true
-  caseMessage.value = ''
-  caseStatus.value = ''
-  
-  let successCount = 0
-  let failCount = 0  // 新增失败计数
-  let totalCasesGenerated = 0
-
-  for (let i = 0; i < caseFiles.value.length; i++) {
-    currentCaseIndex.value = i
-    const formData = new FormData()
-    formData.append('file', caseFiles.value[i])
-    
-    try {
-      const res = await axios.post(`${BASE_URL}/coach-case`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
-      successCount++
-      totalCasesGenerated += (res.data.processed_count || 0)
-    } catch (err) {
-      failCount++  // 记录失败，而不是默默吃掉
-      console.error(`Failed to upload ${caseFiles.value[i].name}:`, err)
-    }
-  }
-
-  // 根据实际结果显示状态，而不是始终 success
-  if (failCount === 0) {
-    caseStatus.value = 'success'
-    caseMessage.value = `成功处理 ${successCount} 份文件，共生成 ${totalCasesGenerated} 个实战剧本！`
-  } else {
-    caseStatus.value = failCount === caseFiles.value.length ? 'error' : 'warning'
-    caseMessage.value = `处理完成。成功: ${successCount} 份，失败: ${failCount} 份。共生成 ${totalCasesGenerated} 个剧本。`
-  }
-  caseFiles.value = []
-  caseUploading.value = false
-  fetchCoachCases()
-}
+})
 
 const deleteCase = async (id) => {
   if (!confirm('确定要删除这个实战场景吗？')) return
@@ -483,6 +351,7 @@ const truncate = (text, len) => {
   return text.length > len ? text.slice(0, len) + '...' : text
 }
 </script>
+
 
 <style scoped>
 .text-green { color: #10b981; }
