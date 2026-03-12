@@ -72,7 +72,27 @@ class ChatRequest(BaseModel):
     history: List[dict] = Field(default_factory=list)
     mode: Optional[str] = "general"
     image_base64: Optional[str] = None
+    image_upload_id: Optional[str] = None
     use_deepseek: Optional[bool] = False
+
+
+def is_image_analysis_failure(image_desc: str) -> bool:
+    if not image_desc:
+        return False
+
+    lowered = image_desc.lower()
+    failure_markers = [
+        "request id",
+        "image dimensions are too small",
+        "api error",
+        "system error",
+        "describe image crash",
+        "识别失败",
+        "解析图片",
+        "系统错误",
+        "暂不可用",
+    ]
+    return any(marker in lowered for marker in failure_markers)
     
 async def classify_intent(message: str, history: List[dict] = None) -> str:
     """Classify user intent to determine routing (simple heuristic or LLM based)"""
@@ -161,12 +181,25 @@ async def chat_stream(
     
     # Process image if present
     needs_realtime = False
-    if request.image_base64:
+    resolved_image_base64 = request.image_base64
+    if request.image_upload_id and not resolved_image_base64:
+        from routers.upload import get_chat_image_base64
+        try:
+            resolved_image_base64 = await asyncio.to_thread(get_chat_image_base64, request.image_upload_id)
+        except FileNotFoundError:
+            request.message = "[系统提示：用户上传的图片已失效，请提醒用户重新上传。] " + request.message
+        except Exception as e:
+            print(f"Uploaded image resolve error: {e}")
+            request.message = "[系统提示：用户上传的图片暂时无法读取，请提醒用户稍后重试。] " + request.message
+    if resolved_image_base64:
         from services.llm_client import describe_image
         try:
-            image_desc = await describe_image(request.image_base64)
+            image_desc = await describe_image(resolved_image_base64)
             if image_desc:
-                img_context = f"[系统提示：用户上传了一张图片，大模型的视觉解析结果如下：\n{image_desc}]\n\n"
+                if is_image_analysis_failure(image_desc):
+                    img_context = "[系统提示：用户上传了一张图片，但系统暂未成功完成视觉解析。请先基于用户文字继续回答，并提醒用户可重新上传更清晰的图片。]\n\n"
+                else:
+                    img_context = f"[系统提示：用户上传了一张图片，大模型的视觉解析结果如下：\n{image_desc}]\n\n"
                 request.message = img_context + request.message
         except Exception as e:
             print(f"Image processing error: {e}")
@@ -567,7 +600,7 @@ async def chat_stream(
 
     # Build messages array
     messages = [{"role": "system", "content": system_prompt}]
-    if request.image_base64 and "[系统提示" in request.message:
+    if resolved_image_base64 and "[系统提示" in request.message:
         messages[0]["content"] += "\n\n**重要指令**：用户上传了图片，请根据解析内容理解。"
 
     # Inject manual search context only if needed (for specific currency rates if preferred)
@@ -674,7 +707,7 @@ async def chat_stream(
                 user_id = current_user.id if current_user else None
                 # Omit image_base64 from logged message if too large, simply note it
                 msg_to_store = request.message
-                if request.image_base64:
+                if request.image_base64 or request.image_upload_id:
                     msg_to_store = f"[附带图片] {msg_to_store}"
 
                 history_record = ChatHistory(

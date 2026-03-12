@@ -1,0 +1,53 @@
+{
+  "pages": [
+    {
+      "path": "pages/login/login",
+      "style": {
+        "navigationBarTitleText": "登录",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/chat/chat",
+      "style": {
+        "navigationBarTitleText": "小易助手",
+        "navigationStyle": "custom",
+        "disableScroll": false
+      }
+    },
+    {
+      "path": "pages/admin/admin",
+      "style": {
+        "navigationBarTitleText": "后台管理",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/admin/staff",
+      "style": {
+        "navigationBarTitleText": "员工管理",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/admin/lab",
+      "style": {
+        "navigationBarTitleText": "小易实验室",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/admin/chat-logs",
+      "style": {
+        "navigationBarTitleText": "会话审计",
+        "navigationStyle": "custom"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "小易智能助手",
+    "navigationBarBackgroundColor": "#FFFFFF",
+    "backgroundColor": "#F8F8F8"
+  }
+}

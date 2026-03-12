@@ -1,29 +1,32 @@
-from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
-from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
-from typing import List, Optional
-from pydantic import BaseModel
-import pandas as pd
 import io
+from typing import Optional
+
+import pandas as pd
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from database import get_db
-from models.user import User, Branch, Department
-from dependencies import get_super_admin, get_admin_user
+from dependencies import get_admin_user, get_super_admin
+from models.user import Branch, Department, User
 from services.auth_service import get_password_hash
 
 router = APIRouter(prefix="/api/staff", tags=["staff"])
 
-# --- Pydantic Schemas ---
+
 class UserBase(BaseModel):
-    username: str # 登录名
-    full_name: Optional[str] = None # 用户姓名
+    username: str
+    full_name: Optional[str] = None
     role: str
     branch_id: Optional[int] = None
     department_id: Optional[int] = None
     is_active: bool = True
 
+
 class UserCreate(UserBase):
     password: str
+
 
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
@@ -33,58 +36,54 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     password: Optional[str] = None
 
+
 class BranchBase(BaseModel):
     name: str
     location: Optional[str] = None
+
 
 class DepartmentCreate(BaseModel):
     name: str
     branch_id: int
 
-# --- API Endpoints ---
+
+def _ensure_branch_admin_can_assign(admin: User, branch_id: Optional[int], role: str):
+    if admin.role != "branch_admin":
+        return
+    if role == "super_admin":
+        raise HTTPException(status_code=403, detail="branch admin cannot assign super_admin role")
+    if branch_id != admin.branch_id:
+        raise HTTPException(status_code=403, detail="branch admin can only manage users in the current branch")
+
+
+def _serialize_user(user: User):
+    return {
+        "id": user.id,
+        "username": user.username,
+        "full_name": user.full_name,
+        "role": user.role,
+        "is_active": user.is_active,
+        "branch": user.branch.name if user.branch else None,
+        "department": user.department.name if user.department else None,
+        "branch_id": user.branch_id,
+        "department_id": user.department_id,
+    }
+
 
 @router.get("/users")
-def list_users(
-    db: Session = Depends(get_db),
-    admin: User = Depends(get_admin_user)
-):
+def list_users(db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
     query = db.query(User)
-    # 分公司管理员只能看到自己分公司的员工
     if admin.role == "branch_admin":
         query = query.filter(User.branch_id == admin.branch_id)
-    
-    users = query.all()
-    return [
-        {
-            "id": u.id,
-            "username": u.username,
-            "full_name": u.full_name,
-            "role": u.role,
-            "is_active": u.is_active,
-            "branch": u.branch.name if u.branch else None,
-            "department": u.department.name if u.department else None,
-            "branch_id": u.branch_id,
-            "department_id": u.department_id,
-        } for u in users
-    ]
+    return [_serialize_user(user) for user in query.all()]
+
 
 @router.post("/users")
-def create_user(
-    data: UserCreate,
-    db: Session = Depends(get_db),
-    admin: User = Depends(get_admin_user)
-):
-    # 唯一性检查
+def create_user(data: UserCreate, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
     existing = db.query(User).filter(User.username == data.username).first()
     if existing:
-        raise HTTPException(status_code=400, detail="用户名已存在")
-
-    # 权限检查：分公司管理员只能创建自己分公司的普通员工
-    if admin.role == "branch_admin":
-        if data.role == "super_admin":
-            raise HTTPException(status_code=403, detail="无权创建超级管理员")
-        if data.branch_id != admin.branch_id:
-            raise HTTPException(status_code=403, detail="只能为本分公司创建员工")
+        raise HTTPException(status_code=400, detail="username already exists")
+    _ensure_branch_admin_can_assign(admin, data.branch_id, data.role)
 
     new_user = User(
         username=data.username,
@@ -93,220 +92,183 @@ def create_user(
         role=data.role,
         branch_id=data.branch_id,
         department_id=data.department_id,
-        is_active=data.is_active
+        is_active=data.is_active,
     )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-    return {"message": "创建用户成功", "id": new_user.id}
+    return {"message": "user created", "id": new_user.id}
+
 
 @router.get("/users/export")
-def export_users(
-    db: Session = Depends(get_db),
-    admin: User = Depends(get_admin_user)
-):
+def export_users(db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
     query = db.query(User)
     if admin.role == "branch_admin":
         query = query.filter(User.branch_id == admin.branch_id)
-    
-    users = query.all()
-    data = []
-    for u in users:
-        data.append({
-            "登录名": u.username,
-            "用户名": u.full_name or "",
-            "角色": u.role,
-            "状态": "启用" if u.is_active else "禁用",
-            "分公司": u.branch.name if u.branch else "",
-            "部门": u.department.name if u.department else ""
-        })
-    
-    df = pd.DataFrame(data)
+
+    rows = []
+    for user in query.all():
+        rows.append(
+            {
+                "username": user.username,
+                "full_name": user.full_name or "",
+                "role": user.role,
+                "status": "active" if user.is_active else "disabled",
+                "branch": user.branch.name if user.branch else "",
+                "department": user.department.name if user.department else "",
+            }
+        )
+
     output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='员工账号列表')
-    
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        pd.DataFrame(rows).to_excel(writer, index=False, sheet_name="staff")
     output.seek(0)
-    headers = {
-        'Content-Disposition': 'attachment; filename="staff_export.xlsx"'
-    }
-    return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    return StreamingResponse(
+        output,
+        headers={"Content-Disposition": 'attachment; filename="staff_export.xlsx"'},
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
 
 @router.post("/users/import")
-async def import_users(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    admin: User = Depends(get_admin_user)
-):
-    if not file.filename.endswith(('.xlsx', '.xls')):
-        raise HTTPException(status_code=400, detail="请上传 Excel 文件")
-    
-    contents = await file.read()
-    df = pd.read_excel(io.BytesIO(contents))
-    
-    # 必要字段检查
-    required_cols = ["登录名", "用户名", "密码", "分公司", "部门"]
+async def import_users(file: UploadFile = File(...), db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="please upload an Excel file")
+
+    dataframe = pd.read_excel(io.BytesIO(await file.read()))
+    required_cols = ["username", "full_name", "password", "branch", "department"]
     for col in required_cols:
-        if col not in df.columns:
-            raise HTTPException(status_code=400, detail=f"Excel 缺少必要列: {col}")
-            
+        if col not in dataframe.columns:
+            raise HTTPException(status_code=400, detail=f"missing required column: {col}")
+
     success_count = 0
     errors = []
-    
-    for index, row in df.iterrows():
-        username = str(row["登录名"]).strip()
-        full_name = str(row["用户名"]).strip()
-        password = str(row["密码"]).strip()
-        branch_name = str(row["分公司"]).strip()
-        dept_name = str(row["部门"]).strip()
-        role = str(row.get("角色", "user")).strip()
-        
+    for index, row in dataframe.iterrows():
+        username = str(row["username"]).strip()
+        full_name = str(row["full_name"]).strip()
+        password = str(row["password"]).strip()
+        branch_name = str(row["branch"]).strip()
+        dept_name = str(row["department"]).strip()
+        role = str(row.get("role", "user")).strip() or "user"
+
         if not username or not password:
-            errors.append(f"第 {index+2} 行: 登录名或密码不能为空")
+            errors.append(f"row {index + 2}: username and password are required")
             continue
-            
-        # 权限与业务检查
-        existing = db.query(User).filter(User.username == username).first()
-        if existing:
-            errors.append(f"第 {index+2} 行: 登录名 {username} 已存在")
+        if db.query(User).filter(User.username == username).first():
+            errors.append(f"row {index + 2}: username {username} already exists")
             continue
-            
-        # 匹配分公司
+
         branch = db.query(Branch).filter(Branch.name == branch_name).first()
         if not branch:
-            # 如果是超级管理员，自动创建分公司
-            if admin.role == "super_admin":
-                branch = Branch(name=branch_name)
-                db.add(branch)
-                db.flush()
-            else:
-                errors.append(f"第 {index+2} 行: 分公司 {branch_name} 不存在且您无权创建")
+            if admin.role != "super_admin":
+                errors.append(f"row {index + 2}: branch {branch_name} does not exist")
                 continue
-        
-        # 权限二次检查
-        if admin.role == "branch_admin" and branch.id != admin.branch_id:
-            errors.append(f"第 {index+2} 行: 您无权为 {branch_name} 创建账号")
-            continue
-            
-        # 匹配或创建部门
-        dept = db.query(Department).filter(Department.name == dept_name, Department.branch_id == branch.id).first()
-        if not dept:
-            dept = Department(name=dept_name, branch_id=branch.id)
-            db.add(dept)
+            branch = Branch(name=branch_name)
+            db.add(branch)
             db.flush()
-            
-        new_user = User(
-            username=username,
-            full_name=full_name,
-            hashed_password=get_password_hash(password),
-            role=role,
-            branch_id=branch.id,
-            department_id=dept.id,
-            is_active=True
+
+        try:
+            _ensure_branch_admin_can_assign(admin, branch.id, role)
+        except HTTPException as exc:
+            errors.append(f"row {index + 2}: {exc.detail}")
+            continue
+
+        department = db.query(Department).filter(Department.name == dept_name, Department.branch_id == branch.id).first()
+        if not department:
+            department = Department(name=dept_name, branch_id=branch.id)
+            db.add(department)
+            db.flush()
+
+        db.add(
+            User(
+                username=username,
+                full_name=full_name,
+                hashed_password=get_password_hash(password),
+                role=role,
+                branch_id=branch.id,
+                department_id=department.id,
+                is_active=True,
+            )
         )
-        db.add(new_user)
         success_count += 1
-        
+
     db.commit()
-    return {
-        "message": f"成功导入 {success_count} 个账号",
-        "errors": errors
-    }
+    return {"message": f"imported {success_count} users", "errors": errors}
 
 
 @router.patch("/users/{user_id}")
-def update_user(
-    user_id: int,
-    data: UserUpdate,
-    db: Session = Depends(get_db),
-    admin: User = Depends(get_admin_user)
-):
+def update_user(user_id: int, data: UserUpdate, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="用户未找到")
-
-    # 权限检查
+        raise HTTPException(status_code=404, detail="user not found")
     if admin.role == "branch_admin" and user.branch_id != admin.branch_id:
-        raise HTTPException(status_code=403, detail="无权修改其他分公司的员工")
+        raise HTTPException(status_code=403, detail="branch admin cannot edit users in another branch")
 
-    if data.full_name is not None: user.full_name = data.full_name
-    if data.role: user.role = data.role
-    if data.branch_id is not None: user.branch_id = data.branch_id
-    if data.department_id is not None: user.department_id = data.department_id
-    if data.is_active is not None: user.is_active = data.is_active
+    requested_role = data.role or user.role
+    requested_branch_id = data.branch_id if data.branch_id is not None else user.branch_id
+    _ensure_branch_admin_can_assign(admin, requested_branch_id, requested_role)
+
+    if data.full_name is not None:
+        user.full_name = data.full_name
+    if data.role:
+        user.role = data.role
+    if data.branch_id is not None:
+        user.branch_id = data.branch_id
+    if data.department_id is not None:
+        user.department_id = data.department_id
+    if data.is_active is not None:
+        user.is_active = data.is_active
     if data.password:
         user.hashed_password = get_password_hash(data.password)
 
     db.commit()
-    return {"message": "更新成功"}
+    return {"message": "user updated"}
+
 
 @router.delete("/users/{user_id}")
-def delete_user(
-    user_id: int,
-    db: Session = Depends(get_db),
-    admin: User = Depends(get_admin_user)
-):
+def delete_user(user_id: int, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="用户未找到")
-    
-    # 不能删自己
+        raise HTTPException(status_code=404, detail="user not found")
     if user.id == admin.id:
-        raise HTTPException(status_code=400, detail="不能删除当前登录账号")
-
+        raise HTTPException(status_code=400, detail="cannot delete current account")
     if admin.role == "branch_admin" and user.branch_id != admin.branch_id:
-        raise HTTPException(status_code=403, detail="无权删除其他分公司的员工")
-
+        raise HTTPException(status_code=403, detail="branch admin cannot delete users in another branch")
     db.delete(user)
     db.commit()
-    return {"message": "删除成功"}
+    return {"message": "user deleted"}
 
-
-
-# --- 结构管理接口 ---
 
 @router.get("/structure")
-def get_structure(
-    db: Session = Depends(get_db),
-    admin: User = Depends(get_admin_user)
-):
-    # 超级管理员看全部，分公司管理员只看自己的分公司
-    branch_query = db.query(Branch)
+def get_structure(db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+    query = db.query(Branch)
     if admin.role == "branch_admin":
-        branch_query = branch_query.filter(Branch.id == admin.branch_id)
-    
-    branches = branch_query.all()
-    result = []
-    for b in branches:
-        result.append({
-            "id": b.id,
-            "name": b.name,
-            "departments": [{"id": d.id, "name": d.name} for d in b.departments]
-        })
-    return result
+        query = query.filter(Branch.id == admin.branch_id)
+    return [
+        {
+            "id": branch.id,
+            "name": branch.name,
+            "departments": [{"id": department.id, "name": department.name} for department in branch.departments],
+        }
+        for branch in query.all()
+    ]
+
 
 @router.post("/branches")
-def create_branch(
-    data: BranchBase,
-    db: Session = Depends(get_db),
-    admin: User = Depends(get_super_admin) # 只有超级管理员能建分公司
-):
-    new_b = Branch(name=data.name, location=data.location)
-    db.add(new_b)
+def create_branch(data: BranchBase, db: Session = Depends(get_db), admin: User = Depends(get_super_admin)):
+    branch = Branch(name=data.name, location=data.location)
+    db.add(branch)
     db.commit()
-    return {"id": new_b.id}
+    db.refresh(branch)
+    return {"id": branch.id}
+
 
 @router.post("/departments")
-def create_dept(
-    data: DepartmentCreate,
-    db: Session = Depends(get_db),
-    admin: User = Depends(get_admin_user)
-):
-    # 分公司管理员只能给自己分公司建部门
+def create_dept(data: DepartmentCreate, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
     if admin.role == "branch_admin" and data.branch_id != admin.branch_id:
-         raise HTTPException(status_code=403, detail="只能管理本分公司的部门")
-         
-    new_d = Department(name=data.name, branch_id=data.branch_id)
-    db.add(new_d)
+        raise HTTPException(status_code=403, detail="branch admin can only manage departments in the current branch")
+    department = Department(name=data.name, branch_id=data.branch_id)
+    db.add(department)
     db.commit()
-    return {"id": new_d.id}
+    db.refresh(department)
+    return {"id": department.id}

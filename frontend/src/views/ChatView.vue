@@ -156,7 +156,7 @@
               <div class="avatar">
                 <template v-if="msg.role === 'assistant'">
                   <div class="avatar-container assistant">
-                    <img src="/logo-icon.png" alt="AI" class="ai-avatar-icon" />
+                    <img src="@/assets/xiaoyi_avatar.png" alt="小易" class="xiaoyi-avatar" />
                   </div>
                 </template>
                 <template v-else>
@@ -1480,7 +1480,12 @@ const truncate = (text, len) => {
   border: 1px solid var(--border-color);
   box-shadow: 0 2px 4px rgba(0,0,0,0.05);
   overflow: hidden;
-  padding: 4px;
+  padding: 0;
+}
+.xiaoyi-avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .ai-avatar-icon {
   width: 100%;

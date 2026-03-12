@@ -1,0 +1,24 @@
+[Unit]
+Description=ZhongYiDa AI Assistant Backend Daemon
+After=network.target
+
+[Service]
+# 请将 User 和 Group 修改为您实际运行代码的用户，例如 ubuntu 或 root
+User=root
+Group=www-data
+
+# 项目的 backend 绝对路径
+WorkingDirectory=/var/www/zyd-bot/backend
+
+# 环境变量文件
+Environment="PATH=/var/www/zyd-bot/backend/venv/bin"
+EnvironmentFile=/var/www/zyd-bot/backend/.env
+
+# Gunicorn 启动命令 (使用 Uvicorn Worker 跑 FastAPI，开4个进程)
+ExecStart=/var/www/zyd-bot/backend/venv/bin/gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker -b 127.0.0.1:8000
+
+# 异常时自动重启
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
