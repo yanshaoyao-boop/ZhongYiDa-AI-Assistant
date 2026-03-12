@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import uvicorn
 import os
-from routers import upload, chat, auth, staff, settings, chat_logs, client_logs
+from routers import upload, chat, auth, staff, settings, chat_logs, client_logs, notices
 
 load_dotenv()
 
@@ -45,6 +45,7 @@ app.include_router(upload.router)
 app.include_router(client_logs.router)
 app.include_router(chat.router)
 app.include_router(chat_logs.router)
+app.include_router(notices.router)
 
 @app.get("/")
 def read_root():

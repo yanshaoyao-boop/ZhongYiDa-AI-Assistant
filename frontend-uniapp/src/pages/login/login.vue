@@ -5,9 +5,18 @@
 		<view class="login-shell fade-in">
 			<view class="zen-login-card login-container">
 				<view class="brand-header">
-					<image src="/static/zyd_logo.png" mode="widthFix" class="brand-logo" />
+					<image
+						src="/static/zyd_logo.png"
+						mode="widthFix"
+						class="brand-logo"
+						@longpress="handleApiBaseLongPress"
+					/>
 					<text class="brand-name">小易智能助手</text>
 					<text class="brand-slogan">链接全球机遇 · 成就每个伙伴</text>
+					<text class="api-base-hint">当前接口：{{ apiBaseDisplay }}</text>
+					<text v-if="showLoopbackWarning" class="api-base-warning">
+						当前地址仅开发者工具可用，真机请长按上方 Logo 改为局域网地址，如 http://192.168.x.x:8000
+					</text>
 				</view>
 
 				<view class="input-section">
@@ -60,14 +69,89 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '@/store/auth'
+import { clearApiBase, getApiBase, isLoopbackApiBase, setApiBase } from '@/utils/api'
 
 const auth = useAuthStore()
 
 const username = ref('')
 const password = ref('')
 const focused = ref('')
+const apiBaseVersion = ref(0)
+
+const syncApiBaseState = () => {
+	apiBaseVersion.value += 1
+}
+
+const apiBaseDisplay = computed(() => {
+	apiBaseVersion.value
+	return getApiBase() || '未配置'
+})
+
+const showLoopbackWarning = computed(() => {
+	return isLoopbackApiBase(apiBaseDisplay.value)
+})
+
+const saveApiBase = (value, successMessage) => {
+	const normalizedValue = setApiBase(value)
+	if (!normalizedValue) {
+		uni.showToast({ title: '请输入有效地址', icon: 'none' })
+		return
+	}
+
+	syncApiBaseState()
+	uni.showToast({ title: successMessage, icon: 'none' })
+}
+
+const promptCustomApiBase = () => {
+	uni.showModal({
+		title: '设置后端地址',
+		editable: true,
+		placeholderText: 'http://192.168.31.178:8000',
+		success: (res) => {
+			if (!res.confirm) return
+			const nextValue = String(res.content || '').trim()
+			if (!/^https?:\/\//i.test(nextValue)) {
+				uni.showToast({ title: '地址需以 http:// 或 https:// 开头', icon: 'none' })
+				return
+			}
+			saveApiBase(nextValue, '后端地址已更新')
+		},
+	})
+}
+
+const handleApiBaseLongPress = () => {
+	const currentBase = getApiBase()
+	const envBase = String(import.meta.env.VITE_API_BASE_URL || '').trim()
+	const itemList = [
+		'手动输入局域网地址',
+		...(envBase ? [`恢复默认地址：${envBase}`] : []),
+		'清除自定义地址',
+	]
+
+	uni.showActionSheet({
+		itemList,
+		success: ({ tapIndex }) => {
+			if (tapIndex === 0) {
+				promptCustomApiBase()
+				return
+			}
+
+			if (envBase && tapIndex === 1) {
+				saveApiBase(envBase, '已恢复默认地址')
+				return
+			}
+
+			clearApiBase()
+			syncApiBaseState()
+			uni.showToast({
+				title: currentBase ? '已清除自定义地址' : '当前未设置自定义地址',
+				icon: 'none',
+			})
+		},
+	})
+}
 
 const handleLogin = async () => {
 	if (!username.value || !password.value) {
@@ -85,6 +169,7 @@ const handleLogin = async () => {
 
 onMounted(() => {
 	username.value = uni.getStorageSync('zyd_last_login_username') || ''
+	syncApiBaseState()
 	if (auth.isAuthenticated) {
 		uni.reLaunch({ url: '/pages/chat/chat' })
 	}
@@ -176,6 +261,26 @@ onMounted(() => {
 	text-align: center;
 	letter-spacing: 1rpx;
 	line-height: 1.5;
+}
+
+.api-base-hint {
+	margin-top: 18rpx;
+	font-size: 22rpx;
+	line-height: 1.5;
+	color: rgba(37, 83, 155, 0.78);
+	text-align: center;
+	word-break: break-all;
+}
+
+.api-base-warning {
+	margin-top: 12rpx;
+	font-size: 22rpx;
+	line-height: 1.5;
+	color: #b45309;
+	text-align: center;
+	background: rgba(245, 158, 11, 0.12);
+	border-radius: 18rpx;
+	padding: 12rpx 16rpx;
 }
 
 .input-section {

@@ -45,4 +45,28 @@ export const ensureApiBaseConfigured = () => {
 	return apiBase
 }
 
+export const setApiBase = (value) => {
+	const normalizedValue = trimTrailingSlash(String(value || '').trim())
+	try {
+		if (normalizedValue) {
+			uni.setStorageSync(API_BASE_STORAGE_KEY, normalizedValue)
+		} else {
+			uni.removeStorageSync(API_BASE_STORAGE_KEY)
+		}
+	} catch (error) {}
+	return normalizedValue
+}
+
+export const clearApiBase = () => {
+	try {
+		uni.removeStorageSync(API_BASE_STORAGE_KEY)
+	} catch (error) {}
+	return readEnvApiBase() || readMpDevApiBase()
+}
+
+export const isLoopbackApiBase = (value = '') => {
+	const normalizedValue = String(value || '').trim().toLowerCase()
+	return normalizedValue.includes('127.0.0.1') || normalizedValue.includes('localhost')
+}
+
 export { API_BASE_STORAGE_KEY }

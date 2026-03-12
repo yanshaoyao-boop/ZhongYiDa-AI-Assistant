@@ -192,6 +192,40 @@
           </ul>
         </div>
       </section>
+
+      <!-- Notice Management Section -->
+      <section class="upload-section glass-panel">
+        <div class="section-header">
+          <IconBell class="icon-lg text-orange" />
+          <h2>通知管理</h2>
+        </div>
+        <p class="section-desc">发布重要通知。此处输入的内容将在前端“重要通知”模块中显示（由于本周逻辑，新发布的通知会立即显示）。</p>
+        
+        <textarea 
+          v-model="noticeContent" 
+          placeholder="请输入通知内容..." 
+          class="notice-textarea"
+          rows="4"
+        ></textarea>
+        
+        <button class="btn-primary notice-btn" :disabled="!noticeContent.trim() || noticeSending" @click="sendNotice">
+          <span v-if="noticeSending">发布中...</span>
+          <span v-else>发布通知</span>
+        </button>
+        
+        <div class="uploaded-list" v-if="historyNotices.length > 0">
+          <h3>历史通知记录</h3>
+          <ul class="notice-history-list">
+            <li v-for="n in historyNotices" :key="n.id" class="notice-history-item">
+              <div class="notice-item-main">
+                <span class="notice-item-date">{{ formatDate(n.created_at) }}</span>
+                <p class="notice-item-content">{{ n.content }}</p>
+              </div>
+              <button class="btn-delete" @click="deleteNotice(n.id)" title="删除通知">🗑️ 删除</button>
+            </li>
+          </ul>
+        </div>
+      </section>
     </div>
   </div>
 </template>
@@ -201,7 +235,13 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../store/auth'
 import axios from 'axios'
-import { FileBox as IconFileBox, Database as IconDatabase, UploadCloud as IconUpload, UserCheck as IconUserCheck } from 'lucide-vue-next'
+import { 
+  FileBox as IconFileBox, 
+  Database as IconDatabase, 
+  UploadCloud as IconUpload, 
+  UserCheck as IconUserCheck,
+  Bell as IconBell
+} from 'lucide-vue-next'
 import { useUploader } from '../composables/useUploader'
 
 const router = useRouter()
@@ -214,6 +254,9 @@ const uploadedAdmin = ref([])
 const uploadedBiz = ref([])
 const uploadedQuotes = ref([])
 const coachCases = ref([])
+const historyNotices = ref([])
+const noticeContent = ref('')
+const noticeSending = ref(false)
 
 const fetchUploadedDocs = async () => {
   try {
@@ -246,10 +289,50 @@ const fetchCoachCases = async () => {
   }
 }
 
+const fetchHistoryNotices = async () => {
+  try {
+    const res = await axios.get('/api/notices/history')
+    historyNotices.value = res.data
+  } catch (err) {
+    console.error('Failed to fetch notices:', err)
+  }
+}
+
+const sendNotice = async () => {
+  if (!noticeContent.value.trim()) return
+  noticeSending.value = true
+  try {
+    await axios.post('/api/notices/', { content: noticeContent.value })
+    noticeContent.value = ''
+    fetchHistoryNotices()
+    alert('通知发布成功！')
+  } catch (err) {
+    alert(`发布失败: ${err.response?.data?.detail || err.message}`)
+  } finally {
+    noticeSending.value = false
+  }
+}
+
+const deleteNotice = async (id) => {
+  if (!confirm('确定要删除这条通知吗？')) return
+  try {
+    await axios.delete(`/api/notices/${id}`)
+    fetchHistoryNotices()
+  } catch (err) {
+    alert(`删除失败: ${err.message}`)
+  }
+}
+
+const formatDate = (dateStr) => {
+  const d = new Date(dateStr)
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
 onMounted(() => {
   fetchUploadedDocs()
   fetchUploadedQuotes()
   fetchCoachCases()
+  fetchHistoryNotices()
 })
 
 // ─── Admin 文档上传 ────────────────────────────────────────────
@@ -355,6 +438,57 @@ const truncate = (text, len) => {
 
 <style scoped>
 .text-green { color: #10b981; }
+.text-orange { color: #f97316; }
+
+.notice-textarea {
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: white;
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
+  resize: vertical;
+}
+
+.notice-textarea:focus {
+  border-color: var(--accent-color);
+}
+
+.notice-btn {
+  background: linear-gradient(135deg, #f97316 0%, #fb923c 100%);
+}
+
+.notice-history-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.notice-history-item {
+  flex-direction: row !important;
+  align-items: flex-start !important;
+  gap: 12px;
+}
+
+.notice-item-main {
+  flex: 1;
+  text-align: left;
+}
+
+.notice-item-date {
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: block;
+  margin-bottom: 4px;
+}
+
+.notice-item-content {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.4;
+  margin: 0;
+}
 
 .coach-btn {
   background: linear-gradient(135deg, #059669 0%, #10b981 100%);

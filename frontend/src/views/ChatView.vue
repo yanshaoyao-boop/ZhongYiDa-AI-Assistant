@@ -52,26 +52,37 @@
           </button>
         </div>
 
-        <!-- Mode Selector -->
-        <div class="mode-selector">
-          <button 
-            :class="['mode-btn', { active: currentMode === 'general' }]"
-            @click="switchMode('general')"
-          >
-            <span class="icon">✨</span> 全能助手
-          </button>
-          <button 
-            :class="['mode-btn', { active: currentMode === 'coach' }]"
-            @click="switchMode('coach')"
-          >
-            <span class="icon">📚</span> 知识教练
-          </button>
-          <button 
-            :class="['mode-btn', { active: currentMode === 'expert' }]"
-            @click="switchMode('expert')"
-          >
-            <span class="icon">💡</span> 专家指导
-          </button>
+        <!-- Mode Selector Groups -->
+        <div class="mode-selector-wrapper">
+          <div class="mode-selector">
+            <button class="mode-btn" @click="openNotices">
+              <span class="icon">🔔</span> 重要通知
+            </button>
+            <button class="mode-btn">
+              <span class="icon">🛠️</span> 智能工具
+            </button>
+          </div>
+
+          <div class="mode-selector">
+            <button 
+              :class="['mode-btn', { active: currentMode === 'general' }]"
+              @click="switchMode('general')"
+            >
+              <span class="icon">✨</span> 全能助手
+            </button>
+            <button 
+              :class="['mode-btn', { active: currentMode === 'coach' }]"
+              @click="switchMode('coach')"
+            >
+              <span class="icon">📚</span> 知识教练
+            </button>
+            <button 
+              :class="['mode-btn', { active: currentMode === 'expert' }]"
+              @click="switchMode('expert')"
+            >
+              <span class="icon">💡</span> 专家指导
+            </button>
+          </div>
         </div>
 
       </nav>
@@ -81,9 +92,11 @@
         <main class="chat-main" ref="chatMain">
           <div v-if="messages.length === 0" class="welcome-screen">
             <template v-if="currentMode === 'general'">
-              <h2 class="welcome-name">{{ welcomeMsg }}</h2>
-              <h2 class="welcome-slogan">把繁琐的流程交给我，把专注留给真正重要的事情。</h2>
-              <p>今天想先解决什么？</p>
+              <div class="welcome-brand">
+                <img src="@/assets/xiaoyi_image.png" alt="小易形象" class="welcome-avatar" />
+                <h2 class="welcome-name">{{ welcomeMsg }}</h2>
+                <h2 class="welcome-slogan">把繁琐的流程交给我，把专注留给真正重要的事情。</h2>
+              </div>
               <div class="suggestion-chips">
                 <button @click="presetMsg('我能帮你做哪些事')">🤖 我能帮你做哪些事</button>
                 <button @click="presetMsg('如何正确的使用小易')">📖 如何正确的使用小易</button>
@@ -257,6 +270,31 @@
         <p class="disclaimer">助手生成的内容可能不准确，请参考系统里的正式文档与报价。</p>
       </footer>
     </div>
+
+    <!-- Notices Modal -->
+    <div v-if="showNotices" class="notices-modal-overlay" @click.self="showNotices = false">
+      <div class="notices-modal glass-panel">
+        <div class="notices-modal-header">
+          <h3>📢 重要通知</h3>
+          <div class="notices-tabs">
+            <button :class="{ active: noticeTab === 'current' }" @click="noticeTab = 'current'">本周通知</button>
+            <button :class="{ active: noticeTab === 'history' }" @click="noticeTab = 'history'">全部历史</button>
+          </div>
+          <button class="close-modal-btn" @click="showNotices = false"><IconX size="20" /></button>
+        </div>
+        
+        <div class="notices-modal-content">
+          <div v-if="loadingNotices" class="notice-loading">正在加载通知...</div>
+          <div v-else-if="displayNotices.length === 0" class="notice-empty">暂无通知内容</div>
+          <div v-else class="notice-list-scroll">
+            <div v-for="n in displayNotices" :key="n.id" class="notice-card">
+              <div class="notice-date">{{ formatDate(n.created_at) }}</div>
+              <div class="notice-body">{{ n.content }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -285,6 +323,37 @@ const inputMsg = ref('')
 const isGenerating = ref(false)
 const abortController = ref(null)
 
+const showNotices = ref(false)
+const noticeTab = ref('current')
+const allNotices = ref({ current: [], history: [] })
+const loadingNotices = ref(false)
+
+const openNotices = async () => {
+  showNotices.value = true
+  loadingNotices.value = true
+  try {
+    const [resC, resH] = await Promise.all([
+      axios.get('/api/notices/current'),
+      axios.get('/api/notices/history')
+    ])
+    allNotices.value.current = resC.data
+    allNotices.value.history = resH.data
+  } catch (err) {
+    console.error("Failed to fetch notices:", err)
+  } finally {
+    loadingNotices.value = false
+  }
+}
+
+const displayNotices = computed(() => {
+  return noticeTab.value === 'current' ? allNotices.value.current : allNotices.value.history
+})
+
+const formatDate = (dateStr) => {
+  const d = new Date(dateStr)
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
 const stopGeneration = () => {
   if (abortController.value) {
     abortController.value.abort()
@@ -294,7 +363,15 @@ const chatMain = ref(null)
 const inputRef = ref(null)
 const currentMode = ref('general')
 const isSidebarOpen = ref(false)
-const welcomeMsg = ref('您好，我是小易，您的全能助手')
+const getDynamicGreeting = () => {
+  const hour = new Date().getHours()
+  if (hour >= 5 && hour < 12) return "早安！我是小易，又是充满活力的一天，今天有什么计划需要我协助吗？"
+  if (hour >= 12 && hour < 18) return "下午好！我是小易，累了可以休息一下，有琐碎的工作尽管交给我。"
+  if (hour >= 18 && hour < 22) return "晚上好！我是小易，这么晚还在忙吗？注意休息，我会一直陪着您。"
+  return "深夜好，我是小易。辛苦了，还在坚持工作的你真的很了不起。早点休息，我会一直陪着您。"
+}
+
+const welcomeMsg = ref(getDynamicGreeting())
 const auth = useAuthStore()
 const router = useRouter()
 
@@ -308,6 +385,8 @@ const fetchPublicSettings = async () => {
     const res = await axios.get('/api/settings/public')
     if (res.data.ai_welcome_message) {
       welcomeMsg.value = res.data.ai_welcome_message
+    } else {
+      welcomeMsg.value = getDynamicGreeting()
     }
   } catch (err) {
     console.error("Failed to fetch public settings:", err)
@@ -988,12 +1067,18 @@ const truncate = (text, len) => {
   -webkit-text-fill-color: transparent;
 }
 
+.mode-selector-wrapper {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+}
 .mode-selector {
   display: flex;
   padding: 4px;
   border-radius: 12px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
+  gap: 2px;
 }
 .mode-btn {
   display: flex;
@@ -1200,6 +1285,25 @@ const truncate = (text, len) => {
   padding-top: 40px;
   text-align: center;
   gap: 20px;
+}
+.welcome-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 32px;
+}
+.welcome-avatar {
+  width: 140px;
+  height: 140px;
+  object-fit: contain;
+  margin-bottom: 24px;
+  filter: drop-shadow(0 10px 20px rgba(0,0,0,0.08));
+  animation: float 6s ease-in-out infinite;
+}
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
 }
 .welcome-screen h2.welcome-name {
   font-size: 36px;
@@ -1750,10 +1854,17 @@ const truncate = (text, len) => {
     height: 22px;
   }
 
-  .mode-selector {
+  .mode-selector-wrapper {
     order: 3;
     width: 100%;
     margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .mode-selector {
+    width: 100%;
     justify-content: center;
     background: rgba(0, 0, 0, 0.03);
     border-radius: 10px;
@@ -1822,6 +1933,119 @@ const truncate = (text, len) => {
   
   .nav-links {
     display: none;
+  }
+
+  .notices-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .notices-modal {
+    width: 100%;
+    max-width: 500px;
+    max-height: 80vh;
+    background: var(--bg-primary);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes modalIn {
+    from { opacity: 0; transform: scale(0.95) translateY(10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  .notices-modal-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .notices-modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    white-space: nowrap;
+  }
+
+  .notices-tabs {
+    display: flex;
+    background: var(--bg-tertiary);
+    padding: 4px;
+    border-radius: 8px;
+    gap: 4px;
+  }
+
+  .notices-tabs button {
+    padding: 4px 12px;
+    font-size: 12px;
+    border-radius: 6px;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+  }
+
+  .notices-tabs button.active {
+    background: #ffffff;
+    color: var(--accent-color);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  }
+
+  .close-modal-btn {
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .notices-modal-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+  }
+
+  .notice-list-scroll {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .notice-card {
+    background: var(--bg-tertiary);
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+  }
+
+  .notice-date {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+  }
+
+  .notice-body {
+    font-size: 14px;
+    color: var(--text-primary);
+    line-height: 1.5;
+    white-space: pre-wrap;
+  }
+
+  .notice-loading, .notice-empty {
+    padding: 40px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 14px;
   }
 
   .intel-toggle-mobile {

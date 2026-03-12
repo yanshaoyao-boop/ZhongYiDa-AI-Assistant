@@ -79,27 +79,27 @@
 					<view v-if="messages.length === 0" class="welcome-screen">
 						<view class="welcome-stage">
 						<view v-if="currentMode === 'general'" class="zen-welcome-stage">
-							<view class="welcome-content welcome-panel welcome-centered">
-								<view class="zen-avatar-breathe">
-									<image src="/static/xiaoyi_character.png" mode="aspectFit" class="zen-avatar-img" />
-								</view>
+								<view class="welcome-content welcome-panel welcome-centered">
+									<view class="zen-avatar-breathe">
+										<image :src="XIAOYI_AVATAR_SRC" mode="aspectFit" class="zen-avatar-img" />
+									</view>
 								<text class="zen-title">您好，我是小易</text>
 								<text class="zen-subtitle">{{ welcomeMsg }}</text>
 
 								<view class="suggestion-chips suggestion-chip-shell">
 									<view class="zen-suggestion-grid">
-										<view class="zen-card" @tap="presetMsg('我能帮你做哪些事情')">
+										<button class="zen-card zen-card-button" @tap="presetMsg('我能帮你做哪些事情')">
 											<view class="zen-card-content">
 												<text class="zen-card-title">查看核心能力</text>
 												<text class="zen-card-desc">了解我能帮您完成的物流与办公任务</text>
 											</view>
-										</view>
-										<view class="zen-card" @tap="presetMsg('如何正确使用小易')">
+										</button>
+										<button class="zen-card zen-card-button" @tap="presetMsg('如何正确使用小易')">
 											<view class="zen-card-content">
 												<text class="zen-card-title">获取使用指南</text>
 												<text class="zen-card-desc">掌握与小易合作的最佳提示词技巧</text>
 											</view>
-										</view>
+										</button>
 									</view>
 								</view>
 							</view>
@@ -113,12 +113,12 @@
 							<text class="zen-subtitle">请描述您遇到的模糊或复杂的问题，我会通过 1-2 轮追问帮你理清思路并提供专业建议。</text>
 
 							<view class="zen-suggestion-grid">
-								<view class="zen-card" @tap="presetMsg('我有一个关于供应链优化的复杂问题')">
+								<button class="zen-card zen-card-button" @tap="presetMsg('我有一个关于供应链优化的复杂问题')">
 									<view class="zen-card-content">
 										<text class="zen-card-title">供应链优化分析</text>
 										<text class="zen-card-desc">我会先帮你拆问题，再给出结构化建议。</text>
 									</view>
-								</view>
+								</button>
 							</view>
 						</view>
 
@@ -137,44 +137,44 @@
 
 									<view v-if="currentCoachSelections.length" class="coach-selection-summary">
 										<view class="zen-breadcrumbs">
-											<view class="zen-breadcrumb coach-selection-chip" @tap="selectedRegion = null; selectedPersona = null">
+											<button class="zen-breadcrumb coach-selection-chip coach-selection-chip-button" @tap="selectedRegion = null; selectedPersona = null">
 												{{ selectedRegion }}
 												<text v-if="selectedPersona" class="arrow">→</text>
-											</view>
-											<view v-if="selectedPersona" class="zen-breadcrumb coach-selection-chip" @tap="selectedPersona = null">
+											</button>
+											<button v-if="selectedPersona" class="zen-breadcrumb coach-selection-chip coach-selection-chip-button" @tap="selectedPersona = null">
 												{{ selectedPersona }}
-											</view>
+											</button>
 										</view>
 									</view>
 
 									<view v-if="!selectedRegion" class="zen-level-grid">
-										<view v-for="reg in coachRegions" :key="reg.name" class="zen-level-card" @tap="selectedRegion = reg.name">
+										<button v-for="reg in coachRegions" :key="reg.name" class="zen-level-card zen-level-card-button" @tap="selectedRegion = reg.name">
 											<view class="zen-card-huge-icon">{{ reg.short }}</view>
 											<view class="zen-level-info">
 												<text class="zen-level-title">{{ reg.name }}</text>
 												<text class="zen-level-desc-mini">{{ reg.desc }}</text>
 											</view>
-										</view>
+										</button>
 									</view>
 
 									<view v-else-if="!selectedPersona" class="zen-level-grid slide-in">
-										<view v-for="persona in coachPersonas" :key="persona.name" class="zen-level-card" @tap="selectedPersona = persona.name">
+										<button v-for="persona in coachPersonas" :key="persona.name" class="zen-level-card zen-level-card-button" @tap="selectedPersona = persona.name">
 											<view class="zen-card-huge-emoji">{{ persona.emoji }}</view>
 											<view class="zen-level-info">
 												<text class="zen-level-title">{{ persona.name }}</text>
 												<text class="zen-level-desc-mini">{{ persona.desc }}</text>
 											</view>
-										</view>
+										</button>
 									</view>
 
 									<view v-else class="zen-level-grid slide-in">
-										<view v-for="subject in coachSubjects" :key="subject.name" class="zen-level-card" @tap="startRandomCoachDetailed(subject.name)">
+										<button v-for="subject in coachSubjects" :key="subject.name" class="zen-level-card zen-level-card-button" @tap="startRandomCoachDetailed(subject.name)">
 											<view class="zen-card-huge-emoji">{{ subject.emoji }}</view>
 											<view class="zen-level-info">
 												<text class="zen-level-title">{{ subject.name }}</text>
 												<text class="zen-level-desc-mini">{{ subject.desc }}</text>
 											</view>
-										</view>
+										</button>
 									</view>
 								</view>
 							</view>
@@ -185,7 +185,7 @@
 					<view class="message-list">
 						<view v-for="msg in messages" :key="msg.id" class="message-wrapper" :class="msg.role">
 							<view class="avatar">
-								<image v-if="msg.role === 'assistant'" src="/static/xiaoyi_avatar.png" class="xiaoyi-avatar" />
+								<image v-if="msg.role === 'assistant'" :src="XIAOYI_AVATAR_SRC" class="xiaoyi-avatar" />
 								<view v-else class="user-avatar">{{ userInitial }}</view>
 							</view>
 
@@ -197,7 +197,25 @@
 									class="chat-message-image"
 									@tap="previewImage(msg.image)"
 								/>
+								<!-- #ifdef MP-WEIXIN -->
+								<view class="mp-message-rich">
+									<view
+										v-for="(block, blockIndex) in renderMpMessageBlocks(msg.content)"
+										:key="`${msg.id}-${blockIndex}`"
+										class="mp-message-block"
+										:class="`is-${block.type}`"
+									>
+										<view v-if="block.type === 'divider'" class="mp-message-divider"></view>
+										<view v-else class="mp-message-line">
+											<text v-if="block.prefix" class="mp-message-prefix">{{ block.prefix }}</text>
+											<text class="mp-message-line-text">{{ block.text }}</text>
+										</view>
+									</view>
+								</view>
+								<!-- #endif -->
+								<!-- #ifndef MP-WEIXIN -->
 								<rich-text class="markdown-body" :nodes="renderMarkdown(msg.content)"></rich-text>
+								<!-- #endif -->
 								<text v-if="msg.isTyping" class="cursor-blink"></text>
 							</view>
 						</view>
@@ -239,6 +257,57 @@
 				</view>
 			</view>
 
+			<!-- #ifdef MP-WEIXIN -->
+			<view class="mp-chat-footer">
+				<view class="mp-composer-shell" :class="{ 'has-image': selectedImage, 'is-focused': isInputFocused }">
+					<view v-if="selectedImage" class="zen-image-preview-area">
+						<view class="image-preview-frame">
+							<image :src="selectedImage" mode="aspectFill" class="zen-image-preview" @tap="previewImage(selectedImage)" />
+						</view>
+						<view class="image-preview-meta">
+							<text class="image-preview-chip">已附图</text>
+						</view>
+						<view class="zen-remove-image-btn" @tap="removeImage">脳</view>
+					</view>
+
+					<view class="mp-composer-main">
+						<view class="zen-upload-btn upload-pic-btn" :class="{ 'has-attachment': selectedImage }" @tap="triggerImageUpload">
+							<text class="upload-pic-mark">+</text>
+						</view>
+						<input
+							v-model="inputMsg"
+							class="zen-input-box zen-input-box-mp mp-composer-input"
+							:cursor-spacing="24"
+							confirm-type="send"
+							:placeholder="selectedImage ? '补充图片说明，或直接发送...' : '发送消息、粘贴或拖入图片...'"
+							@input="handleComposerInput"
+							@confirm="sendMessage"
+							@focus="isInputFocused = true"
+							@blur="isInputFocused = false"
+						/>
+						<button
+							v-if="!isGenerating"
+							class="zen-send-btn mp-send-btn"
+							:class="{ active: canSendMessage }"
+							:disabled="!canSendMessage"
+							@tap="sendMessage"
+						>
+							<text class="icon-send">↑</text>
+						</button>
+						<button v-else class="zen-send-btn mp-send-btn stop" @tap="stopGeneration">
+							<text class="icon-send">■</text>
+						</button>
+					</view>
+				</view>
+
+				<view v-if="selectedImage || isGenerating" class="composer-status-row">
+					<text v-if="selectedImage" class="composer-status-chip image-ready">宸查檮鍔犲浘鐗囷紝鍙洿鎺ュ彂閫佹垨缁х画琛ュ厖鏂囧瓧</text>
+					<text v-if="isGenerating" class="composer-status-chip generating">姝ｅ湪鐢熸垚鍥炲锛屽彲鐐瑰嚮鍋滄鎸夐挳涓柇</text>
+				</view>
+			</view>
+			<!-- #endif -->
+
+			<!-- #ifndef MP-WEIXIN -->
 			<view class="zen-footer-wrapper chat-footer">
 				<view class="input-shell input-container" :class="{ 'has-image': selectedImage, 'is-focused': isInputFocused }">
 				<view class="zen-floating-pill" :class="{ 'has-image': selectedImage, 'is-focused': isInputFocused }">
@@ -258,6 +327,17 @@
 							<text class="upload-pic-mark">＋</text>
 						</view>
 
+						<input
+							:value="inputMsg"
+							class="zen-input-box zen-input-box-mp"
+							:cursor-spacing="24"
+							confirm-type="send"
+							:placeholder="selectedImage ? '补充图片说明，或直接发送...' : '发送消息、粘贴或拖入图片...'"
+							@input="handleComposerInput"
+							@confirm="sendMessage"
+							@focus="isInputFocused = true"
+							@blur="isInputFocused = false"
+						/>
 						<textarea
 							v-model="inputMsg"
 							auto-height
@@ -266,13 +346,14 @@
 							:show-confirm-bar="false"
 							confirm-type="send"
 							:placeholder="selectedImage ? '补充图片说明，或直接发送...' : '发送消息、粘贴或拖入图片...'"
+							@input="handleComposerInput"
 							@confirm="sendMessage"
 							@focus="isInputFocused = true"
 							@blur="isInputFocused = false"
 						></textarea>
 
 						<view class="zen-send-area">
-							<button v-if="!isGenerating" class="zen-send-btn" :class="{ active: inputMsg.trim() || selectedImage }" @tap="sendMessage">
+							<button v-if="!isGenerating" class="zen-send-btn" :class="{ active: canSendMessage }" :disabled="!canSendMessage" @tap="sendMessage">
 								<text class="icon-send">↑</text>
 							</button>
 							<button v-else class="zen-send-btn stop" @tap="stopGeneration">
@@ -288,22 +369,41 @@
 					<text v-if="isGenerating" class="composer-status-chip generating">正在生成回复，可点击停止按钮中断</text>
 				</view>
 			</view>
+			<!-- #endif -->
 		</view>
 
 		<view class="zen-bottom-nav">
 			<view class="zen-nav-item" :class="{ active: currentTab === 'chat' }" @tap="switchTab('chat')">
 				<view class="zen-nav-icon-wrapper">
 					<view class="zen-nav-icon">
-						<text class="zen-nav-glyph">●</text>
+						<image class="zen-nav-icon-image" :class="{ active: currentTab === 'chat' }" :src="CHAT_NAV_ICON_SRC" mode="aspectFit" />
 					</view>
 				</view>
 				<text class="zen-nav-label">对话</text>
 			</view>
 
+			<view class="zen-nav-item" :class="{ active: currentTab === 'notice' }" @tap="switchTab('notice')">
+				<view class="zen-nav-icon-wrapper">
+					<view class="zen-nav-icon">
+						<image class="zen-nav-icon-image" :class="{ active: currentTab === 'notice' }" :src="NOTICE_NAV_ICON_SRC" mode="aspectFit" />
+					</view>
+				</view>
+				<text class="zen-nav-label">通知</text>
+			</view>
+
+			<view class="zen-nav-item" :class="{ active: currentTab === 'tools' }" @tap="switchTab('tools')">
+				<view class="zen-nav-icon-wrapper">
+					<view class="zen-nav-icon">
+						<image class="zen-nav-icon-image" :class="{ active: currentTab === 'tools' }" :src="TOOLS_NAV_ICON_SRC" mode="aspectFit" />
+					</view>
+				</view>
+				<text class="zen-nav-label">工具</text>
+			</view>
+
 			<view class="zen-nav-item" :class="{ active: currentTab === 'admin' }" @tap="switchTab('admin')">
 				<view class="zen-nav-icon-wrapper">
 					<view class="zen-nav-icon">
-						<text class="zen-nav-glyph admin">◉</text>
+						<image class="zen-nav-icon-image" :class="{ active: currentTab === 'admin' }" :src="ADMIN_NAV_ICON_SRC" mode="aspectFit" />
 					</view>
 				</view>
 				<text class="zen-nav-label">管理</text>
@@ -313,7 +413,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAuthStore } from '@/store/auth'
 import { renderMarkdown } from '@/utils/markdown'
 import { resolveApiUrl } from '@/utils/api'
@@ -324,6 +424,11 @@ import { captureClientEvent } from '@/utils/error-logger'
 import { createMpStreamChatController } from '@/utils/mp-stream-chat'
 
 const auth = useAuthStore()
+const XIAOYI_AVATAR_SRC = '/static/xiaoyi_character.png'
+const CHAT_NAV_ICON_SRC = '/static/nav_chat.png'
+const NOTICE_NAV_ICON_SRC = '/static/nav_notice.png'
+const TOOLS_NAV_ICON_SRC = '/static/nav_tools.png'
+const ADMIN_NAV_ICON_SRC = '/static/nav_admin.png'
 
 const messages = ref([])
 const inputMsg = ref('')
@@ -367,6 +472,7 @@ const coachSubjects = [
 ]
 
 const userInitial = computed(() => String(auth.userName || '易').trim().slice(0, 1).toUpperCase() || '易')
+const canSendMessage = computed(() => Boolean(inputMsg.value.trim() || selectedImage.value))
 
 const currentBrandMode = computed(() => {
 	const modeMeta = {
@@ -409,6 +515,97 @@ const formatSuccessCriteria = (criteria) => {
 	return []
 }
 
+const sanitizeMpInlineText = (text) => {
+	return String(text || '')
+		.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
+		.replace(/\*\*(.*?)\*\*/g, '$1')
+		.replace(/__(.*?)__/g, '$1')
+		.replace(/~~(.*?)~~/g, '$1')
+		.replace(/`([^`]+)`/g, '$1')
+		.replace(/\s+/g, ' ')
+		.trim()
+}
+
+const flushMpParagraph = (blocks, paragraphLines) => {
+	if (paragraphLines.length === 0) return
+	const text = sanitizeMpInlineText(paragraphLines.join('\n'))
+	if (text) {
+		blocks.push({
+			type: 'paragraph',
+			text,
+			prefix: '',
+		})
+	}
+	paragraphLines.length = 0
+}
+
+const renderMpMessageBlocks = (content) => {
+	const lines = String(content || '').replace(/\r\n/g, '\n').split('\n')
+	const blocks = []
+	const paragraphLines = []
+
+	for (const rawLine of lines) {
+		const line = rawLine.trim()
+
+		if (!line) {
+			flushMpParagraph(blocks, paragraphLines)
+			continue
+		}
+
+		if (/^([-*_])\1{2,}$/.test(line)) {
+			flushMpParagraph(blocks, paragraphLines)
+			blocks.push({ type: 'divider', text: '', prefix: '' })
+			continue
+		}
+
+		const headingMatch = line.match(/^#{1,6}\s+(.+)$/)
+		if (headingMatch) {
+			flushMpParagraph(blocks, paragraphLines)
+			blocks.push({
+				type: 'heading',
+				text: sanitizeMpInlineText(headingMatch[1]),
+				prefix: '',
+			})
+			continue
+		}
+
+		const orderedMatch = line.match(/^(\d+)\.\s+(.+)$/)
+		if (orderedMatch) {
+			flushMpParagraph(blocks, paragraphLines)
+			blocks.push({
+				type: 'ordered-item',
+				text: sanitizeMpInlineText(orderedMatch[2]),
+				prefix: `${orderedMatch[1]}.`,
+			})
+			continue
+		}
+
+		const bulletMatch = line.match(/^[-*+]\s+(.+)$/)
+		if (bulletMatch) {
+			flushMpParagraph(blocks, paragraphLines)
+			blocks.push({
+				type: 'bullet-item',
+				text: sanitizeMpInlineText(bulletMatch[1]),
+				prefix: '•',
+			})
+			continue
+		}
+
+		paragraphLines.push(rawLine)
+	}
+
+	flushMpParagraph(blocks, paragraphLines)
+
+	if (blocks.length === 0) {
+		const fallbackText = sanitizeMpInlineText(content)
+		return fallbackText
+			? [{ type: 'paragraph', text: fallbackText, prefix: '' }]
+			: []
+	}
+
+	return blocks
+}
+
 let requestTask = null
 let scrollBottomTimer = null
 
@@ -423,6 +620,16 @@ const clearSelectedImage = () => {
 }
 
 const switchTab = (tab) => {
+	if (tab === 'notice') {
+		uni.showToast({ title: '通知中心开发中', icon: 'none' })
+		return
+	}
+
+	if (tab === 'tools') {
+		uni.showToast({ title: '工具中心开发中', icon: 'none' })
+		return
+	}
+
 	currentTab.value = tab
 	if (tab === 'admin') {
 		isSidebarOpen.value = false
@@ -533,8 +740,22 @@ const appendAssistantPlaceholder = () => {
 	return aiMsgId
 }
 
+const handleComposerInput = (event) => {
+	inputMsg.value = event?.detail?.value || ''
+	console.info('[chat-debug] input', {
+		value: inputMsg.value,
+		length: inputMsg.value.length,
+	})
+}
+
 const sendMessage = async () => {
 	const content = inputMsg.value.trim()
+	console.info('[chat-debug] send-attempt', {
+		content,
+		raw: inputMsg.value,
+		hasImage: Boolean(selectedImage.value),
+		isGenerating: isGenerating.value,
+	})
 	if (!content && !selectedImage.value) return
 	if (isGenerating.value) return
 
@@ -554,11 +775,20 @@ const sendMessage = async () => {
 		content,
 		image: selectedImage.value,
 	})
+	console.info('[chat-debug] user-message-pushed', {
+		messagesLength: messages.value.length,
+		currentSessionId: currentSessionId.value,
+		lastRoles: messages.value.slice(-3).map((item) => item.role),
+	})
 
 	inputMsg.value = ''
 	clearSelectedImage()
 	isGenerating.value = true
 	const aiMsgId = appendAssistantPlaceholder()
+	console.info('[chat-debug] assistant-placeholder-pushed', {
+		aiMsgId,
+		messagesLength: messages.value.length,
+	})
 	scrollToBottom()
 
 	const streamLogContext = {
@@ -601,6 +831,7 @@ const sendMessage = async () => {
 	try {
 		await requestTask.start({
 			onStatus: (statusCode) => {
+				console.info('[chat-debug] stream-status', { statusCode })
 				if (statusCode >= 400) {
 					const aiMsg = messages.value.find((item) => item.id === aiMsgId)
 					if (aiMsg && !aiMsg.content) {
@@ -609,6 +840,10 @@ const sendMessage = async () => {
 				}
 			},
 			onText: (text) => {
+				console.info('[chat-debug] stream-text', {
+					length: text?.length || 0,
+					preview: text?.slice?.(0, 60) || '',
+				})
 				const aiMsg = messages.value.find((item) => item.id === aiMsgId)
 				if (aiMsg && text) {
 					aiMsg.content += text
@@ -617,6 +852,11 @@ const sendMessage = async () => {
 			},
 		})
 	} catch (error) {
+		console.error('[chat-debug] stream-error', {
+			code: error?.code,
+			message: error?.message,
+			cause: error?.cause?.errMsg || error?.cause?.message || '',
+		})
 		const aiMsg = messages.value.find((item) => item.id === aiMsgId)
 		if (aiMsg) {
 			if (error?.code === 'STREAM_ABORTED') {
@@ -645,6 +885,11 @@ const sendMessage = async () => {
 		if (aiMsg) aiMsg.isTyping = false
 		isGenerating.value = false
 		requestTask = null
+		console.info('[chat-debug] send-finished', {
+			messagesLength: messages.value.length,
+			lastMessageRole: messages.value[messages.value.length - 1]?.role || '',
+			lastMessagePreview: messages.value[messages.value.length - 1]?.content?.slice?.(0, 60) || '',
+		})
 		saveSessions()
 	}
 }
@@ -728,6 +973,7 @@ const startRandomCoachDetailed = (subjectName) => {
 }
 
 const presetMsg = (message) => {
+	console.info('[chat-debug] preset', { message })
 	inputMsg.value = message
 	sendMessage()
 }
@@ -921,6 +1167,13 @@ onUnmounted(() => {
 	}
 })
 
+watch(messages, (value) => {
+	console.info('[chat-debug] messages-watch', {
+		length: value.length,
+		roles: value.slice(-4).map((item) => item.role),
+	})
+}, { deep: true })
+
 </script>
 
 <style scoped>
@@ -1021,10 +1274,12 @@ onUnmounted(() => {
 	transition: transform 0.24s ease;
 	z-index: 1001;
 	box-shadow: 24rpx 0 54rpx rgba(15, 23, 42, 0.08);
+	pointer-events: none;
 }
 
 .sidebar.show {
 	transform: translateX(0);
+	pointer-events: auto;
 }
 
 .sidebar-header {
@@ -1440,6 +1695,16 @@ onUnmounted(() => {
 	box-shadow: 0 10rpx 32rpx rgba(15, 23, 42, 0.05);
 }
 
+.zen-card-button {
+	width: 100%;
+	margin: 0;
+	text-align: left;
+}
+
+.zen-card-button::after {
+	border: none;
+}
+
 .cat-card {
 	width: 100%;
 	max-width: 360rpx;
@@ -1562,6 +1827,15 @@ onUnmounted(() => {
 	color: #365f4d;
 }
 
+.coach-selection-chip-button {
+	margin: 0;
+	line-height: 1.4;
+}
+
+.coach-selection-chip-button::after {
+	border: none;
+}
+
 .arrow {
 	margin-left: 10rpx;
 	color: #94a3b8;
@@ -1590,6 +1864,16 @@ onUnmounted(() => {
 	border-radius: 28rpx;
 	background: #f8fafc;
 	border: 1px solid var(--border-light);
+}
+
+.zen-level-card-button {
+	width: 100%;
+	margin: 0;
+	text-align: left;
+}
+
+.zen-level-card-button::after {
+	border: none;
 }
 
 .zen-card-huge-icon,
@@ -1621,11 +1905,11 @@ onUnmounted(() => {
 }
 
 .message-list {
-	padding: 0 24rpx 340rpx;
+	padding: 0 24rpx 520rpx;
 }
 
 .message-tail-spacer {
-	height: 80rpx;
+	height: 240rpx;
 }
 
 .message-wrapper {
@@ -1685,6 +1969,56 @@ onUnmounted(() => {
 	border-radius: 30rpx;
 	font-size: 30rpx;
 	line-height: 1.66;
+}
+
+.mp-message-rich {
+	display: flex;
+	flex-direction: column;
+	gap: 12rpx;
+}
+
+.mp-message-block {
+	display: block;
+}
+
+.mp-message-line {
+	display: flex;
+	align-items: flex-start;
+	gap: 8rpx;
+}
+
+.mp-message-line-text {
+	flex: 1;
+	font-size: 30rpx;
+	line-height: 1.7;
+	color: inherit;
+	word-break: break-word;
+}
+
+.mp-message-prefix {
+	flex-shrink: 0;
+	font-size: 30rpx;
+	line-height: 1.7;
+	font-weight: 700;
+	color: inherit;
+}
+
+.mp-message-block.is-heading .mp-message-line-text {
+	font-size: 34rpx;
+	line-height: 1.55;
+	font-weight: 800;
+}
+
+.mp-message-block.is-ordered-item .mp-message-line-text,
+.mp-message-block.is-bullet-item .mp-message-line-text {
+	line-height: 1.75;
+}
+
+.mp-message-divider {
+	width: 100%;
+	height: 2rpx;
+	margin: 8rpx 0;
+	background: rgba(148, 163, 184, 0.32);
 }
 
 .assistant .message-content {
@@ -1757,6 +2091,7 @@ onUnmounted(() => {
 	padding: 26rpx;
 	transition: right 0.28s ease;
 	z-index: 30;
+	pointer-events: none;
 }
 
 .combat-intel-shell {
@@ -1767,6 +2102,7 @@ onUnmounted(() => {
 
 .combat-intel-panel.show {
 	right: 18rpx;
+	pointer-events: auto;
 }
 
 .panel-header {
@@ -1828,6 +2164,48 @@ onUnmounted(() => {
 	color: #ffffff;
 	font-size: 26rpx;
 	font-weight: 700;
+}
+
+.mp-chat-footer {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: calc(128rpx + env(safe-area-inset-bottom));
+	padding: 0 20rpx;
+	z-index: 25;
+}
+
+.mp-composer-shell {
+	background: rgba(255, 255, 255, 0.98);
+	border-radius: 36rpx;
+	padding: 12rpx 16rpx;
+	box-shadow: 0 14rpx 32rpx rgba(15, 23, 42, 0.08);
+	border: 1px solid rgba(15, 23, 42, 0.04);
+}
+
+.mp-composer-shell.has-image {
+	background: rgba(239, 246, 255, 0.96);
+	border-color: rgba(37, 99, 235, 0.24);
+}
+
+.mp-composer-shell.is-focused {
+	transform: translateY(-4rpx);
+}
+
+.mp-composer-main {
+	display: flex;
+	align-items: center;
+	gap: 10rpx;
+}
+
+.mp-composer-input {
+	flex: 1;
+	height: 72rpx;
+	line-height: 72rpx;
+}
+
+.mp-send-btn[disabled] {
+	opacity: 1;
 }
 
 .zen-footer-wrapper {
@@ -1952,6 +2330,11 @@ onUnmounted(() => {
 	font-weight: 500;
 }
 
+.zen-input-box-mp {
+	height: 56rpx;
+	line-height: 56rpx;
+}
+
 .zen-send-area {
 	display: flex;
 	align-items: center;
@@ -2029,7 +2412,7 @@ onUnmounted(() => {
 	backdrop-filter: blur(20rpx);
 	display: flex;
 	align-items: center;
-	justify-content: space-around;
+	justify-content: space-between;
 	box-shadow: 0 12rpx 40rpx rgba(15, 23, 42, 0.08);
 	border: 1px solid rgba(15, 23, 42, 0.04);
 	z-index: 24;
@@ -2040,7 +2423,8 @@ onUnmounted(() => {
 	flex-direction: column;
 	align-items: center;
 	gap: 6rpx;
-	width: 160rpx;
+	flex: 1;
+	min-width: 0;
 }
 
 .zen-nav-icon-wrapper {
@@ -2051,13 +2435,15 @@ onUnmounted(() => {
 	justify-content: center;
 }
 
-.zen-nav-glyph {
-	font-size: 28rpx;
-	color: #0f172a;
+.zen-nav-icon-image {
+	width: 34rpx;
+	height: 34rpx;
+	display: block;
+	opacity: 0.5;
 }
 
-.zen-nav-glyph.admin {
-	color: #91a827;
+.zen-nav-item.active .zen-nav-icon-image {
+	opacity: 1;
 }
 
 .zen-nav-label {
@@ -2086,6 +2472,7 @@ onUnmounted(() => {
 		max-width: none;
 		min-height: 100vh;
 		padding: 24px;
+		pointer-events: auto;
 	}
 
 	.chat-container {
