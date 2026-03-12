@@ -13,7 +13,7 @@ const requiredSnippets = [
   'width: 320rpx;',
   '.brand-name {',
   'width: 100%;',
-  'font-size: 56rpx;',
+  'font-size: 68rpx;',
   'white-space: nowrap;',
   '.brand-slogan {',
   'color: #25539b;',

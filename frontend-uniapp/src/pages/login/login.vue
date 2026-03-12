@@ -160,7 +160,7 @@ onMounted(() => {
 
 .brand-name {
 	width: 100%;
-	font-size: 56rpx;
+	font-size: 68rpx;
 	font-weight: 800;
 	color: var(--slate-900);
 	letter-spacing: -1rpx;
