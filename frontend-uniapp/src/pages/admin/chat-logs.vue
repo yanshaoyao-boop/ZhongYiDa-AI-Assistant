@@ -215,10 +215,11 @@ const currentFilterSummary = computed(() => {
 	return keyword ? `${userLabel} · 关键词“${keyword}”` : userLabel
 })
 
-const emptyStateTitle = computed(() => (auth.isSuperAdmin ? '暂无相关记录' : '当前账号无权查看'))
+const canViewLogs = computed(() => auth.isSuperAdmin || auth.hasPermission('view_logs'))
+const emptyStateTitle = computed(() => (canViewLogs.value ? '暂无相关记录' : '当前账号无权查看'))
 const emptyStateHint = computed(() => {
-	if (!auth.isSuperAdmin) {
-		return '会话审计只对超级管理员开放，前端未改动后端权限规则。'
+	if (!canViewLogs.value) {
+		return '当前账号没有会话审计权限，请联系老板或管理员分配 view_logs 权限。'
 	}
 	return '请尝试更换筛选条件或关键字。'
 })

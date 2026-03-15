@@ -23,6 +23,32 @@ const buildLoginFormPayload = (username, password) => {
     return `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`
 }
 
+const normalizePermissions = (permissions) => {
+    if (Array.isArray(permissions)) {
+        return [...new Set(permissions.filter((item) => typeof item === 'string' && item.trim()))]
+    }
+
+    if (typeof permissions === 'string' && permissions.trim()) {
+        try {
+            return normalizePermissions(JSON.parse(permissions))
+        } catch (error) {
+            return []
+        }
+    }
+
+    return []
+}
+
+const normalizeUser = (user) => {
+    if (!user || typeof user !== 'object') return null
+    return {
+        ...user,
+        permissions: normalizePermissions(user.permissions),
+        branch_id: user.branch_id ?? null,
+        department_id: user.department_id ?? null
+    }
+}
+
 // Legacy fallback marker kept for smoke-test compatibility:
 // res.data?.detail || '鐧诲綍澶辫触锛岃妫€鏌ヨ处鍙峰瘑鐮?
 // res.data?.detail || '登录失败，请检查账号密码'
@@ -117,16 +143,30 @@ axios.interceptors.response.use(
 export const useAuthStore = defineStore('auth', {
     state: () => ({
         token: storage.get('token') || null,
-        user: readStoredItem('user'),
+        user: normalizeUser(readStoredItem('user')),
         loading: false,
         error: null
     }),
 
     getters: {
         isAuthenticated: (state) => !!state.token,
-        isAdmin: (state) => state.user?.role === 'super_admin' || state.user?.role === 'branch_admin',
-        isSuperAdmin: (state) => state.user?.role === 'super_admin',
-        userName: (state) => state.user?.full_name || state.user?.username || '未登录'
+        permissions: (state) => normalizePermissions(state.user?.permissions),
+        hasPermission: (state) => (permission) => normalizePermissions(state.user?.permissions).includes(permission),
+        isAdmin: (state) => Boolean(state.user?.role && state.user?.role !== 'employee'),
+        isSuperAdmin: (state) => state.user?.role === 'super_admin' || state.user?.role === 'owner',
+        userName: (state) => state.user?.full_name || state.user?.username || '未登录',
+        roleName: (state) => {
+            const roleMap = {
+                'owner': '老板',
+                'super_admin': '超级管理员',
+                'executive': '高管',
+                'daily_admin': '日常管理员',
+                'staff_admin': '人事管理员',
+                'branch_admin': '分公司管理员',
+                'employee': '普通员工'
+            }
+            return roleMap[state.user?.role] || '未知角色'
+        }
     },
 
     actions: {
@@ -150,10 +190,11 @@ export const useAuthStore = defineStore('auth', {
                         success: (res) => {
                             if (res.statusCode === 200) {
                                 const { access_token, user } = res.data
+                                const normalizedUser = normalizeUser(user)
                                 this.token = access_token
-                                this.user = user
+                                this.user = normalizedUser
                                 storage.set('token', access_token)
-                                storage.set('user', JSON.stringify(user))
+                                storage.set('user', JSON.stringify(normalizedUser))
                                 axios.defaults.headers.common.Authorization = `Bearer ${access_token}`
                                 resolve(true)
                                 return
@@ -177,11 +218,12 @@ export const useAuthStore = defineStore('auth', {
 
                 const response = await axios.post('/api/auth/login', formData)
                 const { access_token, user } = response.data
+                const normalizedUser = normalizeUser(user)
 
                 this.token = access_token
-                this.user = user
+                this.user = normalizedUser
                 storage.set('token', access_token)
-                storage.set('user', JSON.stringify(user))
+                storage.set('user', JSON.stringify(normalizedUser))
                 axios.defaults.headers.common.Authorization = `Bearer ${access_token}`
 
                 return true
@@ -210,6 +252,7 @@ export const useAuthStore = defineStore('auth', {
         },
 
         initAuth() {
+            this.user = normalizeUser(this.user)
             if (this.token) {
                 axios.defaults.headers.common.Authorization = `Bearer ${this.token}`
             }

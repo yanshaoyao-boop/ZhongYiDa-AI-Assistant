@@ -105,28 +105,139 @@
 							</view>
 						</view>
 
-						<view v-else-if="currentMode === 'expert'" class="zen-welcome-stage expert-stage welcome-centered">
+						<view v-else-if="currentMode === 'expert'" class="zen-welcome-stage expert-stage welcome-centered mode-stage-offset">
 							<view class="zen-expert-icon">
 								<text class="expert-emoji">💡</text>
 							</view>
 							<text class="zen-title zen-title-expert">专家指导</text>
 							<text class="zen-subtitle">请描述您遇到的模糊或复杂的问题，我会通过 1-2 轮追问帮你理清思路并提供专业建议。</text>
 
-							<view class="zen-suggestion-grid">
-								<button class="zen-card zen-card-button" @tap="presetMsg('我有一个关于供应链优化的复杂问题')">
-									<view class="zen-card-content">
-										<text class="zen-card-title">供应链优化分析</text>
-										<text class="zen-card-desc">我会先帮你拆问题，再给出结构化建议。</text>
+						</view>
+
+						<view v-else-if="isCoachQuizActive" class="coach-quiz-stage">
+							<!-- 移动端总结卡片 -->
+							<view v-if="coachQuizSession?.completed" class="coach-quiz-card coach-quiz-summary-premium glass-panel">
+								<view class="summary-visual">
+									<text class="summary-emoji">🏆</text>
+								</view>
+								<text class="summary-title-main">训练任务达成</text>
+								<view class="summary-score-row">
+									<view class="score-card">
+										<text class="score-val">{{ coachQuizSession.correctCount }}</text>
+										<text class="score-lab">答对</text>
 									</view>
-								</button>
+									<view class="score-line"></view>
+									<view class="score-card">
+										<text class="score-val">{{ coachQuizAccuracy }}%</text>
+										<text class="score-lab">正确率</text>
+									</view>
+								</view>
+								<text class="summary-note">坚持每日训练，是通往业务专家的必经之路。</text>
+								<view class="premium-actions-stack">
+									<button class="quiz-primary-stack-btn" @tap="restartCoachQuiz">重新发起训练</button>
+									<button class="quiz-ghost-stack-btn" @tap="coachEntryMode = 'menu'; restartCoachQuiz()">返回教练菜单</button>
+								</view>
+							</view>
+
+							<!-- 移动端答题卡片 -->
+							<view v-else-if="currentCoachQuizQuestion" class="coach-quiz-panel-premium glass-panel">
+								<view class="quiz-panel-head">
+									<view class="quiz-panel-tag">
+										<text class="tag-primary">知识训练</text>
+										<text v-if="currentCoachQuizQuestion.category" class="tag-secondary">{{ currentCoachQuizQuestion.category }}</text>
+									</view>
+									<text class="quiz-panel-progress">{{ coachQuizSession.currentIndex + 1 }} / {{ coachQuizSession.questions.length }}</text>
+								</view>
+								
+								<view class="quiz-panel-question">
+									<text class="question-text">{{ currentCoachQuizQuestion.question }}</text>
+								</view>
+
+								<view class="quiz-panel-options">
+									<button
+										v-for="option in currentCoachQuizQuestion.options"
+										:key="option.key"
+										class="quiz-panel-option-btn"
+										:class="coachQuizOptionClass(option.key)"
+										:disabled="Boolean(currentCoachQuizQuestion.selectedAnswer)"
+										@tap="selectCoachQuizAnswer(option.key)"
+									>
+										<view class="opt-prefix">{{ option.key }}</view>
+										<text class="opt-label">{{ option.text }}</text>
+										<view class="opt-status">
+											<text v-if="currentCoachQuizQuestion.selectedAnswer && currentCoachQuizQuestion.answer === option.key" class="opt-ico-correct">✔</text>
+											<text v-else-if="currentCoachQuizQuestion.selectedAnswer === option.key && currentCoachQuizQuestion.selectedAnswer !== currentCoachQuizQuestion.answer" class="opt-ico-wrong">✘</text>
+										</view>
+									</button>
+								</view>
+
+								<view
+									v-if="currentCoachQuizQuestion.selectedAnswer"
+									class="quiz-panel-feedback"
+									:class="{ 'is-correct': currentCoachQuizQuestion.isCorrect, 'is-wrong': !currentCoachQuizQuestion.isCorrect }"
+								>
+									<view class="feedback-head-row">
+										<text class="fb-icon">{{ currentCoachQuizQuestion.isCorrect ? '✅' : '❌' }}</text>
+										<text class="fb-title">{{ currentCoachQuizQuestion.isCorrect ? '回答正确' : '回答错误' }}</text>
+									</view>
+									<view class="fb-body">
+										<text class="fb-ans">正确答案：{{ currentCoachQuizQuestion.answer }}</text>
+										<text v-if="currentCoachQuizQuestion.explanation" class="fb-expl">{{ currentCoachQuizQuestion.explanation }}</text>
+									</view>
+								</view>
+
+								<view class="quiz-panel-actions">
+									<button class="quiz-btn-nav ghost" @tap="restartCoachQuiz">重试</button>
+									<button class="quiz-btn-nav primary" :disabled="!currentCoachQuizQuestion.selectedAnswer" @tap="nextCoachQuizQuestion">
+										<text>{{ coachQuizSession.currentIndex === coachQuizSession.questions.length - 1 ? '查看总结' : '下一题' }}</text>
+										<text class="ico-next">→</text>
+									</button>
+								</view>
 							</view>
 						</view>
 
-						<view v-else class="zen-welcome-stage coach-stage welcome-centered">
+						<view v-else class="zen-welcome-stage coach-stage welcome-centered mode-stage-offset">
 							<text class="zen-title zen-title-coach">知识教练</text>
 							<text class="zen-subtitle">场景化陪练，帮助你把经验真正练到手。</text>
 
-							<view class="coach-selection-shell">
+							<view v-if="coachEntryMode === 'menu'" class="coach-entry-grid">
+								<button class="zen-level-card zen-level-card-button coach-entry-card" @tap="enterCoachDuelMode">
+									<view class="zen-card-huge-emoji">🎯</view>
+									<view class="zen-level-info">
+										<text class="zen-level-title">教练对练</text>
+										<text class="zen-level-desc-mini">继续使用原来的场景陪练流程，适合练报价、排雷、纠纷和逼单节奏。</text>
+									</view>
+								</button>
+								<button class="zen-level-card zen-level-card-button coach-entry-card" @tap="enterCoachQuizMode">
+									<view class="zen-card-huge-emoji">📝</view>
+									<view class="zen-level-info">
+										<text class="zen-level-title">教练出题</text>
+										<text class="zen-level-desc-mini">选择 5 / 10 / 20 题进入单题卡片流，答完立刻反馈结果。</text>
+									</view>
+								</button>
+							</view>
+
+							<view v-else-if="coachEntryMode === 'quiz'" class="coach-quiz-picker-premium glass-panel">
+								<button class="picker-back-btn" @tap="coachEntryMode = 'menu'; restartCoachQuiz()">
+									<text class="ico-back">←</text> 返回
+								</button>
+								<view class="picker-title-pnl">
+									<text class="p-title">题目数量</text>
+									<text class="p-subtitle">点击下方选项即可立即开始训练</text>
+								</view>
+								<view class="count-grid-modern">
+									<button v-for="count in coachQuizQuestionCounts" :key="count" class="count-card-item" :disabled="coachQuizLoading" @tap="startCoachQuizSession(count)">
+										<text class="c-num">{{ count }}</text>
+										<text class="c-unit">道题</text>
+									</button>
+								</view>
+								<view v-if="coachQuizLoading" class="picker-status-box">
+									<text class="shimmer-text">正在为您精心抽题...</text>
+								</view>
+								<text v-else-if="coachQuizError" class="picker-status-box error">{{ coachQuizError }}</text>
+							</view>
+
+							<view v-else class="coach-selection-shell">
 								<view class="zen-level-up-container">
 									<view class="zen-level-header">
 										<text class="coach-step-pill">{{ currentCoachStep }}</text>
@@ -258,7 +369,7 @@
 			</view>
 
 			<!-- #ifdef MP-WEIXIN -->
-			<view class="mp-chat-footer">
+			<view v-if="!isCoachQuizView" class="mp-chat-footer">
 				<view class="mp-composer-shell" :class="{ 'has-image': selectedImage, 'is-focused': isInputFocused }">
 					<view v-if="selectedImage" class="zen-image-preview-area">
 						<view class="image-preview-frame">
@@ -292,7 +403,7 @@
 							:disabled="!canSendMessage"
 							@tap="sendMessage"
 						>
-							<text class="icon-send">↑</text>
+							<image class="icon-send-image" :src="SEND_ICON_SRC" mode="aspectFit" />
 						</button>
 						<button v-else class="zen-send-btn mp-send-btn stop" @tap="stopGeneration">
 							<text class="icon-send">■</text>
@@ -308,7 +419,7 @@
 			<!-- #endif -->
 
 			<!-- #ifndef MP-WEIXIN -->
-			<view class="zen-footer-wrapper chat-footer">
+			<view v-if="!isCoachQuizView" class="zen-footer-wrapper chat-footer">
 				<view class="input-shell input-container" :class="{ 'has-image': selectedImage, 'is-focused': isInputFocused }">
 				<view class="zen-floating-pill" :class="{ 'has-image': selectedImage, 'is-focused': isInputFocused }">
 					<view v-if="selectedImage" class="zen-image-preview-area">
@@ -354,7 +465,7 @@
 
 						<view class="zen-send-area">
 							<button v-if="!isGenerating" class="zen-send-btn" :class="{ active: canSendMessage }" :disabled="!canSendMessage" @tap="sendMessage">
-								<text class="icon-send">↑</text>
+								<image class="icon-send-image" :src="SEND_ICON_SRC" mode="aspectFit" />
 							</button>
 							<button v-else class="zen-send-btn stop" @tap="stopGeneration">
 								<text class="icon-send">■</text>
@@ -386,6 +497,7 @@
 				<view class="zen-nav-icon-wrapper">
 					<view class="zen-nav-icon">
 						<image class="zen-nav-icon-image" :class="{ active: currentTab === 'notice' }" :src="NOTICE_NAV_ICON_SRC" mode="aspectFit" />
+						<view v-if="hasUnreadNotices" class="zen-nav-badge"></view>
 					</view>
 				</view>
 				<text class="zen-nav-label">通知</text>
@@ -409,6 +521,33 @@
 				<text class="zen-nav-label">管理</text>
 			</view>
 		</view>
+
+		<view v-if="showNoticeCenter" class="notice-center-overlay" @tap="closeNoticeCenter">
+			<view class="notice-center-sheet" @tap.stop>
+				<view class="notice-center-head">
+					<text class="notice-center-title">重要通知</text>
+					<text class="notice-center-close" @tap="closeNoticeCenter">×</text>
+				</view>
+				<view class="notice-center-tabs">
+					<view class="notice-center-tab" :class="{ active: noticeTab === 'current' }" @tap="noticeTab = 'current'">
+						<text>本周通知</text>
+					</view>
+					<view class="notice-center-tab" :class="{ active: noticeTab === 'history' }" @tap="noticeTab = 'history'">
+						<text>历史通知</text>
+					</view>
+				</view>
+				<scroll-view scroll-y class="notice-center-scroll">
+					<view v-if="noticesLoading" class="notice-center-empty">通知加载中…</view>
+					<view v-else-if="displayNotices.length === 0" class="notice-center-empty">
+						{{ noticeTab === 'current' ? '本周暂无通知' : '暂无历史通知' }}
+					</view>
+					<view v-for="notice in displayNotices" :key="notice.id" class="notice-center-card" @tap="previewNotice(notice)">
+						<text class="notice-center-date">{{ formatNoticeDate(notice.created_at) }}</text>
+						<text class="notice-center-content">{{ notice.content }}</text>
+					</view>
+				</scroll-view>
+			</view>
+		</view>
 	</view>
 </template>
 
@@ -429,6 +568,8 @@ const CHAT_NAV_ICON_SRC = '/static/nav_chat.png'
 const NOTICE_NAV_ICON_SRC = '/static/nav_notice.png'
 const TOOLS_NAV_ICON_SRC = '/static/nav_tools.png'
 const ADMIN_NAV_ICON_SRC = '/static/nav_admin.png'
+const SEND_ICON_SRC = '/static/send.png'
+const NOTICE_SEEN_STORAGE_KEY = 'zyd_notice_last_seen_id'
 
 const messages = ref([])
 const inputMsg = ref('')
@@ -450,6 +591,17 @@ const currentScenario = ref(null)
 const isIntelOpen = ref(false)
 const selectedRegion = ref(null)
 const selectedPersona = ref(null)
+const coachEntryMode = ref('menu')
+const coachQuizQuestionCounts = [5, 10, 20]
+const coachQuizSession = ref(null)
+const coachQuizLoading = ref(false)
+const coachQuizError = ref('')
+const showNoticeCenter = ref(false)
+const noticeTab = ref('current')
+const currentNotices = ref([])
+const noticeHistory = ref([])
+const noticesLoading = ref(false)
+const hasUnreadNotices = ref(false)
 
 const POST_LOGIN_FRESH_CHAT_KEY = 'zyd_post_login_fresh_chat'
 const LAST_CHAT_MODE_KEY = 'zyd_last_chat_mode'
@@ -473,6 +625,17 @@ const coachSubjects = [
 
 const userInitial = computed(() => String(auth.userName || '易').trim().slice(0, 1).toUpperCase() || '易')
 const canSendMessage = computed(() => Boolean(inputMsg.value.trim() || selectedImage.value))
+const displayNotices = computed(() => (noticeTab.value === 'history' ? noticeHistory.value : currentNotices.value))
+const isCoachQuizActive = computed(() => currentMode.value === 'coach' && Boolean(coachQuizSession.value))
+const isCoachQuizView = computed(() => currentMode.value === 'coach' && coachEntryMode.value === 'quiz')
+const currentCoachQuizQuestion = computed(() => {
+	if (!coachQuizSession.value || coachQuizSession.value.completed) return null
+	return coachQuizSession.value.questions[coachQuizSession.value.currentIndex] || null
+})
+const coachQuizAccuracy = computed(() => {
+	if (!coachQuizSession.value || coachQuizSession.value.questions.length === 0) return 0
+	return Math.round((coachQuizSession.value.correctCount / coachQuizSession.value.questions.length) * 100)
+})
 
 const currentBrandMode = computed(() => {
 	const modeMeta = {
@@ -606,6 +769,111 @@ const renderMpMessageBlocks = (content) => {
 	return blocks
 }
 
+const readSeenNoticeId = () => {
+	try {
+		return Number(uni.getStorageSync(NOTICE_SEEN_STORAGE_KEY) || 0)
+	} catch (error) {
+		return 0
+	}
+}
+
+const writeSeenNoticeId = (noticeId) => {
+	try {
+		uni.setStorageSync(NOTICE_SEEN_STORAGE_KEY, String(noticeId || 0))
+	} catch (error) {}
+}
+
+const syncUnreadNoticeState = (notices) => {
+	const latestId = Array.isArray(notices) && notices.length > 0 ? Number(notices[0].id || 0) : 0
+	const seenId = readSeenNoticeId()
+	hasUnreadNotices.value = latestId > seenId
+}
+
+const formatNoticeDate = (value) => {
+	if (!value) return ''
+	const date = new Date(value)
+	if (Number.isNaN(date.getTime())) return String(value)
+	const year = date.getFullYear()
+	const month = `${date.getMonth() + 1}`.padStart(2, '0')
+	const day = `${date.getDate()}`.padStart(2, '0')
+	const hours = `${date.getHours()}`.padStart(2, '0')
+	const minutes = `${date.getMinutes()}`.padStart(2, '0')
+	return `${year}-${month}-${day} ${hours}:${minutes}`
+}
+
+const requestNoticeApi = async (path) => {
+	return await new Promise((resolve, reject) => {
+		uni.request({
+			url: resolveApiUrl(path),
+			method: 'GET',
+			header: auth.token ? { Authorization: `Bearer ${auth.token}` } : {},
+			success: (res) => {
+				if (res.statusCode >= 200 && res.statusCode < 300) {
+					resolve(Array.isArray(res.data) ? res.data : [])
+					return
+				}
+				reject(new Error(res.data?.detail || `notice request failed (${res.statusCode})`))
+			},
+			fail: reject,
+		})
+	})
+}
+
+const fetchCurrentNotices = async ({ markAsRead = false } = {}) => {
+	try {
+		const notices = await requestNoticeApi('/api/notices/current')
+		currentNotices.value = notices
+		syncUnreadNoticeState(notices)
+		if (markAsRead && notices.length > 0) {
+			writeSeenNoticeId(notices[0].id)
+			hasUnreadNotices.value = false
+		}
+	} catch (error) {
+		currentNotices.value = []
+		hasUnreadNotices.value = false
+	}
+}
+
+const fetchNoticeHistory = async () => {
+	try {
+		const notices = await requestNoticeApi('/api/notices/history')
+		noticeHistory.value = notices
+	} catch (error) {
+		noticeHistory.value = []
+	}
+}
+
+const openNoticeCenter = async () => {
+	currentTab.value = 'notice'
+	showNoticeCenter.value = true
+	noticeTab.value = 'current'
+	noticesLoading.value = true
+	try {
+		await Promise.all([
+			fetchCurrentNotices({ markAsRead: true }),
+			fetchNoticeHistory(),
+		])
+	} finally {
+		noticesLoading.value = false
+	}
+}
+
+const closeNoticeCenter = () => {
+	showNoticeCenter.value = false
+	if (currentTab.value === 'notice') {
+		currentTab.value = 'chat'
+	}
+}
+
+const previewNotice = (notice) => {
+	if (!notice?.content) return
+	uni.showModal({
+		title: formatNoticeDate(notice.created_at) || '通知详情',
+		content: notice.content,
+		showCancel: false,
+	})
+}
+
 let requestTask = null
 let scrollBottomTimer = null
 
@@ -621,7 +889,7 @@ const clearSelectedImage = () => {
 
 const switchTab = (tab) => {
 	if (tab === 'notice') {
-		uni.showToast({ title: '通知中心开发中', icon: 'none' })
+		openNoticeCenter()
 		return
 	}
 
@@ -631,6 +899,7 @@ const switchTab = (tab) => {
 	}
 
 	currentTab.value = tab
+	showNoticeCenter.value = false
 	if (tab === 'admin') {
 		isSidebarOpen.value = false
 		uni.navigateTo({ url: '/pages/admin/admin' })
@@ -670,6 +939,9 @@ const saveSessions = () => {
 }
 
 const startNewChat = ({ forceCreate = false } = {}) => {
+	if (currentMode.value === 'coach') {
+		resetCoachState()
+	}
 	if (!forceCreate && currentSessionId.value) {
 		const currentSession = sessions.value.find((item) => item.id === currentSessionId.value)
 		if (currentSession && (!currentSession.messages || currentSession.messages.length === 0)) {
@@ -914,6 +1186,7 @@ const switchMode = (mode) => {
 	if (currentMode.value === mode) return
 	currentMode.value = mode
 	persistLastMode(mode)
+	resetCoachState()
 	isSidebarOpen.value = false
 	isIntelOpen.value = false
 	selectedRegion.value = null
@@ -950,8 +1223,114 @@ const buildCoachFallbackScenario = (subjectName) => ({
 	],
 })
 
+const resetCoachQuiz = () => {
+	coachQuizSession.value = null
+	coachQuizLoading.value = false
+	coachQuizError.value = ''
+}
+
+const resetCoachState = () => {
+	currentScenario.value = null
+	isIntelOpen.value = false
+	selectedRegion.value = null
+	selectedPersona.value = null
+	coachEntryMode.value = 'menu'
+	resetCoachQuiz()
+}
+
+const enterCoachDuelMode = () => {
+	resetCoachQuiz()
+	coachEntryMode.value = 'duel'
+}
+
+const enterCoachQuizMode = () => {
+	currentScenario.value = null
+	isIntelOpen.value = false
+	selectedRegion.value = null
+	selectedPersona.value = null
+	coachEntryMode.value = 'quiz'
+	resetCoachQuiz()
+}
+
+const startCoachQuizSession = async (count) => {
+	coachQuizLoading.value = true
+	coachQuizError.value = ''
+	coachQuizSession.value = null
+	try {
+		const response = await new Promise((resolve, reject) => {
+			uni.request({
+				url: resolveApiUrl(`/api/coach-quiz/session?count=${count}`),
+				method: 'GET',
+				header: auth.token ? { Authorization: `Bearer ${auth.token}` } : {},
+				success: resolve,
+				fail: reject,
+			})
+		})
+
+		if (response.statusCode >= 400) {
+			throw new Error(response.data?.detail || `coach quiz request failed: ${response.statusCode}`)
+		}
+
+		const questions = Array.isArray(response.data?.questions) ? response.data.questions : []
+		if (questions.length === 0) {
+			coachQuizError.value = '当前还没有可用题库，请先让管理员上传题目。'
+			return
+		}
+
+		coachQuizSession.value = {
+			requestedCount: count,
+			currentIndex: 0,
+			correctCount: 0,
+			completed: false,
+			questions: questions.map((question) => ({
+				...question,
+				selectedAnswer: '',
+				isCorrect: false,
+			})),
+		}
+	} catch (error) {
+		coachQuizError.value = error.message || '抽题失败，请稍后重试'
+	} finally {
+		coachQuizLoading.value = false
+	}
+}
+
+const selectCoachQuizAnswer = (answerKey) => {
+	const question = currentCoachQuizQuestion.value
+	if (!question || question.selectedAnswer) return
+	question.selectedAnswer = answerKey
+	question.isCorrect = question.answer === answerKey
+	if (question.isCorrect) {
+		coachQuizSession.value.correctCount += 1
+	}
+}
+
+const nextCoachQuizQuestion = () => {
+	if (!coachQuizSession.value || !currentCoachQuizQuestion.value?.selectedAnswer) return
+	if (coachQuizSession.value.currentIndex >= coachQuizSession.value.questions.length - 1) {
+		coachQuizSession.value.completed = true
+		return
+	}
+	coachQuizSession.value.currentIndex += 1
+}
+
+const restartCoachQuiz = () => {
+	resetCoachQuiz()
+	coachEntryMode.value = 'quiz'
+}
+
+const coachQuizOptionClass = (optionKey) => {
+	const question = currentCoachQuizQuestion.value
+	if (!question?.selectedAnswer) return ''
+	if (question.answer === optionKey) return 'correct'
+	if (question.selectedAnswer === optionKey) return 'wrong'
+	return ''
+}
+
 const startRandomCoachDetailed = (subjectName) => {
 	if (!selectedRegion.value || !selectedPersona.value) return
+	coachEntryMode.value = 'duel'
+	resetCoachQuiz()
 
 	const matchingCases = coachCases.value.filter((item) => {
 		const category = item.category || ''
@@ -1155,6 +1534,7 @@ onMounted(() => {
 	switchMode(initialMode)
 	fetchCoachCases()
 	fetchPublicSettings()
+	fetchCurrentNotices()
 	if (shouldFreshChat) {
 		ensureFreshEntrySession()
 	}
@@ -1442,8 +1822,11 @@ watch(messages, (value) => {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	position: relative;
-	z-index: 20;
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 40;
 	gap: 12rpx;
 }
 
@@ -1569,6 +1952,7 @@ watch(messages, (value) => {
 	flex-direction: column;
 	min-height: 0;
 	position: relative;
+	padding-top: calc(132rpx + env(safe-area-inset-top));
 }
 
 .chat-main {
@@ -1605,6 +1989,10 @@ watch(messages, (value) => {
 	text-align: center;
 }
 
+.mode-stage-offset {
+	padding-top: 76rpx;
+}
+
 .welcome-panel {
 	width: 100%;
 	max-width: 920rpx;
@@ -1631,124 +2019,350 @@ watch(messages, (value) => {
 	margin-bottom: 28rpx;
 	box-shadow: 0 20rpx 50rpx rgba(15, 23, 42, 0.08);
 }
-
-.zen-avatar-img {
-	width: 112rpx;
-	height: 112rpx;
-	border-radius: 50%;
-}
-
-.zen-title {
-	font-size: 72rpx;
-	font-weight: 900;
-	line-height: 1.08;
-	color: var(--text-primary);
-	word-break: break-word;
-	margin-bottom: 14rpx;
-}
-
-.zen-title-coach {
-	color: #10b981;
-}
-
-.zen-title-expert {
-	color: #3b82f6;
-}
-
-.zen-subtitle {
-	font-size: 34rpx;
-	line-height: 1.5;
-	color: var(--text-secondary);
-	margin-bottom: 32rpx;
-}
-
-.suggestion-chip-shell {
+/* --- Coach Quiz Premium Redesign for Uniapp --- */
+.coach-quiz-picker-premium {
 	width: 100%;
-	border-radius: 34rpx;
-	background: rgba(248, 250, 252, 0.78);
-	padding: 16rpx;
-	box-sizing: border-box;
-}
-
-.suggestion-chips {
-	gap: 18rpx;
-}
-
-.zen-suggestion-grid {
-	display: flex;
-	flex-direction: column;
-	gap: 22rpx;
-	width: 100%;
-	max-width: 860rpx;
-}
-
-.card-row {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 18rpx;
-}
-
-.zen-card {
-	padding: 30rpx 28rpx;
-	border-radius: 30rpx;
 	background: #ffffff;
-	box-shadow: 0 10rpx 32rpx rgba(15, 23, 42, 0.05);
+	border-radius: 36rpx;
+	padding: 40rpx;
+	box-shadow: 0 20rpx 40rpx rgba(16, 185, 129, 0.08);
 }
 
-.zen-card-button {
-	width: 100%;
-	margin: 0;
-	text-align: left;
+.picker-back-btn {
+	width: 140rpx;
+	height: 64rpx;
+	line-height: 64rpx;
+	background: #f1f5f9;
+	border-radius: 999rpx;
+	font-size: 24rpx;
+	font-weight: 700;
+	color: #64748b;
+	margin: 0 0 40rpx 0;
 }
 
-.zen-card-button::after {
-	border: none;
+.picker-title-pnl {
+	margin-bottom: 48rpx;
 }
 
-.cat-card {
-	width: 100%;
-	max-width: 360rpx;
-	border-radius: 28rpx;
-	box-shadow: 0 16rpx 38rpx rgba(25, 103, 74, 0.08);
-}
-
-.chip {
-	min-height: 80rpx;
-}
-
-.zen-card-title {
+.p-title {
 	display: block;
-	font-size: 34rpx;
+	font-size: 44rpx;
 	font-weight: 800;
-	color: var(--text-primary);
+	color: #0f172a;
 	margin-bottom: 12rpx;
 }
 
-.zen-card-desc {
-	display: block;
-	font-size: 28rpx;
-	line-height: 1.55;
-	color: var(--text-secondary);
+.p-subtitle {
+	font-size: 26rpx;
+	color: #64748b;
 }
 
-.zen-expert-icon {
-	width: 140rpx;
-	height: 140rpx;
-	border-radius: 50%;
-	background: #eff6ff;
+.count-grid-modern {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 20rpx;
+	margin-bottom: 32rpx;
+}
+
+.count-card-item {
+	background: #f8fafc;
+	border: 1px solid #e2e8f0;
+	border-radius: 28rpx;
+	padding: 32rpx 10rpx;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8rpx;
+	margin: 0;
+}
+
+.c-num {
+	font-size: 40rpx;
+	font-weight: 800;
+	color: #10b981;
+}
+
+.c-unit {
+	font-size: 24rpx;
+	color: #64748b;
+}
+
+.picker-status-box {
+	text-align: center;
+	font-size: 24rpx;
+	color: #10b981;
+	padding: 20rpx;
+}
+
+.coach-quiz-panel-premium {
+	background: #ffffff;
+	border-radius: 40rpx;
+	padding: 40rpx;
+	box-shadow: 0 30rpx 60rpx rgba(0,0,0,0.08);
+}
+
+.quiz-panel-head {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 40rpx;
+}
+
+.tag-primary {
+	padding: 8rpx 20rpx;
+	background: #10b981;
+	color: #ffffff;
+	border-radius: 12rpx;
+	font-size: 22rpx;
+	font-weight: 700;
+	margin-right: 12rpx;
+}
+
+.tag-secondary {
+	padding: 8rpx 20rpx;
+	background: #f1f5f9;
+	color: #64748b;
+	border-radius: 12rpx;
+	font-size: 22rpx;
+	font-weight: 700;
+}
+
+.quiz-panel-progress {
+	font-size: 26rpx;
+	font-weight: 700;
+	color: #94a3b8;
+}
+
+.quiz-panel-question {
+	margin-bottom: 48rpx;
+}
+
+.question-text {
+	font-size: 38rpx;
+	line-height: 1.5;
+	font-weight: 800;
+	color: #0f172a;
+}
+
+.quiz-panel-options {
+	display: flex;
+	flex-direction: column;
+	gap: 20rpx;
+	margin-bottom: 40rpx;
+}
+
+.quiz-panel-option-btn {
+	margin: 0;
+	background: #ffffff;
+	border: 1px solid #e2e8f0;
+	border-radius: 24rpx;
+	padding: 28rpx 32rpx;
+	display: flex;
+	align-items: center;
+	gap: 20rpx;
+	text-align: left;
+}
+
+.opt-prefix {
+	width: 44rpx;
+	height: 44rpx;
+	background: #f1f5f9;
+	border-radius: 12rpx;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	margin: 24rpx 0;
+	font-size: 24rpx;
+	font-weight: 800;
+	color: #64748b;
+	flex-shrink: 0;
 }
 
-.expert-emoji {
-	font-size: 72rpx;
+.opt-label {
+	flex: 1;
+	font-size: 30rpx;
+	color: #334155;
+	line-height: 1.4;
 }
 
-.coach-selection-shell {
-	width: 100%;
+.opt-status {
+	width: 32rpx;
+	height: 32rpx;
 }
+
+.quiz-panel-option-btn.correct {
+	background: #f0fdf4;
+	border-color: #22c55e;
+}
+.quiz-panel-option-btn.correct .opt-prefix { background: #22c55e; color: #ffffff; }
+.opt-ico-correct { color: #22c55e; font-weight: 800; }
+
+.quiz-panel-option-btn.wrong {
+	background: #fef2f2;
+	border-color: #ef4444;
+}
+.quiz-panel-option-btn.wrong .opt-prefix { background: #ef4444; color: #ffffff; }
+.opt-ico-wrong { color: #ef4444; font-weight: 800; }
+
+.quiz-panel-feedback {
+	border-radius: 24rpx;
+	padding: 32rpx;
+	margin-bottom: 40rpx;
+	animation: slideInDown 0.3s ease;
+}
+
+.quiz-panel-feedback.is-correct { background: #f0fdf4; border: 1px solid #bbf7d0; }
+.quiz-panel-feedback.is-wrong { background: #fef2f2; border: 1px solid #fecaca; }
+
+.feedback-head-row {
+	display: flex;
+	align-items: center;
+	gap: 12rpx;
+	margin-bottom: 12rpx;
+}
+
+.fb-title {
+	font-size: 28rpx;
+	font-weight: 800;
+}
+
+.fb-ans {
+	display: block;
+	font-size: 26rpx;
+	font-weight: 700;
+	margin-bottom: 8rpx;
+}
+
+.fb-expl {
+	font-size: 24rpx;
+	line-height: 1.6;
+	opacity: 0.8;
+}
+
+.quiz-panel-actions {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+}
+
+.quiz-btn-nav {
+	margin: 0;
+	height: 90rpx;
+	line-height: 90rpx;
+	border-radius: 20rpx;
+	font-size: 28rpx;
+	font-weight: 700;
+}
+
+.quiz-btn-nav.ghost {
+	background: #f1f5f9;
+	color: #64748b;
+	padding: 0 40rpx;
+}
+
+.quiz-btn-nav.primary {
+	background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+	color: #ffffff;
+	flex: 1;
+	margin-left: 20rpx;
+}
+
+.ico-next { margin-left: 12rpx; }
+
+/* Summary Premium */
+.coach-quiz-summary-premium {
+	text-align: center;
+	padding: 64rpx 40rpx;
+}
+
+.summary-visual {
+	width: 160rpx;
+	height: 160rpx;
+	background: #fef3c7;
+	border-radius: 50rpx;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin: 0 auto 40rpx;
+	box-shadow: 0 20rpx 40rpx rgba(245, 158, 11, 0.15);
+}
+
+.summary-emoji {
+	font-size: 80rpx;
+}
+
+.summary-title-main {
+	display: block;
+	font-size: 40rpx;
+	font-weight: 800;
+	color: #0f172a;
+	margin-bottom: 48rpx;
+}
+
+.summary-score-row {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: #f8fafc;
+	border-radius: 32rpx;
+	padding: 40rpx 0;
+	margin-bottom: 48rpx;
+}
+
+.score-card {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+}
+
+.score-val {
+	font-size: 48rpx;
+	font-weight: 800;
+	color: #10b981;
+}
+
+.score-lab {
+	font-size: 22rpx;
+	color: #94a3b8;
+	font-weight: 700;
+}
+
+.score-line {
+	width: 1px;
+	height: 60rpx;
+	background: #e2e8f0;
+}
+
+.summary-note {
+	font-size: 26rpx;
+	color: #64748b;
+	margin-bottom: 64rpx;
+	padding: 0 40rpx;
+	line-height: 1.6;
+}
+
+.premium-actions-stack {
+	display: flex;
+	flex-direction: column;
+	gap: 24rpx;
+}
+
+.quiz-primary-stack-btn {
+	background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+	color: #ffffff;
+	border-radius: 24rpx;
+	height: 100rpx;
+	line-height: 100rpx;
+	font-size: 30rpx;
+	font-weight: 800;
+}
+
+.quiz-ghost-stack-btn {
+	background: transparent;
+	color: #64748b;
+	font-size: 28rpx;
+}
+
+/* Base Styles Refinement */
 
 .zen-level-up-container {
 	width: 100%;
@@ -2370,9 +2984,20 @@ watch(messages, (value) => {
 	color: #94a3b8;
 }
 
+.icon-send-image {
+	width: 30rpx;
+	height: 30rpx;
+	display: block;
+	opacity: 0.72;
+}
+
 .zen-send-btn.active .icon-send,
 .zen-send-btn.stop .icon-send {
 	color: #ffffff;
+}
+
+.zen-send-btn.active .icon-send-image {
+	opacity: 1;
 }
 
 .composer-status-row {
@@ -2442,6 +3067,21 @@ watch(messages, (value) => {
 	opacity: 0.5;
 }
 
+.zen-nav-icon {
+	position: relative;
+}
+
+.zen-nav-badge {
+	position: absolute;
+	top: -2rpx;
+	right: -4rpx;
+	width: 14rpx;
+	height: 14rpx;
+	border-radius: 50%;
+	background: #ef4444;
+	box-shadow: 0 0 0 4rpx #ffffff;
+}
+
 .zen-nav-item.active .zen-nav-icon-image {
 	opacity: 1;
 }
@@ -2454,6 +3094,109 @@ watch(messages, (value) => {
 
 .zen-nav-item.active .zen-nav-label {
 	color: #0f172a;
+}
+
+.notice-center-overlay {
+	position: fixed;
+	inset: 0;
+	background: rgba(15, 23, 42, 0.32);
+	backdrop-filter: blur(8rpx);
+	z-index: 50;
+	display: flex;
+	align-items: flex-end;
+	justify-content: center;
+	padding: 0 24rpx calc(132rpx + env(safe-area-inset-bottom));
+	box-sizing: border-box;
+}
+
+.notice-center-sheet {
+	width: 100%;
+	max-width: 860rpx;
+	max-height: 60vh;
+	background: rgba(255, 255, 255, 0.98);
+	border-radius: 36rpx;
+	box-shadow: 0 18rpx 60rpx rgba(15, 23, 42, 0.18);
+	padding: 28rpx 24rpx;
+	display: flex;
+	flex-direction: column;
+	gap: 20rpx;
+}
+
+.notice-center-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.notice-center-title {
+	font-size: 34rpx;
+	font-weight: 800;
+	color: #0f172a;
+}
+
+.notice-center-close {
+	font-size: 40rpx;
+	line-height: 1;
+	color: #64748b;
+	padding: 8rpx;
+}
+
+.notice-center-tabs {
+	display: flex;
+	gap: 12rpx;
+}
+
+.notice-center-tab {
+	flex: 1;
+	height: 72rpx;
+	border-radius: 999rpx;
+	background: #f8fafc;
+	color: #64748b;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 24rpx;
+	font-weight: 700;
+}
+
+.notice-center-tab.active {
+	background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+	color: #2563eb;
+}
+
+.notice-center-scroll {
+	max-height: 44vh;
+	min-height: 220rpx;
+}
+
+.notice-center-empty {
+	padding: 36rpx 16rpx;
+	text-align: center;
+	font-size: 24rpx;
+	color: #94a3b8;
+}
+
+.notice-center-card {
+	display: flex;
+	flex-direction: column;
+	gap: 12rpx;
+	padding: 22rpx 20rpx;
+	border-radius: 24rpx;
+	background: #f8fafc;
+	margin-bottom: 16rpx;
+}
+
+.notice-center-date {
+	font-size: 22rpx;
+	color: #94a3b8;
+}
+
+.notice-center-content {
+	font-size: 26rpx;
+	line-height: 1.65;
+	color: #0f172a;
+	white-space: pre-wrap;
+	word-break: break-word;
 }
 
 @media screen and (min-width: 768px) {
@@ -2481,6 +3224,11 @@ watch(messages, (value) => {
 
 	.chat-nav {
 		padding: 24px 32px;
+		position: static;
+	}
+
+	.main-body-wrapper {
+		padding-top: 0;
 	}
 
 	.nav-left {

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 import aiofiles
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
-from dependencies import User, get_admin_user, get_current_user
+from dependencies import User, get_admin_user, get_current_user, has_permission
 from services.doc_parser import chunk_text, parse_document
 from services.llm_client import analyze_coach_case, get_embedding
 from services.quote_service import DATA_DIR as QUOTE_DIR
@@ -217,7 +217,7 @@ async def upload_document(
     file: UploadFile = File(...),
     category: str = "biz",
     async_mode: bool = False,
-    admin: User = Depends(get_admin_user),
+    admin: User = Depends(has_permission("edit_knowledge")),
 ):
     safe_filename = os.path.basename(file.filename or "")
     file_path = os.path.join(UPLOAD_DOCS_DIR, safe_filename)
@@ -241,7 +241,7 @@ async def upload_document(
 @router.post("/quote")
 async def upload_quote(
     file: UploadFile = File(...),
-    admin: User = Depends(get_admin_user),
+    admin: User = Depends(has_permission("edit_prices")),
 ):
     safe_filename = os.path.basename(file.filename or "")
     file_path = os.path.join(QUOTE_DIR, safe_filename)
@@ -330,7 +330,7 @@ async def list_documents(
 @router.delete("/document/{filename}")
 async def delete_document(
     filename: str,
-    admin: User = Depends(get_admin_user),
+    admin: User = Depends(has_permission("edit_knowledge")),
 ):
     try:
         safe_filename = os.path.basename(filename)
@@ -361,7 +361,7 @@ async def list_quotes(
 @router.delete("/quote/{filename}")
 async def delete_quote(
     filename: str,
-    admin: User = Depends(get_admin_user),
+    admin: User = Depends(has_permission("edit_prices")),
 ):
     try:
         safe_filename = os.path.basename(filename)
@@ -378,7 +378,7 @@ async def delete_quote(
 @router.post("/coach-case")
 async def create_coach_case(
     file: UploadFile = File(...),
-    admin: User = Depends(get_admin_user),
+    admin: User = Depends(has_permission("edit_cases")),
 ):
     try:
         content = await parse_document_content(file)
@@ -460,7 +460,7 @@ async def list_coach_cases(
 @router.delete("/coach-case/{case_id}")
 async def delete_coach_case(
     case_id: str,
-    admin: User = Depends(get_admin_user),
+    admin: User = Depends(has_permission("edit_cases")),
 ):
     try:
         async with _coach_cases_lock:

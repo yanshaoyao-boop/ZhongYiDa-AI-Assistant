@@ -167,6 +167,11 @@ import { useAuthStore } from '@/store/auth'
 import { ChevronLeft as IconChevronLeft, X as IconX } from 'lucide-vue-next'
 
 const roleMap = {
+	owner: '老板',
+	executive: '高管',
+	daily_admin: '日常管理员',
+	staff_admin: '普通管理员',
+	employee: '员工',
 	super_admin: '超级管理员',
 	branch_admin: '分支管理员',
 	user: '普通员工',
@@ -194,7 +199,7 @@ const createEmptyUserForm = () => ({
 	username: '',
 	full_name: '',
 	password: '',
-	role: 'user',
+	role: 'employee',
 	branch_id: null,
 	department_id: null,
 	is_active: true,
@@ -217,10 +222,14 @@ const currentUserName = computed(() => auth.user?.username || '')
 const canManageStructure = computed(() => auth.isAdmin)
 const roleOptions = computed(() => {
 	const base = [
-		{ label: '普通员工', value: 'user' },
-		{ label: '分支管理员', value: 'branch_admin' },
+		{ label: '员工', value: 'employee' },
+		{ label: '普通管理员', value: 'staff_admin' },
+		{ label: '日常管理员', value: 'daily_admin' },
 	]
-	if (auth.isSuperAdmin) base.push({ label: '超级管理员', value: 'super_admin' })
+	if (auth.isSuperAdmin) {
+		base.push({ label: '高管', value: 'executive' })
+		base.push({ label: '老板', value: 'owner' })
+	}
 	return base
 })
 const roleLabels = computed(() => roleOptions.value.map((item) => item.label))

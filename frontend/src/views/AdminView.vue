@@ -11,13 +11,14 @@
           <div class="user-profile">
             <span class="user-info">
               <span class="user-name">{{ auth.userName }}</span>
-              <span class="user-role">{{ auth.user?.role === 'super_admin' ? '总管' : '分公司管理员' }}</span>
+              <span class="user-role">{{ auth.roleName }}</span>
             </span>
             <button @click="auth.logout(); router.push('/login')" class="logout-btn">退出登录</button>
           </div>
+          <router-link to="/admin/notices" class="nav-btn">通知管理</router-link>
           <router-link to="/admin/staff" class="nav-btn">账号管理</router-link>
           <router-link to="/admin/lab" class="nav-btn">小易实验室</router-link>
-          <router-link to="/admin/chat-logs" class="nav-btn">会话审计</router-link>
+          <router-link v-if="auth.canViewChatAudit" to="/admin/chat-logs" class="nav-btn">会话审计</router-link>
           <router-link to="/" class="nav-btn-outline">返回助手</router-link>
         </div>
       </div>
@@ -193,37 +194,77 @@
         </div>
       </section>
 
-      <!-- Notice Management Section -->
-      <section class="upload-section glass-panel">
-        <div class="section-header">
-          <IconBell class="icon-lg text-orange" />
-          <h2>通知管理</h2>
+      <!-- Coach Quiz Section (Premium) -->
+      <section class="upload-section quiz-management-section glass-panel">
+        <div class="section-header-modern">
+          <div class="header-icon-container">
+            <IconUserCheck class="icon-md text-emerald" />
+          </div>
+          <div class="header-main-text">
+            <h2>教练出题题库</h2>
+            <span class="quiz-stat-pill" v-if="quizQuestions.length > 0">
+               <span class="dot-indicator"></span> {{ quizQuestions.length }} 道存量题目
+            </span>
+          </div>
         </div>
-        <p class="section-desc">发布重要通知。此处输入的内容将在前端“重要通知”模块中显示（由于本周逻辑，新发布的通知会立即显示）。</p>
         
-        <textarea 
-          v-model="noticeContent" 
-          placeholder="请输入通知内容..." 
-          class="notice-textarea"
-          rows="4"
-        ></textarea>
-        
-        <button class="btn-primary notice-btn" :disabled="!noticeContent.trim() || noticeSending" @click="sendNotice">
-          <span v-if="noticeSending">发布中...</span>
-          <span v-else>发布通知</span>
+        <p class="section-hint-text">通过上传 Excel 或 CSV 文件快速导入单选题。约定字段：question, option_a...d, answer, explanation, category。</p>
+
+        <div class="modern-drop-zone"
+             @dragover.prevent="isDraggingQuiz = true"
+             @dragleave.prevent="isDraggingQuiz = false"
+             @drop.prevent="onDropQuiz"
+             :class="{'is-active': isDraggingQuiz}"
+             @click="triggerQuizSelect">
+          <div class="upload-visual">
+            <div class="visual-stack">
+              <IconUpload class="visual-icon" />
+              <div class="visual-bg-glow"></div>
+            </div>
+          </div>
+          <div class="upload-text-group">
+            <p v-if="quizFiles.length === 0" class="primary-text">选择或拖拽题库文件进行导入</p>
+            <p v-if="quizFiles.length === 0" class="secondary-text">支持 .csv, .xlsx, .xls 格式</p>
+            <div v-else class="file-tokens">
+              <div v-for="(file, idx) in quizFiles" :key="idx" class="file-token">
+                <span class="file-token-icon">📄</span>
+                <span class="file-token-name">{{ file.name }}</span>
+              </div>
+            </div>
+          </div>
+          <input type="file" ref="quizInput" style="display:none" @change="onQuizSelected" accept=".csv,.xlsx,.xls" multiple />
+        </div>
+
+        <button class="btn-import-premium" :disabled="quizFiles.length === 0 || quizUploading" @click="uploadQuizBank">
+          <span v-if="quizUploading" class="shimmer-effect">正在导入数据 ({{ currentQuizIndex + 1 }}/{{ quizFiles.length }})...</span>
+          <template v-else>
+            <IconUpload size="18" />
+            <span>立即同步题库</span>
+          </template>
         </button>
         
-        <div class="uploaded-list" v-if="historyNotices.length > 0">
-          <h3>历史通知记录</h3>
-          <ul class="notice-history-list">
-            <li v-for="n in historyNotices" :key="n.id" class="notice-history-item">
-              <div class="notice-item-main">
-                <span class="notice-item-date">{{ formatDate(n.created_at) }}</span>
-                <p class="notice-item-content">{{ n.content }}</p>
+        <div v-if="quizMessage" class="status-alert-box" :class="quizStatus">
+           {{ quizMessage }}
+        </div>
+
+        <div class="quiz-explorer-view" v-if="quizQuestions.length > 0">
+          <div class="explorer-header">
+            <h3>题库实时预览</h3>
+          </div>
+          <div class="explorer-scroll-viewport">
+            <div v-for="question in quizQuestions" :key="question.id" class="explorer-item-card">
+              <div class="item-id-badge">#{{ question.id }}</div>
+              <div class="item-content-wrapper">
+                <div class="item-top-row">
+                  <span v-if="question.category" class="item-category-tag">{{ question.category }}</span>
+                </div>
+                <p class="item-question-text">{{ question.question }}</p>
               </div>
-              <button class="btn-delete" @click="deleteNotice(n.id)" title="删除通知">🗑️ 删除</button>
-            </li>
-          </ul>
+              <button class="item-btn-remove" @click="deleteQuizQuestion(question.id)" title="永久移除这道题">
+                <IconTrash size="16" />
+              </button>
+            </div>
+          </div>
         </div>
       </section>
     </div>
@@ -254,6 +295,7 @@ const uploadedAdmin = ref([])
 const uploadedBiz = ref([])
 const uploadedQuotes = ref([])
 const coachCases = ref([])
+const quizQuestions = ref([])
 const historyNotices = ref([])
 const noticeContent = ref('')
 const noticeSending = ref(false)
@@ -286,6 +328,15 @@ const fetchCoachCases = async () => {
     coachCases.value = Array.isArray(res.data) ? res.data : (res.data.cases || [])
   } catch (err) {
     console.error('Failed to fetch coach cases:', err)
+  }
+}
+
+const fetchQuizQuestions = async () => {
+  try {
+    const res = await axios.get('/api/coach-quiz/bank')
+    quizQuestions.value = Array.isArray(res.data?.questions) ? res.data.questions : []
+  } catch (err) {
+    console.error('Failed to fetch quiz questions:', err)
   }
 }
 
@@ -332,6 +383,7 @@ onMounted(() => {
   fetchUploadedDocs()
   fetchUploadedQuotes()
   fetchCoachCases()
+  fetchQuizQuestions()
   fetchHistoryNotices()
 })
 
@@ -419,11 +471,40 @@ const {
   }
 })
 
+const {
+  files: quizFiles, inputRef: quizInput, uploading: quizUploading,
+  message: quizMessage, status: quizStatus, currentIndex: currentQuizIndex,
+  isDragging: isDraggingQuiz,
+  triggerSelect: triggerQuizSelect, onSelected: onQuizSelected,
+  onDrop: onDropQuiz, upload: uploadQuizBank
+} = useUploader({
+  url: '/api/coach-quiz/bank',
+  onSuccess: (n, _errs, dataList) => {
+    const total = dataList[dataList.length - 1]?.total_questions || 0
+    fetchQuizQuestions()
+    return `成功导入 ${n} 份题库文件，当前共 ${total} 道题。`
+  },
+  onError: (n, errs) => {
+    fetchQuizQuestions()
+    return `导入完成。成功: ${n} 份，失败: ${errs.length} 份。`
+  }
+})
+
 const deleteCase = async (id) => {
   if (!confirm('确定要删除这个实战场景吗？')) return
   try {
     await axios.delete(`${BASE_URL}/coach-case/${id}`)
     fetchCoachCases()
+  } catch (err) {
+    alert(`删除失败: ${err.response?.data?.detail || err.message}`)
+  }
+}
+
+const deleteQuizQuestion = async (id) => {
+  if (!confirm('确定要删除这道题吗？')) return
+  try {
+    await axios.delete(`/api/coach-quiz/bank/${id}`)
+    fetchQuizQuestions()
   } catch (err) {
     alert(`删除失败: ${err.response?.data?.detail || err.message}`)
   }
@@ -748,13 +829,76 @@ const truncate = (text, len) => {
   background: rgba(239, 68, 68, 0.1);
   color: var(--danger-color);
   border: none;
-  padding: 4px 10px;
-  border-radius: 4px;
-  font-size: 12px;
-  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 8px;
 }
-.btn-delete:hover {
-  background: var(--danger-color);
+
+.explorer-item-card {
+  background: #f8fafc;
+  border: 1px solid #edf2f7;
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  transition: all 0.2s;
+}
+
+.explorer-item-card:hover {
+  background: white;
+  border-color: #10b981;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+}
+
+.item-id-badge {
+  padding: 4px 8px;
+  background: #f1f5f9;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 800;
+  border-radius: 6px;
+}
+
+.item-content-wrapper {
+  flex: 1;
+}
+
+.item-top-row {
+  margin-bottom: 8px;
+}
+
+.item-category-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: #059669;
+  background: #dcfce7;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.item-question-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+  line-height: 1.5;
+}
+
+.item-btn-remove {
+  background: #fef2f2;
+  color: #ef4444;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.item-btn-remove:hover {
+  background: #ef4444;
   color: white;
 }
 </style>

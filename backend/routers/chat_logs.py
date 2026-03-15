@@ -5,7 +5,7 @@ from typing import List, Optional
 from datetime import datetime
 from pydantic import BaseModel
 
-from dependencies import get_current_user, User, get_db
+from dependencies import User, get_chat_audit_user, get_db
 from models.chat_history import ChatHistory
 from models.user import User as UserModel
 
@@ -31,11 +31,9 @@ class UserLogStat(BaseModel):
 
 @router.get("/users", response_model=List[UserLogStat])
 def get_users_with_logs(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_chat_audit_user),
     db: Session = Depends(get_db)
 ):
-    if current_user.role != "super_admin":
-        return []
     
     from sqlalchemy import func
     stats = db.query(
@@ -66,11 +64,9 @@ def get_chat_logs(
     limit: int = 50, 
     user_id: Optional[int] = None,
     search: Optional[str] = None,
-    current_user: User = Depends(get_current_user), 
+    current_user: User = Depends(get_chat_audit_user), 
     db: Session = Depends(get_db)
 ):
-    if current_user.role != "super_admin":
-        return []
     
     query = db.query(ChatHistory, UserModel.username).outerjoin(UserModel, ChatHistory.user_id == UserModel.id)
     

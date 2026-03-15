@@ -7,12 +7,12 @@ const source = fs.readFileSync(
 );
 
 const requiredSnippets = [
-  `class="zen-send-btn"`,
-  `>↑</text>`,
-  `>■</text>`,
-  `.icon-send {`,
-  `.zen-send-btn.active .icon-send,`,
-  `.zen-send-btn.stop .icon-send {`,
+  'class="zen-send-btn"',
+  'class="icon-send-image" :src="SEND_ICON_SRC" mode="aspectFit"',
+  '>■</text>',
+  '.icon-send-image {',
+  '.icon-send {',
+  '.zen-send-btn.stop .icon-send {',
 ];
 
 const missing = requiredSnippets.filter((snippet) => !source.includes(snippet));

@@ -100,7 +100,7 @@
 			<view class="mp-admin-user-card">
 				<view class="mp-admin-user-meta">
 					<text class="mp-admin-user-name">{{ auth.userName }}</text>
-					<text class="mp-admin-user-role">{{ roleLabel }}</text>
+					<text class="mp-admin-user-role">{{ auth.roleName }}</text>
 				</view>
 				<button class="mp-admin-logout-icon" @tap="handleRouterLogout">
 					<IconLogOut size="20" color="#ef4444" />
@@ -193,7 +193,7 @@
 				</view>
 			</view>
 
-			<view v-else class="mp-knowledge-card">
+			<view v-else-if="currentKnowledgeSection === 'cases'" class="mp-knowledge-card">
 				<view class="mp-knowledge-head">
 					<text class="mp-knowledge-title">教练案例</text>
 					<button class="mp-knowledge-btn coach" :disabled="caseUploading" @tap="selectAndUploadCoachCase">
@@ -211,6 +211,61 @@
 						<text class="mp-knowledge-caption">{{ item.category || '未分类' }}</text>
 					</view>
 					<text class="mp-knowledge-delete" @tap="deleteCase(item.id)">删除</text>
+				</view>
+			</view>
+		</view>
+
+		<view v-else-if="currentActiveTab === 'notices'" class="mp-notice-panel">
+			<view class="mp-notice-card">
+				<view class="mp-knowledge-head">
+					<text class="mp-knowledge-title">通知管理</text>
+					<button class="mp-knowledge-btn notice" :disabled="noticeSending" @tap="sendNotice">
+						{{ noticeSending ? '发布中' : '发布通知' }}
+					</button>
+				</view>
+				<textarea
+					v-model="noticeContent"
+					class="mp-notice-textarea"
+					auto-height
+					maxlength="-1"
+					placeholder="输入通知内容，发布后小程序通知中心会默认显示本周通知。"
+				></textarea>
+				<text v-if="noticeMessage" class="mp-knowledge-meta">{{ noticeMessage }}</text>
+			</view>
+
+			<view class="mp-notice-card">
+				<view class="mp-knowledge-head">
+					<text class="mp-knowledge-title">历史通知</text>
+					<button class="mp-notice-refresh" @tap="fetchNoticeHistory">刷新</button>
+				</view>
+				<view v-if="noticeHistory.length === 0" class="mp-knowledge-empty">暂无通知</view>
+				<view v-for="notice in noticeHistory" :key="notice.id" class="mp-notice-history-item">
+					<view class="mp-notice-history-content">
+						<text class="mp-notice-history-date">{{ formatNoticeDate(notice.created_at) }}</text>
+						<text class="mp-notice-history-text">{{ notice.content }}</text>
+					</view>
+					<text class="mp-knowledge-delete" @tap="deleteNotice(notice.id)">删除</text>
+				</view>
+			</view>
+
+			<view v-else class="mp-knowledge-card">
+				<view class="mp-knowledge-head">
+					<text class="mp-knowledge-title">教练出题题库</text>
+					<button class="mp-knowledge-btn coach" :disabled="quizUploading" @tap="selectAndUploadQuizBank">
+						{{ quizUploading ? '导入中' : '上传题库' }}
+					</button>
+				</view>
+				<text v-if="quizMessage" class="mp-knowledge-meta">{{ quizMessage }}</text>
+				<text v-if="quizStage" class="mp-knowledge-meta subtle">
+					{{ quizStage }}<text v-if="quizProgress > 0"> 路 {{ quizProgress }}%</text>
+				</text>
+				<view v-if="quizQuestions.length === 0" class="mp-knowledge-empty">暂无题目</view>
+				<view v-for="item in quizQuestions" :key="`quiz-${item.id}`" class="mp-knowledge-item stacked">
+					<view class="mp-knowledge-stack">
+						<text class="mp-knowledge-name">{{ item.question || '未命名题目' }}</text>
+						<text class="mp-knowledge-caption">{{ item.category || '未分类' }}</text>
+					</view>
+					<text class="mp-knowledge-delete" @tap="deleteQuizQuestion(item.id)">删除</text>
 				</view>
 			</view>
 		</view>
@@ -237,7 +292,7 @@ import {
 } from 'lucide-vue-next'
 
 const auth = useAuthStore()
-const currentActiveTab = ref('')
+const currentActiveTab = ref('knowledge')
 const currentKnowledgeSection = ref('biz')
 const knowledgeSections = [
 	{ key: 'biz', label: '业务资料' },
@@ -246,14 +301,11 @@ const knowledgeSections = [
 	{ key: 'cases', label: '教练案例' },
 ]
 
-const roleLabel = computed(() => {
-	if (auth.user?.role === 'super_admin') return '总管 · 小易控制台'
-	if (auth.user?.role === 'branch_admin') return '分公司管理员'
-	return '管理员'
-})
+knowledgeSections.push({ key: 'quiz', label: '教练出题题库' })
 
 const adminEntries = computed(() => {
-	const role = auth.isSuperAdmin ? 'super_admin' : auth.isAdmin ? 'branch_admin' : ''
+	const role = auth.user?.role || ''
+	const permissions = auth.permissions
 
 	return [
 		{
@@ -263,7 +315,16 @@ const adminEntries = computed(() => {
 			icon: '知',
 			bgColor: '#E0F2FE',
 			url: '',
-			enabled: true,
+			enabled: canAccessAdminSection('knowledge', role, { permissions }),
+		},
+		{
+			key: 'notices',
+			title: '通知管理',
+			desc: '发布本周通知，并维护历史通知列表',
+			icon: '铃',
+			bgColor: '#FEE2E2',
+			url: '',
+			enabled: canAccessAdminSection('notices', role, { permissions }),
 		},
 		{
 			key: 'lab',
@@ -272,7 +333,7 @@ const adminEntries = computed(() => {
 			icon: '参',
 			bgColor: '#EDE9FE',
 			url: '/pages/admin/lab',
-			enabled: canAccessAdminSection('lab', role),
+			enabled: canAccessAdminSection('lab', role, { permissions }),
 		},
 		{
 			key: 'chat-logs',
@@ -281,7 +342,7 @@ const adminEntries = computed(() => {
 			icon: '记',
 			bgColor: '#DCFCE7',
 			url: '/pages/admin/chat-logs',
-			enabled: canAccessAdminSection('chat-logs', role),
+			enabled: canAccessAdminSection('chat-logs', role, { permissions }),
 		},
 		{
 			key: 'staff',
@@ -290,7 +351,7 @@ const adminEntries = computed(() => {
 			icon: '人',
 			bgColor: '#FEF9C3',
 			url: '/pages/admin/staff',
-			enabled: canAccessAdminSection('staff', role),
+			enabled: canAccessAdminSection('staff', role, { permissions }),
 		},
 	]
 })
@@ -315,13 +376,21 @@ const navigateToCurrentTab = () => {
 	}
 }
 
+const syncDefaultAdminTab = () => {
+	const activeEntry = adminEntries.value.find((item) => item.key === currentActiveTab.value && item.enabled)
+	if (activeEntry) return
+
+	const firstInlineEntry = adminEntries.value.find((item) => item.enabled && !item.url)
+	currentActiveTab.value = firstInlineEntry?.key || ''
+}
+
 const handleEntryTap = (entry) => {
 	if (!entry.enabled) {
 		uni.showToast({ title: '当前账号无权访问该页面', icon: 'none' })
 		return
 	}
 
-	if (entry.key === 'knowledge') {
+	if (entry.key === 'knowledge' || entry.key === 'notices') {
 		currentActiveTab.value = entry.key
 		return
 	}
@@ -334,6 +403,7 @@ const uploadedAdmin = ref([])
 const uploadedBiz = ref([])
 const uploadedQuotes = ref([])
 const coachCases = ref([])
+const quizQuestions = ref([])
 const mpUploading = ref(false)
 const mpUploadMessage = ref('')
 const mpUploadStage = ref('')
@@ -347,6 +417,14 @@ const caseUploading = ref(false)
 const caseMessage = ref('')
 const caseStage = ref('')
 const caseProgress = ref(0)
+const quizUploading = ref(false)
+const quizMessage = ref('')
+const quizStage = ref('')
+const quizProgress = ref(0)
+const noticeHistory = ref([])
+const noticeContent = ref('')
+const noticeSending = ref(false)
+const noticeMessage = ref('')
 
 const readToken = () => {
 	try {
@@ -395,6 +473,70 @@ const requestUploadApi = async (path, options = {}) => {
 	// #endif
 }
 
+const formatNoticeDate = (value) => {
+	if (!value) return ''
+	const date = new Date(value)
+	if (Number.isNaN(date.getTime())) return String(value)
+	const year = date.getFullYear()
+	const month = `${date.getMonth() + 1}`.padStart(2, '0')
+	const day = `${date.getDate()}`.padStart(2, '0')
+	const hours = `${date.getHours()}`.padStart(2, '0')
+	const minutes = `${date.getMinutes()}`.padStart(2, '0')
+	return `${year}-${month}-${day} ${hours}:${minutes}`
+}
+
+const fetchNoticeHistory = async () => {
+	try {
+		const notices = await requestUploadApi('/api/notices/history')
+		noticeHistory.value = Array.isArray(notices) ? notices : []
+	} catch (error) {
+		console.error('Failed to fetch notices:', error)
+		noticeHistory.value = []
+	}
+}
+
+const sendNotice = async () => {
+	const content = noticeContent.value.trim()
+	if (!content || noticeSending.value) return
+
+	noticeSending.value = true
+	try {
+		await requestUploadApi('/api/notices/', {
+			method: 'POST',
+			data: { content },
+			headers: {
+				'content-type': 'application/json',
+			},
+		})
+		noticeContent.value = ''
+		noticeMessage.value = '通知已发布'
+		await fetchNoticeHistory()
+		uni.showToast({ title: '通知已发布', icon: 'success' })
+	} catch (error) {
+		noticeMessage.value = error.message || '通知发布失败'
+		uni.showToast({ title: noticeMessage.value, icon: 'none' })
+	} finally {
+		noticeSending.value = false
+	}
+}
+
+const deleteNotice = async (noticeId) => {
+	uni.showModal({
+		title: '删除通知',
+		content: '确定要删除这条通知吗？',
+		success: async ({ confirm }) => {
+			if (!confirm) return
+			try {
+				await requestUploadApi(`/api/notices/${encodeURIComponent(noticeId)}`, { method: 'DELETE' })
+				noticeMessage.value = '通知已删除'
+				await fetchNoticeHistory()
+			} catch (error) {
+				uni.showToast({ title: error.message || '删除通知失败', icon: 'none' })
+			}
+		},
+	})
+}
+
 const fetchUploadedDocs = async () => {
 	try {
 		const [adminFiles, bizFiles] = await Promise.all([
@@ -423,6 +565,15 @@ const fetchCoachCases = async () => {
 		coachCases.value = Array.isArray(caseData) ? caseData : caseData?.cases || []
 	} catch (error) {
 		console.error('Failed to fetch coach cases:', error)
+	}
+}
+
+const fetchQuizQuestions = async () => {
+	try {
+		const quizData = await requestUploadApi('/api/coach-quiz/bank')
+		quizQuestions.value = Array.isArray(quizData?.questions) ? quizData.questions : []
+	} catch (error) {
+		console.error('Failed to fetch quiz questions:', error)
 	}
 }
 
@@ -542,6 +693,23 @@ const deleteCase = async (caseId) => {
 				await requestUploadApi(`/api/upload/coach-case/${encodeURIComponent(caseId)}`, { method: 'DELETE' })
 				caseMessage.value = '案例已删除'
 				await fetchCoachCases()
+			} catch (error) {
+				uni.showToast({ title: error.message || '删除失败', icon: 'none' })
+			}
+		},
+	})
+}
+
+const deleteQuizQuestion = async (questionId) => {
+	uni.showModal({
+		title: '删除题目',
+		content: '确定要删除这道题吗？',
+		success: async ({ confirm }) => {
+			if (!confirm) return
+			try {
+				await requestUploadApi(`/api/coach-quiz/bank/${encodeURIComponent(questionId)}`, { method: 'DELETE' })
+				quizMessage.value = '题目已删除'
+				await fetchQuizQuestions()
 			} catch (error) {
 				uni.showToast({ title: error.message || '删除失败', icon: 'none' })
 			}
@@ -713,14 +881,32 @@ const selectAndUploadCoachCase = async () => {
 	})
 }
 
+const selectAndUploadQuizBank = async () => {
+	await uploadSingleFile({
+		chooseType: 'file',
+		uploadUrl: '/api/coach-quiz/bank',
+		title: '题库文件',
+		successMessageRef: quizMessage,
+		stageRef: quizStage,
+		progressRef: quizProgress,
+		loadingRef: quizUploading,
+		afterSuccess: async (payload) => {
+			quizMessage.value = payload.imported_count !== undefined
+				? `成功导入 ${payload.imported_count} 道题`
+				: quizMessage.value
+			await fetchQuizQuestions()
+		},
+	})
+}
+
 onMounted(() => {
-	ensureAdminPageAccess('admin', { role: auth.user?.role || '' })
-	// #ifdef H5
-	currentActiveTab.value = 'knowledge'
-	// #endif
+	ensureAdminPageAccess('admin', { role: auth.user?.role || '', permissions: auth.permissions })
+	syncDefaultAdminTab()
 	fetchUploadedDocs()
 	fetchUploadedQuotes()
 	fetchCoachCases()
+	fetchQuizQuestions()
+	fetchNoticeHistory()
 })
 </script>
 
@@ -905,6 +1091,84 @@ onMounted(() => {
 	display: flex;
 	flex-direction: column;
 	gap: 16rpx;
+}
+
+.mp-notice-panel {
+	display: flex;
+	flex-direction: column;
+	gap: 24rpx;
+}
+
+.mp-notice-card {
+	background: #ffffff;
+	border-radius: 36rpx;
+	padding: 28rpx;
+	box-shadow: 0 12rpx 32rpx rgba(15, 23, 42, 0.04);
+	border: 1px solid rgba(0, 0, 0, 0.02);
+	display: flex;
+	flex-direction: column;
+	gap: 20rpx;
+}
+
+.mp-notice-textarea {
+	width: 100%;
+	min-height: 220rpx;
+	padding: 24rpx;
+	box-sizing: border-box;
+	border-radius: 24rpx;
+	background: #f8fafc;
+	font-size: 28rpx;
+	line-height: 1.6;
+	color: #0f172a;
+}
+
+.mp-knowledge-btn.notice {
+	background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
+}
+
+.mp-notice-refresh {
+	margin: 0;
+	padding: 0 22rpx;
+	height: 60rpx;
+	line-height: 60rpx;
+	border-radius: 999rpx;
+	background: rgba(15, 23, 42, 0.08);
+	color: #334155;
+	font-size: 22rpx;
+}
+
+.mp-notice-refresh::after {
+	border: none;
+}
+
+.mp-notice-history-item {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16rpx;
+	padding: 22rpx 24rpx;
+	border-radius: 24rpx;
+	background: #f8fafc;
+}
+
+.mp-notice-history-content {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 10rpx;
+}
+
+.mp-notice-history-date {
+	font-size: 22rpx;
+	color: #94a3b8;
+}
+
+.mp-notice-history-text {
+	font-size: 26rpx;
+	line-height: 1.6;
+	color: #0f172a;
+	white-space: pre-wrap;
+	word-break: break-word;
 }
 
 .mp-knowledge-head {

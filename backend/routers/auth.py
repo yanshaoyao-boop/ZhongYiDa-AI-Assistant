@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
+import json
 
 from database import get_db
 from models.user import User
@@ -43,6 +44,11 @@ def login(
         },
         expires_delta=access_token_expires
     )
+
+    try:
+        permissions = json.loads(user.permissions or "[]")
+    except Exception:
+        permissions = []
     
     return {
         "access_token": access_token,
@@ -51,7 +57,10 @@ def login(
             "username": user.username,
             "full_name": user.full_name or user.username,
             "role": user.role,
+            "permissions": permissions,
             "branch": user.branch.name if user.branch else None,
-            "department": user.department.name if user.department else None
+            "department": user.department.name if user.department else None,
+            "branch_id": user.branch_id,
+            "department_id": user.department_id,
         }
     }

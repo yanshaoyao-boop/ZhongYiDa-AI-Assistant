@@ -14,11 +14,14 @@
              导入 Excel
           </button>
           <input type="file" ref="importInput" style="display:none" @change="handleImport" accept=".xlsx,.xls" />
-          <button v-if="auth.isSuperAdmin" @click="openOrgModal" class="btn-outline">
+          <button @click="openTemplateModal" class="btn-outline">
+             权限模板
+          </button>
+          <button v-if="auth.canManageAllBranches" @click="openOrgModal" class="btn-outline">
              架构管理
           </button>
           <button @click="openUserModal(null)" class="btn-primary">
-            + {{ auth.isSuperAdmin ? '新增员工' : '新增本分公司员工' }}
+            + {{ auth.canManageAllBranches ? '新增员工' : '新增本分公司员工' }}
           </button>
         </div>
       </div>
@@ -135,11 +138,28 @@
 
           <div class="form-group">
             <label>账号角色</label>
-            <select v-model="userForm.role" required>
-              <option value="user">普通员工 (User)</option>
-              <option value="branch_admin">分公司管理员 (Branch Admin)</option>
-              <option v-if="auth.isSuperAdmin" value="super_admin">超级管理员 (Super Admin)</option>
+            <select v-model="userForm.role" @change="handleRoleChange" required>
+              <option value="employee">普通员工 (Employee)</option>
+              <option value="staff_admin">普通管理员 (Staff Admin)</option>
+              <option value="daily_admin">日常管理员 (Daily Admin)</option>
+              <option value="executive">高管 (Executive)</option>
+              <option value="owner">老板 (Owner)</option>
             </select>
+            <p v-if="userForm.role === 'owner' || userForm.role === 'super_admin'" class="role-hint">老板/超级管理员拥有全量上帝权限，无需勾选下方权限位。</p>
+          </div>
+
+          <!-- Permissions Section -->
+          <div v-if="userForm.role !== 'owner' && userForm.role !== 'super_admin'" class="permissions-section">
+            <label class="section-label">功能权限设置 (可自由组合)</label>
+            <div class="permissions-grid">
+              <div v-for="p in permissionOptions" :key="p.value" class="permission-item">
+                <input type="checkbox" :id="'perm_' + p.value" :value="p.value" v-model="userForm.permissions" />
+                <label :for="'perm_' + p.value">
+                  <span class="p-name">{{ p.label }}</span>
+                  <span class="p-desc">{{ p.desc }}</span>
+                </label>
+              </div>
+            </div>
           </div>
 
           <div class="form-group checkbox">
@@ -196,6 +216,52 @@
         </div>
       </div>
     </div>
+
+    <!-- Role Templates Management Modal -->
+    <div v-if="showTemplateModal" class="modal-overlay" @click.self="showTemplateModal = false">
+      <div class="modal-card wide glass-panel">
+        <div class="modal-header">
+          <h3>角色权限模板设置</h3>
+          <button @click="showTemplateModal = false" class="close-btn">×</button>
+        </div>
+        <div class="modal-body template-manager">
+          <div v-if="templates.length === 0" class="loading-state">
+             正在加载角色模板...
+          </div>
+          <template v-else>
+            <div class="template-tabs">
+              <button v-for="t in templates" :key="t.role" :class="['tab-btn', { active: activeTemplateTab === t.role }]" @click="activeTemplateTab = t.role">
+                {{ roleMap[t.role] }}
+              </button>
+            </div>
+            
+            <div v-if="currentTemplate" class="template-content">
+              <div class="form-group">
+                <label>模板描述</label>
+                <input v-model="currentTemplate.description" type="text" placeholder="例如：负责日常业务操作的职员" />
+              </div>
+              
+              <label class="section-label">默认勾选权限位</label>
+              <div class="permissions-grid">
+                 <div v-for="p in permissionOptions" :key="p.value" class="permission-item">
+                  <input type="checkbox" :id="'t_perm_' + p.value" :value="p.value" v-model="currentTemplate.permissions" />
+                  <label :for="'t_perm_' + p.value">
+                    <span class="p-name">{{ p.label }}</span>
+                    <span class="p-desc">{{ p.desc }}</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+        <div class="modal-footer">
+          <button @click="showTemplateModal = false" class="btn-secondary">关闭</button>
+          <button @click="saveTemplates" class="btn-primary" :disabled="saving">
+            {{ saving ? '正在保存...' : '保存模板设置' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -213,27 +279,61 @@ import {
 const auth = useAuthStore()
 const users = ref([])
 const structure = ref([])
+const templates = ref([])
 const searchQuery = ref('')
 const saving = ref(false)
 
 // Role mappings
 const roleMap = {
-  'super_admin': '超级管理员',
-  'branch_admin': '分公司管理',
-  'user': '普通员工'
+  'owner': '老板',
+  'executive': '高管',
+  'daily_admin': '日常管理员',
+  'staff_admin': '普通管理员',
+  'employee': '员工',
+  'super_admin': '超级管理员'
+}
+
+// Permission Options
+const permissionOptions = [
+  { label: '员工管理', value: 'manage_staff', desc: '可新增/编辑员工账号及组织架构' },
+  { label: '通知发布', value: 'edit_notices', desc: '可发布及编辑首页重要通知' },
+  { label: '价格管理', value: 'edit_prices', desc: '可调整运费价格及相关参数' },
+  { label: '案例编辑', value: 'edit_cases', desc: '可管理小易教练的实战案例' },
+  { label: '参数设置', value: 'edit_settings', desc: '可调整 AI 温度、搜索深度等系统参数' },
+  { label: '日志查看', value: 'view_logs', desc: '可查看所有用户的 AI 会话记录' },
+  { label: '知识库管理', value: 'edit_knowledge', desc: '可上传及更新 RAG 知识库文档' }
+]
+
+// Default Role Permissions Matrix (Fallback if dynamic templates fail)
+const fallbackRoleMatrix = {
+  'employee': [],
+  'staff_admin': ['manage_staff'],
+  'daily_admin': ['manage_staff', 'edit_notices', 'edit_prices', 'edit_cases', 'edit_settings', 'edit_knowledge'],
+  'executive': ['edit_notices', 'edit_prices', 'edit_cases', 'view_logs', 'edit_settings', 'edit_knowledge'],
+  'owner': ['manage_staff', 'edit_notices', 'edit_prices', 'edit_cases', 'edit_settings', 'view_logs', 'edit_knowledge']
 }
 
 // Fetch Data
 const fetchData = async () => {
   try {
-    const [uRes, sRes] = await Promise.all([
+    const [uRes, sRes, tRes] = await Promise.all([
       axios.get('/api/staff/users'),
-      axios.get('/api/staff/structure')
+      axios.get('/api/staff/structure'),
+      axios.get('/api/staff/role-templates')
     ])
     users.value = uRes.data
     structure.value = sRes.data
+    templates.value = tRes.data
   } catch (err) {
     console.error("Failed to load staff data", err)
+    // 如果后端模板拉取失败，至少确保 templates 里有 fallback，不至于显示加载中
+    if (templates.value.length === 0) {
+      templates.value = Object.keys(fallbackRoleMatrix).map(role => ({
+        role,
+        permissions: fallbackRoleMatrix[role],
+        description: '系统预设权限'
+      }))
+    }
   }
 }
 
@@ -256,11 +356,22 @@ const userForm = ref({
   username: '',
   full_name: '',
   password: '',
-  role: 'user',
+  role: 'employee',
+  permissions: [],
   branch_id: null,
   department_id: null,
   is_active: true
 })
+
+const handleRoleChange = () => {
+  // 优先从后端加载的模板中查找权限
+  const template = templates.value.find(t => t.role === userForm.value.role)
+  if (template) {
+    userForm.value.permissions = [...template.permissions]
+  } else if (fallbackRoleMatrix[userForm.value.role]) {
+    userForm.value.permissions = [...fallbackRoleMatrix[userForm.value.role]]
+  }
+}
 
 const availableDepartments = computed(() => {
   if (!userForm.value.branch_id) return []
@@ -276,6 +387,7 @@ const openUserModal = (user) => {
       full_name: user.full_name || '',
       password: '',
       role: user.role,
+      permissions: user.permissions || [],
       branch_id: user.branch_id,
       department_id: user.department_id,
       is_active: user.is_active
@@ -286,7 +398,8 @@ const openUserModal = (user) => {
       username: '',
       full_name: '',
       password: '',
-      role: 'user',
+      role: 'employee',
+      permissions: [],
       branch_id: auth.user?.branch_id || null, // 默认带出自己的分公司
       department_id: null,
       is_active: true
@@ -400,6 +513,36 @@ const handleAddDept = async () => {
     fetchData() // Refresh structure
   } catch (err) {
     alert("添加部门失败")
+  }
+}
+// Role Template Modal Logic
+const showTemplateModal = ref(false)
+const activeTemplateTab = ref('employee')
+
+const openTemplateModal = () => {
+  if (templates.value.length > 0) {
+    activeTemplateTab.value = templates.value[0]?.role
+  } else {
+    activeTemplateTab.value = 'employee'
+    fetchData() // 再次尝试获取
+  }
+  showTemplateModal.value = true
+}
+
+const currentTemplate = computed(() => {
+  return templates.value.find(t => t.role === activeTemplateTab.value)
+})
+
+const saveTemplates = async () => {
+  saving.value = true
+  try {
+    await axios.patch('/api/staff/role-templates', templates.value)
+    alert("模板已成功更新")
+    showTemplateModal.value = false
+  } catch (err) {
+    alert("保存模板失败")
+  } finally {
+    saving.value = false
   }
 }
 </script>
@@ -550,9 +693,79 @@ const handleAddDept = async () => {
   font-weight: 600;
 }
 
-.role-tag.super_admin { background: rgba(124, 58, 237, 0.1); color: #7c3aed; }
-.role-tag.branch_admin { background: rgba(37, 99, 235, 0.1); color: #2563eb; }
-.role-tag.user { background: rgba(148, 163, 184, 0.1); color: #64748b; }
+.role-tag.super_admin, .role-tag.owner { background: rgba(124, 58, 237, 0.1); color: #7c3aed; }
+.role-tag.executive { background: rgba(37, 99, 235, 0.1); color: #2563eb; }
+.role-tag.daily_admin { background: rgba(16, 185, 129, 0.1); color: #059669; }
+.role-tag.staff_admin { background: rgba(245, 158, 11, 0.1); color: #d97706; }
+.role-tag.employee { background: rgba(148, 163, 184, 0.1); color: #64748b; }
+
+/* Permissions Section Styles */
+.permissions-section {
+  margin-top: 10px;
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px dashed var(--border-color);
+}
+
+.section-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  display: block;
+}
+
+.permissions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.permission-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.permission-item:hover {
+  background: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.permission-item input {
+  margin-top: 4px;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.permission-item label {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+}
+
+.p-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.p-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.role-hint {
+  font-size: 12px;
+  color: #7c3aed;
+  margin-top: 4px;
+  font-weight: 500;
+}
 
 .status-dot {
   display: inline-block;
@@ -589,9 +802,11 @@ const handleAddDept = async () => {
 }
 
 .modal-card {
-  width: 480px;
+  width: 580px;
   padding: 32px;
   background: white;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 .modal-card.wide { width: 800px; }
@@ -726,5 +941,50 @@ input, select {
   border-radius: 8px;
   font-weight: 600;
   font-size: 14px;
+}
+.template-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 8px;
+  min-height: 42px;
+}
+
+.tab-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.tab-btn:hover {
+  background: #f1f5f9;
+}
+
+.tab-btn.active {
+  background: var(--primary-light);
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.template-content {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.loading-state {
+  padding: 40px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-style: italic;
 }
 </style>

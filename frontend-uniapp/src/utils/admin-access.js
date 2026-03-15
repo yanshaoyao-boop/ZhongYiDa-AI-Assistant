@@ -1,5 +1,11 @@
-const ADMIN_ROLES = new Set(['super_admin', 'branch_admin'])
-const SUPER_ADMIN_ONLY_SECTIONS = new Set(['chat-logs', 'lab'])
+const ROOT_ROLES = new Set(['super_admin', 'owner'])
+const SECTION_PERMISSION_MAP = {
+	notices: 'edit_notices',
+	staff: 'manage_staff',
+	'chat-logs': 'view_logs',
+	lab: 'edit_settings',
+	knowledge: ['edit_knowledge', 'edit_prices', 'edit_cases'],
+}
 
 const readStoredUser = () => {
 	try {
@@ -13,12 +19,43 @@ const readStoredUser = () => {
 
 export const getStoredUserRole = () => readStoredUser()?.role || ''
 
-export const canAccessAdminSection = (section, role) => {
-	if (!ADMIN_ROLES.has(role)) return false
-	if (SUPER_ADMIN_ONLY_SECTIONS.has(section)) {
-		return role === 'super_admin'
+const normalizePermissions = (permissions) => {
+	if (Array.isArray(permissions)) {
+		return [...new Set(permissions.filter((item) => typeof item === 'string' && item.trim()))]
 	}
-	return ['admin', 'staff'].includes(section)
+	if (typeof permissions === 'string' && permissions.trim()) {
+		try {
+			return normalizePermissions(JSON.parse(permissions))
+		} catch (error) {
+			return []
+		}
+	}
+	return []
+}
+
+export const getStoredUserPermissions = () => {
+	return normalizePermissions(readStoredUser()?.permissions)
+}
+
+const isAdminRole = (role) => Boolean(role && role !== 'employee')
+
+export const canAccessAdminSection = (section, role, options = {}) => {
+	const userPermissions = options.permissions || getStoredUserPermissions()
+	if (ROOT_ROLES.has(role)) return true
+
+	if (section === 'admin') {
+		return isAdminRole(role)
+	}
+
+	const requiredPermission = SECTION_PERMISSION_MAP[section]
+	if (requiredPermission) {
+		if (Array.isArray(requiredPermission)) {
+			return requiredPermission.some((permission) => userPermissions.includes(permission))
+		}
+		return userPermissions.includes(requiredPermission)
+	}
+
+	return isAdminRole(role)
 }
 
 const redirectAfterDenied = (role, section, fallbackUrl) => {
@@ -32,9 +69,10 @@ const redirectAfterDenied = (role, section, fallbackUrl) => {
 
 export const ensureAdminPageAccess = (section, options = {}) => {
 	const role = options.role || getStoredUserRole()
-	const fallbackUrl = options.fallbackUrl || (ADMIN_ROLES.has(role) ? '/pages/admin/admin' : '/pages/chat/chat')
+	const userPermissions = options.permissions || getStoredUserPermissions()
+	const fallbackUrl = options.fallbackUrl || (canAccessAdminSection('admin', role, { permissions: userPermissions }) ? '/pages/admin/admin' : '/pages/chat/chat')
 
-	if (canAccessAdminSection(section, role)) {
+	if (canAccessAdminSection(section, role, { permissions: userPermissions })) {
 		return true
 	}
 

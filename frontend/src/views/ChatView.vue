@@ -56,10 +56,14 @@
         <div class="mode-selector-wrapper">
           <div class="mode-selector">
             <button class="mode-btn" @click="openNotices">
-              <span class="icon">🔔</span> 重要通知
+              <div class="icon-wrapper">
+                <IconAlertCircle size="18" class="icon" />
+                <span v-if="hasNewNotice" class="notice-dot"></span>
+              </div>
+              重要通知
             </button>
-            <button class="mode-btn">
-              <span class="icon">🛠️</span> 智能工具
+            <button class="mode-btn" @click="openToolsCenter">
+              <IconZap size="18" class="icon" /> 智能工具
             </button>
           </div>
 
@@ -68,19 +72,19 @@
               :class="['mode-btn', { active: currentMode === 'general' }]"
               @click="switchMode('general')"
             >
-              <span class="icon">✨</span> 全能助手
+              <IconZap size="18" class="icon" /> 全能助手
             </button>
             <button 
               :class="['mode-btn', { active: currentMode === 'coach' }]"
               @click="switchMode('coach')"
             >
-              <span class="icon">📚</span> 知识教练
+              <IconTarget size="18" class="icon" /> 知识教练
             </button>
             <button 
               :class="['mode-btn', { active: currentMode === 'expert' }]"
               @click="switchMode('expert')"
             >
-              <span class="icon">💡</span> 专家指导
+              <IconFileQuestion size="18" class="icon" /> 专家指导
             </button>
           </div>
         </div>
@@ -108,56 +112,163 @@
             </template>
             <template v-else>
               <h2 class="welcome-name">欢迎来到知识教练模式</h2>
-              <h2 class="welcome-slogan">场景化沉浸式对练，打造金牌业务员。</h2>
-              <!-- 第一级：选择航线/大区 -->
-              <div class="category-step-label" v-if="!selectedRegion">第一步：选择实战航线</div>
-              <div class="category-grid" v-if="!selectedRegion">
-                <div v-for="reg in coachRegions" :key="reg.name" 
-                     class="category-main-card region-card" 
-                     @click="selectedRegion = reg.name">
-                  <span class="cat-emoji">{{ reg.emoji }}</span>
-                  <div class="cat-info">
-                    <h3>{{ reg.name }}</h3>
-                    <p>{{ reg.desc }}</p>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 第二层：选择客户身份 -->
-              <div class="category-step-header" v-if="selectedRegion && !selectedPersona">
-                <button class="back-link" @click="selectedRegion = null">← 返回重选航线</button>
-                <div class="category-step-label">第二步：选择【{{ selectedRegion }}】客户背景</div>
-              </div>
-              <div class="category-grid" v-if="selectedRegion && !selectedPersona">
-                <div v-for="per in coachPersonas" :key="per.name" 
-                     class="category-main-card persona-card" 
-                     @click="selectedPersona = per.name">
-                  <span class="cat-emoji">{{ per.emoji }}</span>
-                  <div class="cat-info">
-                    <h3>{{ per.name }}</h3>
-                    <p>{{ per.desc }}</p>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 第三层：选择练习科目 -->
-              <div class="category-step-header" v-if="selectedPersona">
-                <button class="back-link" @click="selectedPersona = null">← 返回重选身份</button>
-                <div class="category-step-label">第三步：选择【{{ selectedPersona }}】练习科目</div>
-              </div>
-              <div class="category-grid subjects" v-if="selectedPersona">
-                <div v-for="sub in coachSubjects" :key="sub.name" 
-                     class="category-main-card subject-card" 
-                     @click="startRandomCoachDetailed(sub.name)">
-                  <span class="cat-emoji">{{ sub.emoji }}</span>
-                  <div class="cat-info">
-                    <h3>{{ sub.name }}</h3>
-                    <p>{{ sub.desc }}</p>
-                  </div>
-                </div>
-              </div>
               
-              <div class="suggestion-chips" style="margin-top: 32px;">
+              <!-- 入口选择：对练 vs 出题 -->
+              <div v-if="coachSubMode === 'entrance'" class="coach-gates">
+                <div class="category-main-card gate-card" @click="coachSubMode = 'practice'">
+                  <div class="cat-icon-lg"><IconZap size="48" /></div>
+                  <div class="cat-info">
+                    <h3>教练对练</h3>
+                    <p>场景化沉浸式对练，模拟真实业务沟通</p>
+                  </div>
+                </div>
+                <div class="category-main-card gate-card" @click="startCoachQuizFlow">
+                  <div class="cat-icon-lg"><IconTarget size="48" /></div>
+                  <div class="cat-info">
+                    <h3>教练出题</h3>
+                    <p>单选题专项训练，巩固业务知识点</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 教练对练流程 -->
+              <template v-if="coachSubMode === 'practice'">
+                <div class="category-step-header">
+                  <button class="back-link" @click="coachSubMode = 'entrance'; selectedRegion = null; selectedPersona = null">← 返回主入口</button>
+                  <div class="category-step-label" v-if="!selectedRegion">第一步：选择实战航线</div>
+                </div>
+                
+                <div class="category-grid" v-if="!selectedRegion">
+                  <div v-for="reg in coachRegions" :key="reg.name" 
+                       class="category-main-card region-card" 
+                       @click="selectedRegion = reg.name">
+                    <span class="cat-emoji">{{ reg.emoji }}</span>
+                    <div class="cat-info">
+                      <h3>{{ reg.name }}</h3>
+                      <p>{{ reg.desc }}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 第二层：选择客户身份 -->
+                <div class="category-step-header" v-if="selectedRegion && !selectedPersona">
+                  <button class="back-link" @click="selectedRegion = null">← 返回重选航线</button>
+                  <div class="category-step-label">第二步：选择【{{ selectedRegion }}】客户背景</div>
+                </div>
+                <div class="category-grid" v-if="selectedRegion && !selectedPersona">
+                  <div v-for="per in coachPersonas" :key="per.name" 
+                       class="category-main-card persona-card" 
+                       @click="selectedPersona = per.name">
+                    <span class="cat-emoji">{{ per.emoji }}</span>
+                    <div class="cat-info">
+                      <h3>{{ per.name }}</h3>
+                      <p>{{ per.desc }}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 第三层：选择练习科目 -->
+                <div class="category-step-header" v-if="selectedPersona">
+                  <button class="back-link" @click="selectedPersona = null">← 返回重选身份</button>
+                  <div class="category-step-label">第三步：选择【{{ selectedPersona }}】练习科目</div>
+                </div>
+                <div class="category-grid subjects" v-if="selectedPersona">
+                  <div v-for="sub in coachSubjects" :key="sub.name" 
+                       class="category-main-card subject-card" 
+                       @click="startCoachDetailedSubject(sub.name)">
+                    <span class="cat-emoji">{{ sub.emoji }}</span>
+                    <div class="cat-info">
+                      <h3>{{ sub.name }}</h3>
+                      <p>{{ sub.desc }}</p>
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+              <!-- 教练出题流程 -->
+              <div v-if="coachSubMode === 'quiz'" class="quiz-flow">
+                <!-- 步 1：选择题量 -->
+                <div v-if="quizStep === 'count_selection'" class="quiz-setup">
+                  <button class="back-link-quiz" @click="coachSubMode = 'entrance'">← 返回</button>
+                  <h3>请选择本次训练题量</h3>
+                  <div class="count-options">
+                    <button class="count-btn" @click="fetchQuizQuestions(5)">5 道题</button>
+                    <button class="count-btn" @click="fetchQuizQuestions(10)">10 道题</button>
+                    <button class="count-btn" @click="fetchQuizQuestions(20)">20 道题</button>
+                  </div>
+                </div>
+
+                <!-- 步 2：答题中 -->
+                <div v-if="quizStep === 'answering'" class="quiz-card-container">
+                  <div class="quiz-progress">
+                    <span>题量进度: {{ currentQuizIdx + 1 }} / {{ quizQuestions.length }}</span>
+                    <div class="progress-bar">
+                      <div class="progress-fill" :style="{ width: ((currentQuizIdx + 1) / quizQuestions.length) * 100 + '%' }"></div>
+                    </div>
+                  </div>
+                  
+                  <div v-if="quizQuestions[currentQuizIdx]" class="quiz-card glass-panel">
+                    <div class="quiz-question">{{ quizQuestions[currentQuizIdx].question }}</div>
+                    <div class="quiz-options">
+                      <button 
+                        v-for="optObj in quizQuestions[currentQuizIdx].options" 
+                        :key="optObj.key"
+                        :class="['opt-btn', { 
+                          selected: selectedOption === optObj.key,
+                          correct: isQuizSubmitted && quizQuestions[currentQuizIdx].answer === optObj.key,
+                          wrong: isQuizSubmitted && selectedOption === optObj.key && quizQuestions[currentQuizIdx].answer !== optObj.key
+                        }]"
+                        @click="selectQuizOption(optObj.key)"
+                        :disabled="isQuizSubmitted"
+                      >
+                        <span class="opt-label">{{ optObj.key }}</span>
+                        <span class="opt-text">{{ optObj.text }}</span>
+                        <IconCheckCircle v-if="isQuizSubmitted && quizQuestions[currentQuizIdx].answer === optObj.key" size="18" class="status-icon" />
+                        <IconXCircle v-if="isQuizSubmitted && selectedOption === optObj.key && quizQuestions[currentQuizIdx].answer !== optObj.key" size="18" class="status-icon" />
+                      </button>
+                    </div>
+
+                    <div v-if="isQuizSubmitted" class="quiz-feedback-box animate-in">
+                      <div :class="['feedback-header', selectedOption === quizQuestions[currentQuizIdx].answer ? 'text-correct' : 'text-wrong']">
+                        <template v-if="selectedOption === quizQuestions[currentQuizIdx].answer">
+                          <IconCheckCircle size="20" /> 回答正确！
+                        </template>
+                        <template v-else>
+                          <IconXCircle size="20" /> 回答错误。正确答案是 【{{ quizQuestions[currentQuizIdx].answer }}】
+                        </template>
+                      </div>
+                      <div class="quiz-explanation" v-if="quizQuestions[currentQuizIdx].explanation">
+                        <strong>解析：</strong>{{ quizQuestions[currentQuizIdx].explanation }}
+                      </div>
+                      <button class="next-quiz-btn" @click="nextQuizQuestion">
+                        {{ currentQuizIdx === quizQuestions.length - 1 ? '查看结果' : '下一题' }}
+                        <IconChevronRight size="18" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 步 3：总结页 -->
+                <div v-if="quizStep === 'result'" class="quiz-result-card glass-panel">
+                  <IconTrophy size="64" class="trophy-icon" />
+                  <h2>训练完成！</h2>
+                  <div class="result-stats">
+                    <div class="stat-item">
+                      <label>答对题数</label>
+                      <span class="stat-value text-correct">{{ quizStats.correct }}</span>
+                    </div>
+                    <div class="stat-item">
+                      <label>正确率</label>
+                      <span class="stat-value">{{ Math.round((quizStats.correct / quizStats.total) * 100) }}%</span>
+                    </div>
+                  </div>
+                  <button class="restart-quiz-btn" @click="restartQuiz">
+                    <IconRotateCcw size="18" /> 重新开始
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="coachSubMode !== 'quiz'" class="suggestion-chips" style="margin-top: 32px;">
                 <button @click="presetMsg('能通俗地给我讲解一下什么是DDP和DDU吗？')">📖 常见物流基础名词讲解</button>
               </div>
             </template>
@@ -236,7 +347,7 @@
       </div>
 
       <!-- Input Area -->
-      <footer class="chat-footer">
+      <footer v-if="coachSubMode !== 'quiz'" class="chat-footer">
         <div class="input-container glass-panel" 
              :class="{'has-image': selectedImage}"
              @dragover.prevent="onDragOver"
@@ -271,30 +382,47 @@
       </footer>
     </div>
 
-    <!-- Notices Modal -->
-    <div v-if="showNotices" class="notices-modal-overlay" @click.self="showNotices = false">
-      <div class="notices-modal glass-panel">
-        <div class="notices-modal-header">
-          <h3>📢 重要通知</h3>
-          <div class="notices-tabs">
-            <button :class="{ active: noticeTab === 'current' }" @click="noticeTab = 'current'">本周通知</button>
-            <button :class="{ active: noticeTab === 'history' }" @click="noticeTab = 'history'">全部历史</button>
+    <!-- Notices Premium Modal -->
+    <Teleport to="body">
+      <div v-if="showNotices" class="premium-modal-backdrop" @click.self="showNotices = false">
+        <div class="premium-modal notice-modal animate-modal">
+          <div class="modal-header">
+            <div class="header-top">
+              <div class="header-main">
+                <IconAlertCircle class="header-icon" />
+                <h3>重要通知中心</h3>
+              </div>
+              <button class="close-btn-inner" @click="showNotices = false"><IconX /></button>
+            </div>
+            <div class="header-tabs">
+              <button :class="{ active: noticeTab === 'current' }" @click="noticeTab = 'current'">当前通知</button>
+              <button :class="{ active: noticeTab === 'history' }" @click="noticeTab = 'history'">往期回顾</button>
+            </div>
           </div>
-          <button class="close-modal-btn" @click="showNotices = false"><IconX size="20" /></button>
-        </div>
-        
-        <div class="notices-modal-content">
-          <div v-if="loadingNotices" class="notice-loading">正在加载通知...</div>
-          <div v-else-if="displayNotices.length === 0" class="notice-empty">暂无通知内容</div>
-          <div v-else class="notice-list-scroll">
-            <div v-for="n in displayNotices" :key="n.id" class="notice-card">
-              <div class="notice-date">{{ formatDate(n.created_at) }}</div>
-              <div class="notice-body">{{ n.content }}</div>
+          
+          <div class="modal-body custom-scrollbar">
+            <div v-if="loadingNotices" class="modal-loading">
+              <div class="loading-spinner"></div>
+              <span>从服务器同步中...</span>
+            </div>
+            <div v-else-if="displayNotices.length === 0" class="modal-empty text-neutral">
+              <IconMenu size="48" />
+              <p>暂无相关通知内容</p>
+            </div>
+            <div v-else class="notice-list-premium">
+              <div v-for="n in displayNotices" :key="n.id" class="notice-item-premium" @click="handleNoticeClick(n)">
+                <div class="notice-meta">
+                  <span class="notice-tag">NEWS</span>
+                  <span class="notice-time">{{ formatDate(n.created_at) }}</span>
+                </div>
+                <div class="notice-content-text">{{ n.content }}</div>
+                <div class="notice-action">点击对话深入了解 <IconChevronRight size="14" /></div>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </Teleport>
   </div>
 </template>
 
@@ -312,11 +440,22 @@ import {
   Square as IconSquare, 
   XCircle as IconXCircle,
   Zap as IconZap,
-  ShieldCheck as IconShieldCheck
+  ShieldCheck as IconShieldCheck,
+  Target as IconTarget,
+  FileQuestion as IconFileQuestion,
+  ChevronRight as IconChevronRight,
+  RotateCcw as IconRotateCcw,
+  ArrowLeft as IconArrowLeft,
+  CheckCircle as IconCheckCircle,
+  AlertCircle as IconAlertCircle,
+  Trophy as IconTrophy
 } from 'lucide-vue-next'
 // 使用相对路径，配合 vite.config.js 中的 dev proxy 转发到后端
 // 生产环境由 nginx/反向代理处理 /api 路由
 const API_BASE = ''
+
+const auth = useAuthStore()
+const router = useRouter()
 
 const messages = ref([])
 const inputMsg = ref('')
@@ -327,6 +466,23 @@ const showNotices = ref(false)
 const noticeTab = ref('current')
 const allNotices = ref({ current: [], history: [] })
 const loadingNotices = ref(false)
+const hasNewNotice = ref(false)
+
+const checkNewNotices = async () => {
+  try {
+    const res = await axios.get('/api/notices/current')
+    const currentNotices = res.data
+    if (currentNotices.length > 0) {
+      const lastReadId = localStorage.getItem('last_read_notice_id')
+      const latestId = currentNotices[0].id.toString()
+      if (lastReadId !== latestId) {
+        hasNewNotice.value = true
+      }
+    }
+  } catch (err) {
+    console.error("Failed to check new notices:", err)
+  }
+}
 
 const openNotices = async () => {
   showNotices.value = true
@@ -342,6 +498,10 @@ const openNotices = async () => {
     console.error("Failed to fetch notices:", err)
   } finally {
     loadingNotices.value = false
+    if (allNotices.value.current.length > 0) {
+      localStorage.setItem('last_read_notice_id', allNotices.value.current[0].id.toString())
+      hasNewNotice.value = false
+    }
   }
 }
 
@@ -354,26 +514,32 @@ const formatDate = (dateStr) => {
   return `${d.getMonth() + 1}月${d.getDate()}日 ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+const handleNoticeClick = (notice) => {
+  showNotices.value = false
+  startNewChat()
+  inputMsg.value = `针对这条通知内容，我想详细了解一下：\n\n"${notice.content}"`
+  sendMessage()
+}
+
+const openToolsCenter = () => {
+  router.push('/tools')
+}
+
 const stopGeneration = () => {
   if (abortController.value) {
     abortController.value.abort()
   }
 }
+
 const chatMain = ref(null)
 const inputRef = ref(null)
 const currentMode = ref('general')
 const isSidebarOpen = ref(false)
 const getDynamicGreeting = () => {
-  const hour = new Date().getHours()
-  if (hour >= 5 && hour < 12) return "早安！我是小易，又是充满活力的一天，今天有什么计划需要我协助吗？"
-  if (hour >= 12 && hour < 18) return "下午好！我是小易，累了可以休息一下，有琐碎的工作尽管交给我。"
-  if (hour >= 18 && hour < 22) return "晚上好！我是小易，这么晚还在忙吗？注意休息，我会一直陪着您。"
-  return "深夜好，我是小易。辛苦了，还在坚持工作的你真的很了不起。早点休息，我会一直陪着您。"
+  return `${auth.userName || '您'}，您好！我是小易，您的智能助手。`
 }
 
 const welcomeMsg = ref(getDynamicGreeting())
-const auth = useAuthStore()
-const router = useRouter()
 
 const handleLogout = () => {
   auth.logout()
@@ -384,7 +550,7 @@ const fetchPublicSettings = async () => {
   try {
     const res = await axios.get('/api/settings/public')
     if (res.data.ai_welcome_message) {
-      welcomeMsg.value = res.data.ai_welcome_message
+      welcomeMsg.value = res.data.ai_welcome_message.replace('{name}', auth.userName || '您')
     } else {
       welcomeMsg.value = getDynamicGreeting()
     }
@@ -466,6 +632,17 @@ const selectedRegion = ref(null)
 const selectedPersona = ref(null)
 const isIntelOpen = ref(false)
 
+// Coach Quiz State
+const coachSubMode = ref('entrance') // entrance, practice, quiz
+const quizStep = ref('count_selection') // count_selection, answering, result
+const quizQuestions = ref([])
+const currentQuizIdx = ref(0)
+const quizAnswers = ref([])
+const selectedQuizCount = ref(5)
+const isQuizSubmitted = ref(false)
+const selectedOption = ref(null)
+const quizStats = ref({ correct: 0, total: 0 })
+
 const formatSuccessCriteria = (criteria) => {
   if (Array.isArray(criteria)) return criteria
   if (typeof criteria === 'string') return criteria.split('\n').filter(t => t.trim())
@@ -546,6 +723,67 @@ const fetchCoachCases = async () => {
   }
 }
 
+const startCoachDetailedSubject = (subName) => {
+  coachSubMode.value = 'practice'
+  startRandomCoachDetailed(subName)
+}
+
+const startCoachQuizFlow = () => {
+  coachSubMode.value = 'quiz'
+  quizStep.value = 'count_selection'
+}
+
+const fetchQuizQuestions = async (count) => {
+  selectedQuizCount.value = count
+  try {
+    const res = await axios.get(`${API_BASE}/api/coach-quiz/session?count=${count}`)
+    quizQuestions.value = res.data.questions || []
+    currentQuizIdx.value = 0
+    quizAnswers.value = []
+    quizStep.value = 'answering'
+    isQuizSubmitted.value = false
+    selectedOption.value = null
+    quizStats.value = { correct: 0, total: quizQuestions.value.length }
+  } catch (err) {
+    console.error("Failed to fetch quiz questions:", err)
+    alert("获取题目失败，请检查网络或题库状态。")
+    coachSubMode.value = 'entrance'
+  }
+}
+
+const selectQuizOption = (opt) => {
+  if (isQuizSubmitted.value) return
+  selectedOption.value = opt
+  isQuizSubmitted.value = true
+  
+  const current = quizQuestions.value[currentQuizIdx.value]
+  const isCorrect = opt === current.answer
+  if (isCorrect) quizStats.value.correct++
+  
+  quizAnswers.value.push({
+    question: current.question,
+    userAnswer: opt,
+    correctAnswer: current.answer,
+    isCorrect: isCorrect,
+    explanation: current.explanation
+  })
+}
+
+const nextQuizQuestion = () => {
+  if (currentQuizIdx.value < quizQuestions.value.length - 1) {
+    currentQuizIdx.value++
+    isQuizSubmitted.value = false
+    selectedOption.value = null
+  } else {
+    quizStep.value = 'result'
+  }
+}
+
+const restartQuiz = () => {
+  coachSubMode.value = 'entrance'
+  quizStep.value = 'count_selection'
+}
+
 const scrollToBottom = async () => {
   await nextTick()
   if (chatMain.value) {
@@ -579,9 +817,10 @@ const switchMode = (mode) => {
   isIntelOpen.value = false
   if (mode === 'general') {
     currentScenario.value = null
-  } else {
+  } else if (mode === 'coach') {
     selectedRegion.value = null 
-    selectedPersona.value = null // 重置 3 层选择
+    selectedPersona.value = null
+    coachSubMode.value = 'entrance'
   }
   loadSessionsForMode(mode)
 }
@@ -594,6 +833,7 @@ onMounted(() => {
   loadSessionsForMode(currentMode.value)
   fetchCoachCases()
   fetchPublicSettings()
+  checkNewNotices()
 })
 
 onUnmounted(() => {
@@ -1035,6 +1275,33 @@ const truncate = (text, len) => {
   min-width: 0;
 }
 
+/* Icons & Badges */
+.icon-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.notice-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 10px;
+  height: 10px;
+  background-color: #ef4444;
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+  animation: notice-pulse 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+  z-index: 2;
+}
+
+@keyframes notice-pulse {
+  0% { transform: scale(0.8); opacity: 0.8; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+  70% { transform: scale(1.1); opacity: 1; box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+  100% { transform: scale(0.8); opacity: 0.8; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
 .chat-nav {
   display: flex;
   justify-content: space-between;
@@ -1471,6 +1738,195 @@ const truncate = (text, len) => {
   box-shadow: 0 20px 40px rgba(16, 185, 129, 0.15);
 }
 
+/* Coach Gates */
+.coach-gates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  max-width: 800px;
+  margin: 40px auto;
+}
+.gate-card {
+  flex-direction: column;
+  text-align: center;
+  padding: 40px 20px;
+}
+.cat-icon-lg {
+  margin-bottom: 20px;
+  background: var(--bg-tertiary);
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20px;
+  color: var(--accent-color);
+}
+
+/* Quiz Flow */
+.quiz-flow {
+  max-width: 700px;
+  margin: 20px auto;
+  animation: fadeIn 0.4s ease;
+}
+.back-link-quiz {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+.count-options {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-top: 20px;
+}
+.count-btn {
+  padding: 12px 24px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.count-btn:hover {
+  background: var(--accent-color);
+  color: white;
+}
+
+.quiz-card-container {
+  margin-top: 20px;
+}
+.quiz-progress {
+  margin-bottom: 30px;
+}
+.progress-bar {
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 3px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent-color);
+  transition: width 0.3s ease;
+}
+
+.quiz-card {
+  padding: 32px;
+  border-radius: 20px;
+}
+.quiz-question {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 24px;
+  line-height: 1.5;
+}
+.quiz-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.opt-btn {
+  display: flex;
+  align-items: center;
+  padding: 16px 20px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: white;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+  gap: 12px;
+}
+.opt-btn:hover:not(:disabled) {
+  border-color: var(--accent-color);
+  background: #f0fdf4;
+}
+.opt-label {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  border-radius: 50%;
+  font-weight: 700;
+}
+.opt-text { flex: 1; }
+.opt-btn.correct { border-color: #10b981; background: #ecfdf5; }
+.opt-btn.wrong { border-color: #ef4444; background: #fef2f2; }
+.opt-btn.selected { border-color: var(--accent-color); box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2); }
+
+.quiz-feedback-box {
+  margin-top: 24px;
+  padding: 20px;
+  background: var(--bg-tertiary);
+  border-radius: 12px;
+}
+.feedback-header {
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.text-correct { color: #10b981; }
+.text-wrong { color: #ef4444; }
+.quiz-explanation {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.next-quiz-btn {
+  margin-top: 20px;
+  width: 100%;
+  padding: 12px;
+  background: var(--primary-gradient);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.quiz-result-card {
+  text-align: center;
+  padding: 60px 40px;
+  border-radius: 30px;
+}
+.result-stats {
+  display: flex;
+  gap: 40px;
+  justify-content: center;
+  margin: 32px 0;
+}
+.stat-item {
+  display: flex;
+  flex-direction: column;
+}
+.stat-value {
+  font-size: 32px;
+  font-weight: 800;
+}
+.restart-quiz-btn {
+  padding: 12px 32px;
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 auto;
+  cursor: pointer;
+}
+
 .cat-emoji {
   font-size: 48px;
   filter: drop-shadow(0 4px 8px rgba(0,0,0,0.1));
@@ -1772,6 +2228,203 @@ const truncate = (text, len) => {
   margin-top: 12px;
 }
 
+/* Premium Global Modal (Shared) */
+.premium-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.premium-modal {
+  width: 100%;
+  max-width: 600px;
+  max-height: 85vh;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  border-radius: 24px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.modal-header {
+  padding: 24px;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.header-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-icon {
+  color: var(--accent-color);
+  width: 24px;
+  height: 24px;
+}
+
+.header-main h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.close-btn-inner {
+  background: rgba(0, 0, 0, 0.05);
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--text-secondary);
+}
+
+.close-btn-inner:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: var(--text-primary);
+  transform: rotate(90deg);
+}
+
+.header-tabs {
+  display: flex;
+  gap: 8px;
+  background: rgba(0,0,0,0.05);
+  padding: 4px;
+  border-radius: 12px;
+  align-self: flex-start;
+}
+
+.header-tabs button {
+  padding: 6px 16px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.header-tabs button.active {
+  background: white;
+  color: var(--accent-color);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.notice-list-premium {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.notice-item-premium {
+  padding: 20px;
+  background: white;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.03);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.notice-item-premium:hover {
+  transform: translateX(4px);
+  border-color: var(--accent-color);
+}
+
+.notice-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.notice-tag {
+  background: #fef2f2;
+  color: #ef4444;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.notice-time {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.notice-content-text {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.notice-action {
+  font-size: 13px;
+  color: var(--accent-color);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}
+
+.modal-loading, .modal-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  gap: 12px;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(16, 185, 129, 0.1);
+  border-top-color: var(--accent-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+
 /* Responsive Design */
 .menu-toggle {
   display: none;
@@ -1935,118 +2588,6 @@ const truncate = (text, len) => {
     display: none;
   }
 
-  .notices-modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(8px);
-    z-index: 2000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-  }
-
-  .notices-modal {
-    width: 100%;
-    max-width: 500px;
-    max-height: 80vh;
-    background: var(--bg-primary);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    animation: modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  @keyframes modalIn {
-    from { opacity: 0; transform: scale(0.95) translateY(10px); }
-    to { opacity: 1; transform: scale(1) translateY(0); }
-  }
-
-  .notices-modal-header {
-    padding: 20px;
-    border-bottom: 1px solid var(--border-color);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-  }
-
-  .notices-modal-header h3 {
-    margin: 0;
-    font-size: 18px;
-    white-space: nowrap;
-  }
-
-  .notices-tabs {
-    display: flex;
-    background: var(--bg-tertiary);
-    padding: 4px;
-    border-radius: 8px;
-    gap: 4px;
-  }
-
-  .notices-tabs button {
-    padding: 4px 12px;
-    font-size: 12px;
-    border-radius: 6px;
-    color: var(--text-secondary);
-    transition: all 0.2s;
-  }
-
-  .notices-tabs button.active {
-    background: #ffffff;
-    color: var(--accent-color);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-  }
-
-  .close-modal-btn {
-    color: var(--text-secondary);
-    cursor: pointer;
-  }
-
-  .notices-modal-content {
-    flex: 1;
-    overflow-y: auto;
-    padding: 0;
-  }
-
-  .notice-list-scroll {
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .notice-card {
-    background: var(--bg-tertiary);
-    padding: 16px;
-    border-radius: 12px;
-    border: 1px solid var(--border-color);
-  }
-
-  .notice-date {
-    font-size: 11px;
-    color: var(--text-secondary);
-    margin-bottom: 8px;
-  }
-
-  .notice-body {
-    font-size: 14px;
-    color: var(--text-primary);
-    line-height: 1.5;
-    white-space: pre-wrap;
-  }
-
-  .notice-loading, .notice-empty {
-    padding: 40px;
-    text-align: center;
-    color: var(--text-secondary);
-    font-size: 14px;
-  }
 
   .intel-toggle-mobile {
     display: flex;

@@ -7,8 +7,9 @@ const checks = [
   {
     file: path.join(root, 'src', 'utils', 'admin-access.js'),
     snippets: [
-      'const SUPER_ADMIN_ONLY_SECTIONS = new Set([\'chat-logs\', \'lab\'])',
-      'export const canAccessAdminSection = (section, role) => {',
+      "const isAdminRole = (role) => Boolean(role && role !== 'employee')",
+      'const ROOT_ROLES = new Set([\'super_admin\', \'owner\'])',
+      'export const canAccessAdminSection = (section, role, options = {}) => {',
       'export const ensureAdminPageAccess = (section, options = {}) => {',
       "uni.showToast({ title: '当前账号无权访问该页面', icon: 'none' })",
     ],
@@ -16,11 +17,14 @@ const checks = [
   {
     file: path.join(root, 'src', 'pages', 'admin', 'admin.vue'),
     snippets: [
+      '{{ auth.roleName }}',
       'const adminEntries = computed(() => {',
-      "auth.isSuperAdmin ? 'super_admin' : auth.isAdmin ? 'branch_admin' : ''",
-      "canAccessAdminSection('chat-logs', role)",
-      "canAccessAdminSection('lab', role)",
-      "canAccessAdminSection('staff', role)",
+      "const role = auth.user?.role || ''",
+      'const permissions = auth.permissions',
+      "canAccessAdminSection('chat-logs', role, { permissions })",
+      "canAccessAdminSection('lab', role, { permissions })",
+      "canAccessAdminSection('notices', role, { permissions })",
+      "canAccessAdminSection('staff', role, { permissions })",
       "ensureAdminPageAccess('admin'",
     ],
   },

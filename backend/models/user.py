@@ -33,8 +33,10 @@ class User(Base):
     username = Column(String, unique=True, index=True, nullable=False) # 登录名
     full_name = Column(String, nullable=True) # 用户姓名
     hashed_password = Column(String, nullable=False)
-    # role 取值为: super_admin, branch_admin, user
-    role = Column(String, nullable=False, default="user")
+    # role 取值为: owner, executive, daily_admin, staff_admin, employee
+    role = Column(String, nullable=False, default="employee")
+    # permissions 存储为 JSON 字符串，例如: ["manage_staff", "edit_notices"]
+    permissions = Column(String, nullable=True, default="[]")
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -48,6 +50,13 @@ class User(Base):
 
     def __repr__(self):
         return f"<User(username='{self.username}', role='{self.role}')>"
+
+class RoleTemplate(Base):
+    __tablename__ = "role_templates"
+    
+    role = Column(String, primary_key=True, index=True) # owner, executive, etc.
+    permissions = Column(String, nullable=False, default="[]") # JSON list
+    description = Column(String, nullable=True)
 
 class SystemSetting(Base):
     __tablename__ = "system_settings"

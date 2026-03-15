@@ -1,4 +1,5 @@
 import io
+import json
 from typing import Optional
 
 import pandas as pd
@@ -8,11 +9,22 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database import get_db
-from dependencies import get_admin_user, get_super_admin
-from models.user import Branch, Department, User
+from dependencies import get_admin_user, has_permission
+from models.user import Branch, Department, RoleTemplate as RoleTemplateModel, User
 from services.auth_service import get_password_hash
 
 router = APIRouter(prefix="/api/staff", tags=["staff"])
+
+FULL_BRANCH_ACCESS_ROLES = {"owner", "super_admin", "executive", "daily_admin"}
+FULL_ORG_MANAGEMENT_ROLES = {"owner", "super_admin", "daily_admin"}
+DAILY_ADMIN_DEFAULT_PERMISSIONS = [
+    "manage_staff",
+    "edit_notices",
+    "edit_prices",
+    "edit_cases",
+    "edit_settings",
+    "edit_knowledge",
+]
 
 
 class UserBase(BaseModel):
@@ -22,6 +34,7 @@ class UserBase(BaseModel):
     branch_id: Optional[int] = None
     department_id: Optional[int] = None
     is_active: bool = True
+    permissions: Optional[list] = []
 
 
 class UserCreate(UserBase):
@@ -35,6 +48,7 @@ class UserUpdate(BaseModel):
     department_id: Optional[int] = None
     is_active: Optional[bool] = None
     password: Optional[str] = None
+    permissions: Optional[list] = None
 
 
 class BranchBase(BaseModel):
@@ -47,13 +61,18 @@ class DepartmentCreate(BaseModel):
     branch_id: int
 
 
-def _ensure_branch_admin_can_assign(admin: User, branch_id: Optional[int], role: str):
-    if admin.role != "branch_admin":
-        return
-    if role == "super_admin":
-        raise HTTPException(status_code=403, detail="branch admin cannot assign super_admin role")
-    if branch_id != admin.branch_id:
-        raise HTTPException(status_code=403, detail="branch admin can only manage users in the current branch")
+class RoleTemplateUpdate(BaseModel):
+    role: str
+    permissions: list
+    description: Optional[str] = None
+
+
+def _load_permissions(raw_permissions: Optional[str]) -> list[str]:
+    try:
+        parsed = json.loads(raw_permissions or "[]")
+    except Exception:
+        parsed = []
+    return parsed if isinstance(parsed, list) else []
 
 
 def _serialize_user(user: User):
@@ -63,6 +82,7 @@ def _serialize_user(user: User):
         "full_name": user.full_name,
         "role": user.role,
         "is_active": user.is_active,
+        "permissions": _load_permissions(user.permissions),
         "branch": user.branch.name if user.branch else None,
         "department": user.department.name if user.department else None,
         "branch_id": user.branch_id,
@@ -70,10 +90,52 @@ def _serialize_user(user: User):
     }
 
 
+def _default_role_templates() -> list[dict]:
+    return [
+        {
+            "role": "owner",
+            "permissions": ["manage_staff", "edit_notices", "edit_prices", "edit_cases", "edit_settings", "view_logs", "edit_knowledge"],
+            "description": "系统最高管理者，拥有全量权限",
+        },
+        {
+            "role": "executive",
+            "permissions": ["edit_notices", "edit_prices", "edit_cases", "view_logs", "edit_settings", "edit_knowledge"],
+            "description": "公司高管，可查看会话审计并参与经营配置",
+        },
+        {
+            "role": "daily_admin",
+            "permissions": DAILY_ADMIN_DEFAULT_PERMISSIONS,
+            "description": "日常管理员，拥有除会话审计外的全部后台权限",
+        },
+        {
+            "role": "staff_admin",
+            "permissions": ["manage_staff"],
+            "description": "人事管理员，仅限账号与组织维护",
+        },
+        {
+            "role": "employee",
+            "permissions": [],
+            "description": "普通员工，仅限前台功能使用",
+        },
+    ]
+
+
+def _ensure_branch_admin_can_manage(admin: User, target_user_role: str, target_branch_id: Optional[int]):
+    if admin.role in FULL_BRANCH_ACCESS_ROLES:
+        return
+
+    perms = _load_permissions(admin.permissions)
+    if "manage_staff" not in perms:
+        raise HTTPException(status_code=403, detail="您没有员工管理的权限")
+
+    if target_branch_id and target_branch_id != admin.branch_id:
+        raise HTTPException(status_code=403, detail="您只能管理本分公司的员工")
+
+
 @router.get("/users")
 def list_users(db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
     query = db.query(User)
-    if admin.role == "branch_admin":
+    if admin.role not in FULL_BRANCH_ACCESS_ROLES:
         query = query.filter(User.branch_id == admin.branch_id)
     return [_serialize_user(user) for user in query.all()]
 
@@ -83,13 +145,15 @@ def create_user(data: UserCreate, db: Session = Depends(get_db), admin: User = D
     existing = db.query(User).filter(User.username == data.username).first()
     if existing:
         raise HTTPException(status_code=400, detail="username already exists")
-    _ensure_branch_admin_can_assign(admin, data.branch_id, data.role)
+
+    _ensure_branch_admin_can_manage(admin, data.role, data.branch_id)
 
     new_user = User(
         username=data.username,
         full_name=data.full_name,
         hashed_password=get_password_hash(data.password),
         role=data.role,
+        permissions=json.dumps(data.permissions or []),
         branch_id=data.branch_id,
         department_id=data.department_id,
         is_active=data.is_active,
@@ -149,7 +213,7 @@ async def import_users(file: UploadFile = File(...), db: Session = Depends(get_d
         password = str(row["password"]).strip()
         branch_name = str(row["branch"]).strip()
         dept_name = str(row["department"]).strip()
-        role = str(row.get("role", "user")).strip() or "user"
+        role = str(row.get("role", "employee")).strip() or "employee"
 
         if not username or not password:
             errors.append(f"row {index + 2}: username and password are required")
@@ -160,7 +224,7 @@ async def import_users(file: UploadFile = File(...), db: Session = Depends(get_d
 
         branch = db.query(Branch).filter(Branch.name == branch_name).first()
         if not branch:
-            if admin.role != "super_admin":
+            if admin.role not in FULL_ORG_MANAGEMENT_ROLES:
                 errors.append(f"row {index + 2}: branch {branch_name} does not exist")
                 continue
             branch = Branch(name=branch_name)
@@ -168,12 +232,15 @@ async def import_users(file: UploadFile = File(...), db: Session = Depends(get_d
             db.flush()
 
         try:
-            _ensure_branch_admin_can_assign(admin, branch.id, role)
+            _ensure_branch_admin_can_manage(admin, role, branch.id)
         except HTTPException as exc:
             errors.append(f"row {index + 2}: {exc.detail}")
             continue
 
-        department = db.query(Department).filter(Department.name == dept_name, Department.branch_id == branch.id).first()
+        department = db.query(Department).filter(
+            Department.name == dept_name,
+            Department.branch_id == branch.id,
+        ).first()
         if not department:
             department = Department(name=dept_name, branch_id=branch.id)
             db.add(department)
@@ -201,12 +268,9 @@ def update_user(user_id: int, data: UserUpdate, db: Session = Depends(get_db), a
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="user not found")
-    if admin.role == "branch_admin" and user.branch_id != admin.branch_id:
-        raise HTTPException(status_code=403, detail="branch admin cannot edit users in another branch")
 
-    requested_role = data.role or user.role
-    requested_branch_id = data.branch_id if data.branch_id is not None else user.branch_id
-    _ensure_branch_admin_can_assign(admin, requested_branch_id, requested_role)
+    target_branch = data.branch_id if data.branch_id is not None else user.branch_id
+    _ensure_branch_admin_can_manage(admin, data.role or user.role, target_branch)
 
     if data.full_name is not None:
         user.full_name = data.full_name
@@ -220,6 +284,8 @@ def update_user(user_id: int, data: UserUpdate, db: Session = Depends(get_db), a
         user.is_active = data.is_active
     if data.password:
         user.hashed_password = get_password_hash(data.password)
+    if data.permissions is not None:
+        user.permissions = json.dumps(data.permissions)
 
     db.commit()
     return {"message": "user updated"}
@@ -255,7 +321,9 @@ def get_structure(db: Session = Depends(get_db), admin: User = Depends(get_admin
 
 
 @router.post("/branches")
-def create_branch(data: BranchBase, db: Session = Depends(get_db), admin: User = Depends(get_super_admin)):
+def create_branch(data: BranchBase, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+    if admin.role not in FULL_ORG_MANAGEMENT_ROLES:
+        raise HTTPException(status_code=403, detail="only owner, super admin, and daily admin can manage branches")
     branch = Branch(name=data.name, location=data.location)
     db.add(branch)
     db.commit()
@@ -272,3 +340,68 @@ def create_dept(data: DepartmentCreate, db: Session = Depends(get_db), admin: Us
     db.commit()
     db.refresh(department)
     return {"id": department.id}
+
+
+@router.get("/role-templates")
+def get_role_templates(db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+    default_templates = _default_role_templates()
+
+    try:
+        templates = db.query(RoleTemplateModel).all()
+        template_map = {template.role: template for template in templates}
+        updated = False
+
+        for template_data in default_templates:
+            template = template_map.get(template_data["role"])
+            if template is None:
+                template = RoleTemplateModel(
+                    role=template_data["role"],
+                    permissions=json.dumps(template_data["permissions"]),
+                    description=template_data["description"],
+                )
+                db.add(template)
+                template_map[template.role] = template
+                updated = True
+                continue
+
+            if template.role == "daily_admin":
+                permissions_json = json.dumps(template_data["permissions"])
+                if template.permissions != permissions_json:
+                    template.permissions = permissions_json
+                    updated = True
+                if template.description != template_data["description"]:
+                    template.description = template_data["description"]
+                    updated = True
+
+        if updated:
+            db.commit()
+
+        ordered_templates = [template_map[item["role"]] for item in default_templates]
+        return [
+            {
+                "role": template.role,
+                "permissions": _load_permissions(template.permissions),
+                "description": template.description,
+            }
+            for template in ordered_templates
+        ]
+    except Exception as error:
+        db.rollback()
+        print(f"Error fetching role templates: {error}")
+        return default_templates
+
+
+@router.patch("/role-templates")
+def update_role_templates(data: list[RoleTemplateUpdate], db: Session = Depends(get_db), admin: User = Depends(has_permission("manage_staff"))):
+    for item in data:
+        template = db.query(RoleTemplateModel).filter(RoleTemplateModel.role == item.role).first()
+        if not template:
+            template = RoleTemplateModel(role=item.role)
+            db.add(template)
+
+        template.permissions = json.dumps(item.permissions)
+        if item.description is not None:
+            template.description = item.description
+
+    db.commit()
+    return {"message": "role templates updated"}

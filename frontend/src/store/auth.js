@@ -35,9 +35,25 @@ export const useAuthStore = defineStore('auth', {
 
     getters: {
         isAuthenticated: (state) => !!state.token,
-        isAdmin: (state) => state.user?.role === 'super_admin' || state.user?.role === 'branch_admin',
-        isSuperAdmin: (state) => state.user?.role === 'super_admin',
-        userName: (state) => state.user?.full_name || state.user?.username || '未登录'
+        // 除了 employee 之外的所有角色都具有管理后台入口权限
+        isAdmin: (state) => state.user?.role && state.user?.role !== 'employee',
+        // owner 和 历史遗留的 super_admin 视为超级管理员
+        isSuperAdmin: (state) => state.user?.role === 'owner' || state.user?.role === 'super_admin',
+        canViewChatAudit: (state) => ['owner', 'executive', 'super_admin'].includes(state.user?.role),
+        canManageAllBranches: (state) => ['owner', 'super_admin', 'daily_admin'].includes(state.user?.role),
+        userName: (state) => state.user?.full_name || state.user?.username || '未登录',
+        roleName: (state) => {
+            const roleMap = {
+                'owner': '老板',
+                'super_admin': '超级管理员',
+                'executive': '高管',
+                'daily_admin': '日常管理员',
+                'staff_admin': '人事管理员',
+                'branch_admin': '分公司管理员',
+                'employee': '普通员工'
+            }
+            return roleMap[state.user?.role] || '未知角色'
+        }
     },
 
     actions: {

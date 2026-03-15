@@ -14,9 +14,21 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/tools',
+    name: 'Tools',
+    component: () => import('../views/ToolsView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/admin',
     name: 'Admin',
     component: () => import('../views/AdminView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
+    path: '/admin/notices',
+    name: 'NoticeManager',
+    component: () => import('../views/NoticeView.vue'),
     meta: { requiresAuth: true, requiresAdmin: true }
   },
   {
@@ -35,7 +47,7 @@ const routes = [
     path: '/admin/chat-logs',
     name: 'ChatLogs',
     component: () => import('../views/ChatLogsView.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true }
+    meta: { requiresAuth: true, requiresAdmin: true, requiresChatAudit: true }
   }
 ]
 
@@ -57,6 +69,9 @@ router.beforeEach((to, from, next) => {
   // 检查是否需要管理员权限
   else if (to.meta.requiresAdmin && !auth.isAdmin) {
     next('/')
+  }
+  else if (to.meta.requiresChatAudit && !auth.canViewChatAudit) {
+    next('/admin')
   }
   // 已登录状态访问登录页，跳转首页
   else if (to.name === 'Login' && auth.isAuthenticated) {

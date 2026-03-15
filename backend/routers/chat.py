@@ -24,17 +24,6 @@ _config_cache = {}
 _config_cache_ts = 0
 _CONFIG_TTL = 60  # 缓存有效期 60 秒
 
-def get_time_based_greeting():
-    hour = datetime.now().hour
-    if 5 <= hour < 12:
-        return "早安！我是小易，又是充满活力的一天，今天有什么计划需要我协助吗？"
-    elif 12 <= hour < 18:
-        return "下午好！我是小易，累了可以休息一下，有琐碎的工作尽管交给我。"
-    elif 18 <= hour < 22:
-        return "晚上好！我是小易，这么晚还在忙吗？注意休息，我会一直陪着您。"
-    else:
-        return "深夜好，我是小易。辛苦了，还在坚持工作的你真的很了不起。早点休息，我会一直陪着您。"
-
 def get_all_config() -> dict:
     """一次性读取所有配置，带 60 秒 TTL 缓存"""
     global _config_cache, _config_cache_ts
@@ -476,14 +465,6 @@ async def chat_stream(
 4. 友情提醒战友务必在报价中核算这部分高昂的附加费成本。语气要像经验丰富的老鸟，专业且严谨。
 """
 
-        elif intent == "social":
-            greeting = get_time_based_greeting()
-            system_prompt = f"""你现在正在以“小易”的身份进行友好的社交/闲聊。
-当用户打招呼（如‘你好’、‘哈喽’）时，请务必在回复的开头（或显著位置）使用以下问候语：
-“{greeting}”
-
-同时，你可以保持你一贯幽默而专业的形象，适度展示你的能力，比如告诉用户你可以查报价、查地址、查轨迹或进行实战对练。
-"""
         elif intent == "tracking":
             track_match = re.search(r'(?:FBA|YT|UJ|LP|AG|SF|TB|JD)\d+[A-Z0-9]*|\b\d{10,20}\b', request.message.upper())
             track_num = track_match.group(0) if track_match else request.message.strip()

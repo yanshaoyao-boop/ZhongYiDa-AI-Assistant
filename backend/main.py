@@ -4,12 +4,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import uvicorn
 import os
-from routers import upload, chat, auth, staff, settings, chat_logs, client_logs, notices
+from routers import upload, chat, auth, staff, settings, chat_logs, client_logs, notices, tools, coach_quiz
 
 load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 启动时确保数据库表结构同步
+    from database import engine, Base
+    import models.user, models.notice, models.chat_history # 显式引入以确保 Base 识别所有模型
+    Base.metadata.create_all(bind=engine)
+    print("Database tables synchronized.")
     yield
     # 应用强制关闭时，释放全局网络连接池
     from services.llm_client import close_client
@@ -46,6 +51,9 @@ app.include_router(client_logs.router)
 app.include_router(chat.router)
 app.include_router(chat_logs.router)
 app.include_router(notices.router)
+app.include_router(tools.router)
+app.include_router(coach_quiz.router)
+
 
 @app.get("/")
 def read_root():
@@ -54,4 +62,5 @@ def read_root():
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)

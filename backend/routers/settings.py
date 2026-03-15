@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from database import get_db
 from models.user import User, SystemSetting
-from dependencies import get_super_admin
+from dependencies import has_permission
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -15,7 +15,7 @@ class SettingUpdate(BaseModel):
 @router.get("/")
 def get_all_settings(
     db: Session = Depends(get_db),
-    admin: User = Depends(get_super_admin)
+    admin: User = Depends(has_permission("edit_settings"))
 ):
     settings = db.query(SystemSetting).all()
     # Return as {key: value} dict
@@ -25,7 +25,7 @@ def get_all_settings(
 def update_settings(
     data: SettingUpdate,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_super_admin)
+    admin: User = Depends(has_permission("edit_settings"))
 ):
     for key, value in data.settings.items():
         setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()

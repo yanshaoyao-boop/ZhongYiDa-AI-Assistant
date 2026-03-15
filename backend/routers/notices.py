@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from database import get_db
 from models.notice import Notice
 from models.user import User
-from dependencies import get_super_admin, get_current_user
+from dependencies import has_permission, get_current_user
 
 router = APIRouter(prefix="/api/notices", tags=["notices"])
 
@@ -26,7 +26,7 @@ class NoticeResponse(BaseModel):
 def create_notice(
     notice: NoticeCreate, 
     db: Session = Depends(get_db), 
-    admin: User = Depends(get_super_admin)
+    admin: User = Depends(has_permission("edit_notices"))
 ):
     """创建新通知（仅限超级管理员）"""
     new_notice = Notice(content=notice.content)
@@ -64,7 +64,7 @@ def get_history_notices(db: Session = Depends(get_db)):
 def delete_notice(
     notice_id: int, 
     db: Session = Depends(get_db), 
-    admin: User = Depends(get_super_admin)
+    admin: User = Depends(has_permission("edit_notices"))
 ):
     """删除通知（逻辑删除）"""
     notice = db.query(Notice).filter(Notice.id == notice_id).first()
