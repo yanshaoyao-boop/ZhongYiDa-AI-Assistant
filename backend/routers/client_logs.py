@@ -7,7 +7,7 @@ import aiofiles
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-router = APIRouter(prefix="/api/client-logs", tags=["client-logs"])
+router = APIRouter(prefix="/client-logs", tags=["client-logs"])
 
 CLIENT_LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "logs")
 CLIENT_LOG_FILE = os.path.join(CLIENT_LOG_DIR, "client-logs.jsonl")

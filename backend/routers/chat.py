@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+﻿from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import List, Optional
@@ -65,7 +65,7 @@ COMPANY_INTRO_KEYWORDS = [
 # 报价查询关键词
 QUOTE_KEYWORDS = ["报价", "价格", "多少钱", "费", "门点", "计费", "卖价", "舱位", "单价", "运费"]
 
-router = APIRouter(prefix="/api/chat", tags=["chat"])
+router = APIRouter(prefix="/chat", tags=["chat"])
 
 class ChatRequest(BaseModel):
     message: str

@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 
 from dependencies import User, get_current_user, has_permission
 
-router = APIRouter(prefix="/api/coach-quiz", tags=["coach-quiz"])
+router = APIRouter(prefix="/coach-quiz", tags=["coach-quiz"])
 
 QUIZ_BANK_FILE = os.path.join(
     os.path.dirname(os.path.dirname(__file__)),

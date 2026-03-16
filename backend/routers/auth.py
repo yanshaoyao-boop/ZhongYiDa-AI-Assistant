@@ -8,7 +8,7 @@ from database import get_db
 from models.user import User
 from services.auth_service import verify_password, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
 
-router = APIRouter(prefix="/api/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/login")
 def login(

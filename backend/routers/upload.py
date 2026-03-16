@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import base64
 import json
 import os
@@ -16,7 +16,7 @@ from services.quote_service import DATA_DIR as QUOTE_DIR
 from services.quote_service import load_all_quotes, parse_quote_file
 from services.rag_service import add_documents_to_db, delete_documents_by_source
 
-router = APIRouter(prefix="/api/upload", tags=["upload"])
+router = APIRouter(prefix="/upload", tags=["upload"])
 
 UPLOAD_DOCS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "docs")
 COACH_CASES_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "coach_cases.json")

@@ -13,7 +13,7 @@ from dependencies import get_admin_user, has_permission
 from models.user import Branch, Department, RoleTemplate as RoleTemplateModel, User
 from services.auth_service import get_password_hash
 
-router = APIRouter(prefix="/api/staff", tags=["staff"])
+router = APIRouter(prefix="/staff", tags=["staff"])
 
 FULL_BRANCH_ACCESS_ROLES = {"owner", "super_admin", "executive", "daily_admin"}
 FULL_ORG_MANAGEMENT_ROLES = {"owner", "super_admin", "daily_admin"}
@@ -94,12 +94,27 @@ def _default_role_templates() -> list[dict]:
     return [
         {
             "role": "owner",
-            "permissions": ["manage_staff", "edit_notices", "edit_prices", "edit_cases", "edit_settings", "view_logs", "edit_knowledge"],
+            "permissions": [
+                "manage_staff",
+                "edit_notices",
+                "edit_prices",
+                "edit_cases",
+                "edit_settings",
+                "view_logs",
+                "edit_knowledge",
+            ],
             "description": "系统最高管理者，拥有全量权限",
         },
         {
             "role": "executive",
-            "permissions": ["edit_notices", "edit_prices", "edit_cases", "view_logs", "edit_settings", "edit_knowledge"],
+            "permissions": [
+                "edit_notices",
+                "edit_prices",
+                "edit_cases",
+                "view_logs",
+                "edit_settings",
+                "edit_knowledge",
+            ],
             "description": "公司高管，可查看会话审计并参与经营配置",
         },
         {
@@ -120,7 +135,9 @@ def _default_role_templates() -> list[dict]:
     ]
 
 
-def _ensure_branch_admin_can_manage(admin: User, target_user_role: str, target_branch_id: Optional[int]):
+def _ensure_branch_admin_can_manage(
+    admin: User, target_user_role: str, target_branch_id: Optional[int]
+):
     if admin.role in FULL_BRANCH_ACCESS_ROLES:
         return
 
@@ -141,7 +158,11 @@ def list_users(db: Session = Depends(get_db), admin: User = Depends(get_admin_us
 
 
 @router.post("/users")
-def create_user(data: UserCreate, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+def create_user(
+    data: UserCreate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
     existing = db.query(User).filter(User.username == data.username).first()
     if existing:
         raise HTTPException(status_code=400, detail="username already exists")
@@ -195,15 +216,19 @@ def export_users(db: Session = Depends(get_db), admin: User = Depends(get_admin_
 
 
 @router.post("/users/import")
-async def import_users(file: UploadFile = File(...), db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+async def import_users(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="please upload an Excel file")
 
     dataframe = pd.read_excel(io.BytesIO(await file.read()))
     required_cols = ["username", "full_name", "password", "branch", "department"]
-    for col in required_cols:
-        if col not in dataframe.columns:
-            raise HTTPException(status_code=400, detail=f"missing required column: {col}")
+    for column in required_cols:
+        if column not in dataframe.columns:
+            raise HTTPException(status_code=400, detail=f"missing required column: {column}")
 
     success_count = 0
     errors = []
@@ -237,10 +262,11 @@ async def import_users(file: UploadFile = File(...), db: Session = Depends(get_d
             errors.append(f"row {index + 2}: {exc.detail}")
             continue
 
-        department = db.query(Department).filter(
-            Department.name == dept_name,
-            Department.branch_id == branch.id,
-        ).first()
+        department = (
+            db.query(Department)
+            .filter(Department.name == dept_name, Department.branch_id == branch.id)
+            .first()
+        )
         if not department:
             department = Department(name=dept_name, branch_id=branch.id)
             db.add(department)
@@ -264,7 +290,12 @@ async def import_users(file: UploadFile = File(...), db: Session = Depends(get_d
 
 
 @router.patch("/users/{user_id}")
-def update_user(user_id: int, data: UserUpdate, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+def update_user(
+    user_id: int,
+    data: UserUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="user not found")
@@ -292,14 +323,20 @@ def update_user(user_id: int, data: UserUpdate, db: Session = Depends(get_db), a
 
 
 @router.delete("/users/{user_id}")
-def delete_user(user_id: int, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="user not found")
     if user.id == admin.id:
         raise HTTPException(status_code=400, detail="cannot delete current account")
     if admin.role == "branch_admin" and user.branch_id != admin.branch_id:
-        raise HTTPException(status_code=403, detail="branch admin cannot delete users in another branch")
+        raise HTTPException(
+            status_code=403, detail="branch admin cannot delete users in another branch"
+        )
     db.delete(user)
     db.commit()
     return {"message": "user deleted"}
@@ -314,16 +351,26 @@ def get_structure(db: Session = Depends(get_db), admin: User = Depends(get_admin
         {
             "id": branch.id,
             "name": branch.name,
-            "departments": [{"id": department.id, "name": department.name} for department in branch.departments],
+            "departments": [
+                {"id": department.id, "name": department.name}
+                for department in branch.departments
+            ],
         }
         for branch in query.all()
     ]
 
 
 @router.post("/branches")
-def create_branch(data: BranchBase, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+def create_branch(
+    data: BranchBase,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
     if admin.role not in FULL_ORG_MANAGEMENT_ROLES:
-        raise HTTPException(status_code=403, detail="only owner, super admin, and daily admin can manage branches")
+        raise HTTPException(
+            status_code=403,
+            detail="only owner, super admin, and daily admin can manage branches",
+        )
     branch = Branch(name=data.name, location=data.location)
     db.add(branch)
     db.commit()
@@ -332,9 +379,16 @@ def create_branch(data: BranchBase, db: Session = Depends(get_db), admin: User =
 
 
 @router.post("/departments")
-def create_dept(data: DepartmentCreate, db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+def create_dept(
+    data: DepartmentCreate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
     if admin.role == "branch_admin" and data.branch_id != admin.branch_id:
-        raise HTTPException(status_code=403, detail="branch admin can only manage departments in the current branch")
+        raise HTTPException(
+            status_code=403,
+            detail="branch admin can only manage departments in the current branch",
+        )
     department = Department(name=data.name, branch_id=data.branch_id)
     db.add(department)
     db.commit()
@@ -392,7 +446,11 @@ def get_role_templates(db: Session = Depends(get_db), admin: User = Depends(get_
 
 
 @router.patch("/role-templates")
-def update_role_templates(data: list[RoleTemplateUpdate], db: Session = Depends(get_db), admin: User = Depends(has_permission("manage_staff"))):
+def update_role_templates(
+    data: list[RoleTemplateUpdate],
+    db: Session = Depends(get_db),
+    admin: User = Depends(has_permission("manage_staff")),
+):
     for item in data:
         template = db.query(RoleTemplateModel).filter(RoleTemplateModel.role == item.role).first()
         if not template:

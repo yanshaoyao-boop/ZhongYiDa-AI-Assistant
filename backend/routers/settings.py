@@ -1,31 +1,34 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from typing import Dict, Any
+from typing import Any, Dict
+
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from database import get_db
-from models.user import User, SystemSetting
 from dependencies import has_permission
+from models.user import SystemSetting, User
 
-router = APIRouter(prefix="/api/settings", tags=["settings"])
+router = APIRouter(prefix="/settings", tags=["settings"])
+
 
 class SettingUpdate(BaseModel):
     settings: Dict[str, Any]
 
+
 @router.get("/")
 def get_all_settings(
     db: Session = Depends(get_db),
-    admin: User = Depends(has_permission("edit_settings"))
+    admin: User = Depends(has_permission("edit_settings")),
 ):
     settings = db.query(SystemSetting).all()
-    # Return as {key: value} dict
-    return {s.key: s.value for s in settings}
+    return {setting.key: setting.value for setting in settings}
+
 
 @router.patch("/")
 def update_settings(
     data: SettingUpdate,
     db: Session = Depends(get_db),
-    admin: User = Depends(has_permission("edit_settings"))
+    admin: User = Depends(has_permission("edit_settings")),
 ):
     for key, value in data.settings.items():
         setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
@@ -34,17 +37,17 @@ def update_settings(
             db.add(setting)
         else:
             setting.value = str(value)
-    
+
     db.commit()
-    # 管理员修改配置后立即清除缓存
+
     from routers.chat import invalidate_config_cache
+
     invalidate_config_cache()
     return {"message": "设置已更新"}
 
-# 也可以提供一个公共接口给 ChatView 使用（如果需要一些前台展示配置）
+
 @router.get("/public")
 def get_public_settings(db: Session = Depends(get_db)):
-    # 限制只返回非敏感配置
     public_keys = ["welcome_message", "slogan", "app_name"]
     settings = db.query(SystemSetting).filter(SystemSetting.key.in_(public_keys)).all()
-    return {s.key: s.value for s in settings}
+    return {setting.key: setting.value for setting in settings}

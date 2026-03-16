@@ -1,4 +1,4 @@
-import base64
+﻿import base64
 import importlib.util
 import json
 import sys
@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
 
-router = APIRouter(prefix="/api/tools", tags=["tools"])
+router = APIRouter(prefix="/tools", tags=["tools"])
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TOOLS_SOURCE_ROOT = REPO_ROOT / "智能工具源代码"
@@ -33,13 +33,14 @@ def _load_module(module_name: str, file_path: Path):
     return module
 
 
-_excel_mapper_module = _load_module(
-    "xiaoyi_fist_excel_mapper",
-    FIST_TOOL_DIR / "excel_mapper.py",
-)
-load_a_headers = _excel_mapper_module.load_a_headers
-extract_template_targets = _excel_mapper_module.extract_template_targets
-generate_workbooks = _excel_mapper_module.generate_workbooks
+def _get_fist_mapper():
+    mapper_path = FIST_TOOL_DIR / "excel_mapper.py"
+    if not mapper_path.exists():
+        raise HTTPException(
+            status_code=503,
+            detail="客服转单工具核心代码尚未就绪，请先上传资源并配置路径。",
+        )
+    return _load_module("xiaoyi_fist_excel_mapper", mapper_path)
 
 
 TOOL_GROUPS = [
@@ -121,11 +122,13 @@ def _safe_join(base_dir: Path, relative_path: str) -> Path:
 
 def _file_response(path: Path, media_type: str | None = None):
     if not path.exists() or not path.is_file():
-        raise HTTPException(status_code=404, detail="file not found")
+        raise HTTPException(status_code=404, detail="工具或静态资源文件未找到，请检查上传路径。")
     return FileResponse(path, media_type=media_type)
 
 
 def _render_fist_html() -> HTMLResponse:
+    if not FIST_TEMPLATE_PATH.exists():
+        raise HTTPException(status_code=404, detail="Fist 模板文件未找到。")
     html = FIST_TEMPLATE_PATH.read_text(encoding="utf-8")
     html = html.replace('href="/static/styles.css"', 'href="./static/styles.css"')
     html = html.replace('src="/static/app.js"', 'src="./static/app.js"')
@@ -133,7 +136,10 @@ def _render_fist_html() -> HTMLResponse:
 
 
 def _render_fist_js() -> Response:
-    js = (FIST_STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    js_path = FIST_STATIC_DIR / "app.js"
+    if not js_path.exists():
+        raise HTTPException(status_code=404, detail="Fist JS 资源未找到。")
+    js = js_path.read_text(encoding="utf-8")
     js = js.replace('fetch("/api/inspect"', 'fetch("./api/inspect"')
     js = js.replace('fetch("/api/generate"', 'fetch("./api/generate"')
     return Response(content=js, media_type="application/javascript")
@@ -211,12 +217,13 @@ def serve_tool_asset(group: str, slug: str, asset_path: str):
 @router.post("/runtime/admin/fist-transfer/api/inspect")
 def inspect_fist_files(payload: dict):
     try:
+        mapper = _get_fist_mapper()
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             a_path = _write_upload(tmp_path, payload["aFileName"], payload["aFileContent"])
             b_path = _write_upload(tmp_path, payload["bFileName"], payload["bFileContent"])
-            headers = load_a_headers(a_path)
-            targets = extract_template_targets(b_path)
+            headers = mapper.load_a_headers(a_path)
+            targets = mapper.extract_template_targets(b_path)
         return {"headers": headers, "targets": targets}
     except Exception as exc:
         return JSONResponse(
@@ -228,6 +235,7 @@ def inspect_fist_files(payload: dict):
 @router.post("/runtime/admin/fist-transfer/api/generate")
 def generate_fist_files(payload: dict):
     try:
+        mapper = _get_fist_mapper()
         mappings = payload.get("mappings", [])
         if len(mappings) > 30:
             raise ValueError("最多只允许 30 条映射")
@@ -241,7 +249,7 @@ def generate_fist_files(payload: dict):
         b_path = _write_upload(upload_dir, payload["bFileName"], payload["bFileContent"])
         output_dir = run_dir / "excel"
 
-        result = generate_workbooks(
+        result = mapper.generate_workbooks(
             a_path=a_path,
             b_path=b_path,
             mappings=mappings,

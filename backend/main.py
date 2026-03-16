@@ -42,17 +42,19 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
 )
 
-# Include routers
-app.include_router(settings.router)
-app.include_router(auth.router)
-app.include_router(staff.router)
-app.include_router(upload.router)
-app.include_router(client_logs.router)
-app.include_router(chat.router)
-app.include_router(chat_logs.router)
-app.include_router(notices.router)
-app.include_router(tools.router)
-app.include_router(coach_quiz.router)
+# Include routers with configurable prefix
+API_PREFIX = os.getenv("API_PREFIX", "/api")
+if API_PREFIX == "/": API_PREFIX = ""
+app.include_router(settings.router, prefix=API_PREFIX)
+app.include_router(auth.router, prefix=API_PREFIX)
+app.include_router(staff.router, prefix=API_PREFIX)
+app.include_router(upload.router, prefix=API_PREFIX)
+app.include_router(client_logs.router, prefix=API_PREFIX)
+app.include_router(chat.router, prefix=API_PREFIX)
+app.include_router(chat_logs.router, prefix=API_PREFIX)
+app.include_router(notices.router, prefix=API_PREFIX)
+app.include_router(tools.router, prefix=API_PREFIX)
+app.include_router(coach_quiz.router, prefix=API_PREFIX)
 
 
 @app.get("/")
