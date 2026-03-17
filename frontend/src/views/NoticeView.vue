@@ -44,6 +44,7 @@
             <thead>
               <tr>
                 <th>发布时间</th>
+                <th>发布人</th>
                 <th>通知内容</th>
                 <th>操作</th>
               </tr>
@@ -51,6 +52,7 @@
             <tbody>
               <tr v-for="n in historyNotices" :key="n.id">
                 <td class="date-cell">{{ formatDate(n.created_at) }}</td>
+                <td class="publisher-cell">{{ n.created_by_name || '系统发布' }}</td>
                 <td class="content-cell">{{ n.content }}</td>
                 <td class="action-cell">
                   <button class="btn-delete" @click="deleteNotice(n.id)">🗑️ 删除</button>
@@ -233,6 +235,13 @@ onMounted(fetchHistoryNotices)
   white-space: nowrap;
   color: var(--text-secondary);
   width: 200px;
+}
+
+.publisher-cell {
+  width: 140px;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-weight: 600;
 }
 
 .content-cell {

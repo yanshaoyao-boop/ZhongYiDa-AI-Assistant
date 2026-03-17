@@ -2,11 +2,26 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from sqlalchemy import text
 import uvicorn
 import os
 from routers import upload, chat, auth, staff, settings, chat_logs, client_logs, notices, tools, coach_quiz
 
 load_dotenv()
+
+
+def ensure_legacy_schema(engine):
+    if engine.dialect.name != "sqlite":
+        return
+
+    with engine.begin() as connection:
+        notice_columns = {
+            row[1] for row in connection.execute(text("PRAGMA table_info(notices)")).fetchall()
+        }
+        if "created_by_id" not in notice_columns:
+            connection.execute(text("ALTER TABLE notices ADD COLUMN created_by_id INTEGER"))
+        if "created_by_name" not in notice_columns:
+            connection.execute(text("ALTER TABLE notices ADD COLUMN created_by_name VARCHAR"))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -14,6 +29,7 @@ async def lifespan(app: FastAPI):
     from database import engine, Base
     import models.user, models.notice, models.chat_history # 显式引入以确保 Base 识别所有模型
     Base.metadata.create_all(bind=engine)
+    ensure_legacy_schema(engine)
     print("Database tables synchronized.")
     yield
     # 应用强制关闭时，释放全局网络连接池
@@ -38,7 +54,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,          # 白名单模式，替代原来的全开regex
     allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE"],  # 只开放实际用到的方法
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],  # 只开放实际用到的方法
     allow_headers=["Content-Type", "Authorization"],
 )
 

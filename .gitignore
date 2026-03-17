@@ -1,24 +1,67 @@
-.git
-node_modules
-dist
-dist-ssr
-*.local
-.vscode
+.git/
 .DS_Store
-*.log
-package-lock.json
-stats.json
-.env
-data/
+.idea/
+.vscode/
+
+# Python runtime
+venv/
 backend/venv/
+__pycache__/
 **/__pycache__/
 *.pyc
-backend/data/
-backend/*.log
-backend/.env
+*.pyo
+*.pyd
+
+# Node runtime
+node_modules/
 frontend/node_modules/
+frontend-uniapp/node_modules/
+package-lock.json
+frontend-uniapp-old-webpack/
+
+# Build output
+dist/
+dist-ssr/
 frontend/dist/
+frontend-uniapp/dist/
+frontend-uniapp/unpackage/
+unpackage/
+release-artifacts/*
+!release-artifacts/.gitkeep
+!release-artifacts/README.md
+
+# Local secrets and runtime data
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
 frontend/.env
+frontend/.env.*
+frontend-uniapp/.env.local
+backend/data/
+backend/data/*.db
+backend/data/*.sqlite
+backend/data/*.sqlite3
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+backend/*.log
+backend/scripts/*.txt
+
+# Local archives and private workspace
+archives/*
+!archives/.gitkeep
+!archives/README.md
+private/*
+!private/.gitkeep
+!private/README.md
+
+# Temporary local scripts and inspection artifacts
 test_*.py
 tmp_*.py
 check_*.py
@@ -27,24 +70,24 @@ detailed_*.py
 scan_*.py
 dump_*.py
 list_*.py
-价格表/
-*.txt
 parsed_quotes.json
+inspect_sheet.json
+test_excel.json
+temp_html.html
+tengxin_output.txt
+xingye_output.txt
+*.zip
+*.7z
+*.rar
 
-# Temporary files
-~$*
-.idea/
-.vscode/
-venv/
-__pycache__/
-*.pyc
-.env
-*.log
-node_modules/
-dist/
-unpackage/
-frontend-uniapp/node_modules/
-frontend-uniapp/dist/
-frontend-uniapp/unpackage/
-frontend-uniapp-old-webpack/
+# Local business data and reference assets
+/价格表/
+/偏远地址/
+/小易基准图/
+/智能工具源代码/
+/icon/
+
+# IDE / tool caches
 .hbuilderx/
+stats.json
+backend/boot.log

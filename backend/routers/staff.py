@@ -1,6 +1,7 @@
 import io
 import json
 from typing import Optional
+from urllib.parse import quote
 
 import pandas as pd
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -17,6 +18,7 @@ router = APIRouter(prefix="/staff", tags=["staff"])
 
 FULL_BRANCH_ACCESS_ROLES = {"owner", "super_admin", "executive", "daily_admin"}
 FULL_ORG_MANAGEMENT_ROLES = {"owner", "super_admin", "daily_admin"}
+DEFAULT_NEW_USER_PASSWORD = "123456"
 DAILY_ADMIN_DEFAULT_PERMISSIONS = [
     "manage_staff",
     "edit_notices",
@@ -38,7 +40,7 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    password: str
+    password: Optional[str] = DEFAULT_NEW_USER_PASSWORD
 
 
 class UserUpdate(BaseModel):
@@ -49,6 +51,11 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     password: Optional[str] = None
     permissions: Optional[list] = None
+
+
+class PasswordUpdate(BaseModel):
+    password: str
+    confirm_password: str
 
 
 class BranchBase(BaseModel):
@@ -88,6 +95,18 @@ def _serialize_user(user: User):
         "branch_id": user.branch_id,
         "department_id": user.department_id,
     }
+
+
+def _get_role_label(role: Optional[str]) -> str:
+    return {
+        "owner": "老板",
+        "super_admin": "超级管理员",
+        "executive": "高管",
+        "daily_admin": "日常管理员",
+        "staff_admin": "普通管理员",
+        "branch_admin": "分公司管理员",
+        "employee": "员工",
+    }.get(role or "", role or "")
 
 
 def _default_role_templates() -> list[dict]:
@@ -172,7 +191,7 @@ def create_user(
     new_user = User(
         username=data.username,
         full_name=data.full_name,
-        hashed_password=get_password_hash(data.password),
+        hashed_password=get_password_hash((data.password or "").strip() or DEFAULT_NEW_USER_PASSWORD),
         role=data.role,
         permissions=json.dumps(data.permissions or []),
         branch_id=data.branch_id,
@@ -195,22 +214,27 @@ def export_users(db: Session = Depends(get_db), admin: User = Depends(get_admin_
     for user in query.all():
         rows.append(
             {
-                "username": user.username,
-                "full_name": user.full_name or "",
-                "role": user.role,
-                "status": "active" if user.is_active else "disabled",
-                "branch": user.branch.name if user.branch else "",
-                "department": user.department.name if user.department else "",
+                "登录名": user.username,
+                "姓名": user.full_name or "",
+                "角色": _get_role_label(user.role),
+                "状态": "启用" if user.is_active else "禁用",
+                "分公司": user.branch.name if user.branch else "",
+                "部门": user.department.name if user.department else "",
             }
         )
 
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        pd.DataFrame(rows).to_excel(writer, index=False, sheet_name="staff")
+        pd.DataFrame(rows).to_excel(writer, index=False, sheet_name="员工名单")
     output.seek(0)
     return StreamingResponse(
         output,
-        headers={"Content-Disposition": 'attachment; filename="staff_export.xlsx"'},
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="staff_export.xlsx"; '
+                f"filename*=UTF-8''{quote('员工账号导出.xlsx')}"
+            )
+        },
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
@@ -320,6 +344,28 @@ def update_user(
 
     db.commit()
     return {"message": "user updated"}
+
+
+@router.patch("/users/{user_id}/password")
+def update_user_password(
+    user_id: int,
+    data: PasswordUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
+    if not data.password.strip():
+        raise HTTPException(status_code=400, detail="password cannot be empty")
+    if data.password != data.confirm_password:
+        raise HTTPException(status_code=400, detail="password confirmation does not match")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="user not found")
+
+    _ensure_branch_admin_can_manage(admin, user.role, user.branch_id)
+    user.hashed_password = get_password_hash(data.password)
+    db.commit()
+    return {"message": "password updated"}
 
 
 @router.delete("/users/{user_id}")

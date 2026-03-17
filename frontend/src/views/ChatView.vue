@@ -415,6 +415,7 @@
                   <span class="notice-tag">NEWS</span>
                   <span class="notice-time">{{ formatDate(n.created_at) }}</span>
                 </div>
+                <div class="notice-author">发布人：{{ n.created_by_name || '系统发布' }}</div>
                 <div class="notice-content-text">{{ n.content }}</div>
                 <div class="notice-action">点击对话深入了解 <IconChevronRight size="14" /></div>
               </div>
@@ -517,7 +518,7 @@ const formatDate = (dateStr) => {
 const handleNoticeClick = (notice) => {
   showNotices.value = false
   startNewChat()
-  inputMsg.value = `针对这条通知内容，我想详细了解一下：\n\n"${notice.content}"`
+  inputMsg.value = `针对 ${notice.created_by_name || '系统发布'} 发布的这条通知内容，我想详细了解一下：\n\n"${notice.content}"`
   sendMessage()
 }
 
@@ -2391,6 +2392,12 @@ const truncate = (text, len) => {
   line-height: 1.6;
   color: var(--text-primary);
   margin-bottom: 12px;
+}
+
+.notice-author {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
 }
 
 .notice-action {

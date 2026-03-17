@@ -55,43 +55,46 @@
           </div>
         </div>
         
-        <table class="staff-table">
-          <thead>
-            <tr>
-              <th>登录名</th>
-              <th>用户名</th>
-              <th>所属分公司</th>
-              <th>所属部门</th>
-              <th>角色</th>
-              <th>状态</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="user in filteredUsers" :key="user.id">
-              <td>{{ user.username }}</td>
-              <td>{{ user.full_name || '-' }}</td>
-              <td>{{ user.branch || '未分配' }}</td>
-              <td>{{ user.department || '未分配' }}</td>
-              <td>
-                <span :class="['role-tag', user.role]">
-                  {{ roleMap[user.role] }}
-                </span>
-              </td>
-              <td>
-                <span :class="['status-dot', { active: user.is_active }]"></span>
-                {{ user.is_active ? '启用' : '禁用' }}
-              </td>
-              <td class="actions">
-                <button @click="openUserModal(user)" class="icon-btn edit" title="编辑"><IconEdit size="18" /></button>
-                <button @click="handleDeleteUser(user)" class="icon-btn delete" title="删除"><IconTrash size="18" /></button>
-              </td>
-            </tr>
-            <tr v-if="filteredUsers.length === 0">
-              <td colspan="6" class="empty-cell">未找到相关人员数据</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-scroll">
+          <table class="staff-table">
+            <thead>
+              <tr>
+                <th>登录名</th>
+                <th>用户名</th>
+                <th>所属分公司</th>
+                <th>所属部门</th>
+                <th>角色</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="user in filteredUsers" :key="user.id">
+                <td>{{ user.username }}</td>
+                <td>{{ user.full_name || '-' }}</td>
+                <td>{{ user.branch || '未分配' }}</td>
+                <td>{{ user.department || '未分配' }}</td>
+                <td>
+                  <span :class="['role-tag', user.role]">
+                    {{ roleMap[user.role] }}
+                  </span>
+                </td>
+                <td>
+                  <span :class="['status-dot', { active: user.is_active }]"></span>
+                  {{ user.is_active ? '启用' : '禁用' }}
+                </td>
+                <td class="actions">
+                  <button @click="openUserModal(user)" class="icon-btn edit" title="编辑"><IconEdit size="18" /></button>
+                  <button @click="openPasswordModal(user)" class="icon-btn password" title="修改密码"><IconKeyRound size="18" /></button>
+                  <button @click="handleDeleteUser(user)" class="icon-btn delete" title="删除"><IconTrash size="18" /></button>
+                </td>
+              </tr>
+              <tr v-if="filteredUsers.length === 0">
+                <td colspan="7" class="empty-cell">未找到相关人员数据</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -114,9 +117,10 @@
             </div>
           </div>
           
-          <div class="form-group">
-            <label>{{ editingUser ? '重置密码 (留空则不修改)' : '登录密码' }}</label>
-            <input v-model="userForm.password" type="password" :required="!editingUser" />
+          <div v-if="!editingUser" class="form-group">
+            <label>登录密码</label>
+            <input v-model="userForm.password" type="text" readonly />
+            <p class="field-hint">新建员工默认密码为 123456，创建后可通过“修改密码”单独调整。</p>
           </div>
 
           <div class="form-row">
@@ -262,6 +266,34 @@
         </div>
       </div>
     </div>
+
+    <div v-if="showPasswordModal" class="modal-overlay" @click.self="closePasswordModal">
+      <div class="modal-card modal-card-sm glass-panel">
+        <div class="modal-header">
+          <div>
+            <h3>修改密码</h3>
+            <p class="modal-subtitle">{{ passwordTargetUser?.full_name || passwordTargetUser?.username }}</p>
+          </div>
+          <button @click="closePasswordModal" class="close-btn">×</button>
+        </div>
+        <form @submit.prevent="submitPasswordChange" class="modal-form">
+          <div class="form-group">
+            <label>新密码</label>
+            <input v-model="passwordForm.password" type="password" minlength="6" required />
+          </div>
+          <div class="form-group">
+            <label>确认新密码</label>
+            <input v-model="passwordForm.confirm_password" type="password" minlength="6" required />
+          </div>
+          <div class="modal-footer">
+            <button type="button" @click="closePasswordModal" class="btn-secondary">取消</button>
+            <button type="submit" class="btn-primary" :disabled="saving">
+              {{ saving ? '保存中...' : '保存新密码' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -273,10 +305,12 @@ import {
   Users as IconUsers, 
   Building as IconBuilding,
   Edit as IconEdit,
+  KeyRound as IconKeyRound,
   Trash as IconTrash
 } from 'lucide-vue-next'
 
 const auth = useAuthStore()
+const DEFAULT_PASSWORD = '123456'
 const users = ref([])
 const structure = ref([])
 const templates = ref([])
@@ -355,7 +389,7 @@ const editingUser = ref(null)
 const userForm = ref({
   username: '',
   full_name: '',
-  password: '',
+  password: DEFAULT_PASSWORD,
   role: 'employee',
   permissions: [],
   branch_id: null,
@@ -397,7 +431,7 @@ const openUserModal = (user) => {
     userForm.value = {
       username: '',
       full_name: '',
-      password: '',
+      password: DEFAULT_PASSWORD,
       role: 'employee',
       permissions: [],
       branch_id: auth.user?.branch_id || null, // 默认带出自己的分公司
@@ -414,12 +448,59 @@ const saveUser = async () => {
     if (editingUser.value) {
       await axios.patch(`/api/staff/users/${editingUser.value.id}`, userForm.value)
     } else {
-      await axios.post('/api/staff/users', userForm.value)
+      await axios.post('/api/staff/users', {
+        ...userForm.value,
+        password: userForm.value.password || DEFAULT_PASSWORD,
+      })
     }
     showUserModal.value = false
     fetchData()
   } catch (err) {
     alert(err.response?.data?.detail || "操作失败")
+  } finally {
+    saving.value = false
+  }
+}
+
+const showPasswordModal = ref(false)
+const passwordTargetUser = ref(null)
+const passwordForm = ref({
+  password: '',
+  confirm_password: '',
+})
+
+const openPasswordModal = (user) => {
+  passwordTargetUser.value = user
+  passwordForm.value = {
+    password: '',
+    confirm_password: '',
+  }
+  showPasswordModal.value = true
+}
+
+const closePasswordModal = () => {
+  showPasswordModal.value = false
+  passwordTargetUser.value = null
+  passwordForm.value = {
+    password: '',
+    confirm_password: '',
+  }
+}
+
+const submitPasswordChange = async () => {
+  if (!passwordTargetUser.value) return
+  if (passwordForm.value.password !== passwordForm.value.confirm_password) {
+    alert('两次输入的密码不一致')
+    return
+  }
+
+  saving.value = true
+  try {
+    await axios.patch(`/api/staff/users/${passwordTargetUser.value.id}/password`, passwordForm.value)
+    closePasswordModal()
+    alert('密码修改成功')
+  } catch (err) {
+    alert(err.response?.data?.detail || '密码修改失败')
   } finally {
     saving.value = false
   }
@@ -555,7 +636,8 @@ const saveTemplates = async () => {
   display: flex;
   flex-direction: column;
   gap: 32px;
-  min-height: 100vh;
+  height: 100vh;
+  overflow-y: auto;
 }
 
 .staff-header {
@@ -630,6 +712,11 @@ const saveTemplates = async () => {
 
 .table-container {
   padding: 24px;
+}
+
+.table-scroll {
+  max-height: min(62vh, calc(100vh - 320px));
+  overflow: auto;
 }
 
 .table-header {
@@ -784,6 +871,7 @@ const saveTemplates = async () => {
 }
 .icon-btn:hover { background: rgba(0,0,0,0.05); }
 .icon-btn.edit:hover { color: #2563eb; }
+.icon-btn.password:hover { color: #7c3aed; }
 .icon-btn.delete:hover { color: #ef4444; }
 
 /* Modal Styles */
@@ -809,7 +897,14 @@ const saveTemplates = async () => {
   overflow-y: auto;
 }
 
+.modal-card-sm { width: 420px; }
 .modal-card.wide { width: 800px; }
+
+.modal-subtitle {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
 
 .modal-header {
   display: flex;
@@ -842,6 +937,11 @@ const saveTemplates = async () => {
   font-size: 13px;
   color: var(--text-secondary);
   font-weight: 500;
+}
+
+.field-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 input, select {
