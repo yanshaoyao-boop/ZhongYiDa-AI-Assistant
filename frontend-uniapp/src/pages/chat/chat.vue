@@ -84,7 +84,7 @@
 									<view class="zen-avatar-breathe">
 										<image :src="XIAOYI_AVATAR_SRC" mode="aspectFit" class="zen-avatar-img" />
 									</view>
-								<text class="zen-title">您好，我是小易</text>
+								<text class="zen-title">{{ auth.userName }} 您好，我是小易</text>
 								<text class="zen-subtitle">{{ welcomeMsg }}</text>
 
 								<view class="suggestion-chips suggestion-chip-shell">
@@ -337,10 +337,16 @@
 					</view>
 				</scroll-view>
 
-				<view :class="['combat-intel-panel', 'combat-intel-shell', 'glass-panel', { show: isIntelOpen }]">
+				
+<view v-if="isIntelOpen && isIntelCollapsed" class="combat-intel-minimized" @tap="isIntelCollapsed = false">
+    <text class="minimized-icon">📊</text>
+    <text class="minimized-text">实战情报</text>
+</view>
+
+<view :class="['combat-intel-panel', 'combat-intel-shell', 'glass-panel', { show: isIntelOpen, collapsed: isIntelCollapsed }]">
 					<view class="panel-header">
 						<text>实战情报中心</text>
-						<text class="panel-close" @tap="isIntelOpen = false">×</text>
+						<view class="panel-header-btns"><text class="panel-collapse-btn" @tap="isIntelCollapsed = true">－</text><text class="panel-close" @tap="isIntelOpen = false">×</text></view>
 					</view>
 					<scroll-view scroll-y class="panel-content">
 						<view class="intel-section">
@@ -624,7 +630,7 @@ import { captureClientEvent } from '@/utils/error-logger'
 import { createMpStreamChatController } from '@/utils/mp-stream-chat'
 
 const auth = useAuthStore()
-const XIAOYI_AVATAR_SRC = '/static/xiaoyi_character.png'
+const XIAOYI_AVATAR_SRC = '/static/xiaoyi_transparent.png'
 const CHAT_NAV_ICON_SRC = '/static/nav_chat.png'
 const NOTICE_NAV_ICON_SRC = '/static/nav_notice.png'
 const TOOLS_NAV_ICON_SRC = '/static/nav_tools.png'
@@ -650,6 +656,7 @@ const scrollIntoViewTarget = ref('')
 const coachCases = ref([])
 const currentScenario = ref(null)
 const isIntelOpen = ref(false)
+const isIntelCollapsed = ref(false)
 const selectedRegion = ref(null)
 const selectedPersona = ref(null)
 const coachEntryMode = ref('menu')
@@ -1687,10 +1694,48 @@ watch(messages, (value) => {
 </script>
 
 <style scoped>
+
+/* ======= 深度 Web 一致性重构 ======= */
+:deep(.zen-card-button), 
+.zen-card-button {
+  background: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  border-radius: 20px !important;
+  padding: 30rpx 40rpx !important;
+  margin: 15rpx 20rpx !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+  width: auto !important;
+  height: auto !important;
+}
+
+.zen-card-title {
+  font-size: 32rpx !important;
+  font-weight: 700 !important;
+  color: #1e293b !important;
+  margin-bottom: 8rpx !important;
+  display: block !important;
+}
+
+.zen-card-desc {
+  font-size: 24rpx !important;
+  color: #64748b !important;
+  display: block !important;
+}
+
+.zen-welcome-stage {
+  padding-top: 160rpx !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+}
+
 .general-mode {
 	--bg-primary: #f5f7fb;
 	--bg-secondary: #ffffff;
-	--accent-color: #f59e0b;
+	--accent-color: #2563eb;
 	--text-primary: #0f172a;
 	--text-secondary: #64748b;
 	--border-light: rgba(226, 232, 240, 0.92);
@@ -3548,4 +3593,226 @@ watch(messages, (value) => {
 		display: none;
 	}
 }
+
+/* ======= 独家定制：Web级高端 UI 布局修复 (2026-03 Refactor) ======= */
+
+/* 1. 修复欢迎屏中心布局与间距 */
+.welcome-content {
+	display: flex !important;
+	flex-direction: column !important;
+	align-items: center !important;
+	justify-content: center !important;
+	width: 100% !important;
+	margin-top: 140rpx !important;
+}
+
+/* 2. 让头像呼吸发光 */
+.zen-avatar-img {
+	width: 160rpx !important;
+	height: 160rpx !important;
+	border-radius: 0 !important;
+	background: transparent !important;
+	padding: 0 !important;
+	box-shadow: none !important;
+	margin-bottom: 24rpx !important;
+}
+
+.zen-avatar-breathe {
+	animation: floatAvatar 4s ease-in-out infinite !important;
+}
+
+@keyframes floatAvatar {
+	0%, 100% { transform: translateY(0); }
+	50% { transform: translateY(-10rpx); }
+}
+
+/* 3. 字体层次：高级、克制、醒目 */
+.zen-title {
+	font-size: 44rpx !important;
+	font-weight: 800 !important;
+	background: linear-gradient(135deg, #1e293b 0%, #475569 100%) !important;
+	-webkit-background-clip: text !important;
+	color: transparent !important;
+	letter-spacing: 2rpx !important;
+	margin-bottom: 16rpx !important;
+	line-height: 1.2 !important;
+}
+
+.zen-title-expert {
+    background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%) !important;
+    -webkit-background-clip: text !important;
+    color: transparent !important;
+}
+
+.zen-title-coach {
+    background: linear-gradient(135deg, #059669 0%, #10b981 100%) !important;
+    -webkit-background-clip: text !important;
+    color: transparent !important;
+}
+
+.zen-subtitle {
+	font-size: 28rpx !important;
+	color: #64748b !important;
+	font-weight: 500 !important;
+	max-width: 85% !important;
+	text-align: center !important;
+	line-height: 1.5 !important;
+	margin-bottom: 60rpx !important;
+}
+
+/* 4. 重构卡片网格 (解决粘连、居中、和按钮默认流破坏) */
+.suggestion-chips {
+	width: 100% !important;
+	padding: 0 40rpx !important;
+	box-sizing: border-box !important;
+}
+
+.zen-suggestion-grid, .zen-level-grid, .coach-entry-grid {
+	display: flex !important;
+	flex-direction: column !important;
+	gap: 24rpx !important;
+	width: 100% !important;
+	box-sizing: border-box !important;
+}
+
+/* 如果是小程序教练页的并排网格 */
+.coach-entry-grid {
+    flex-direction: row !important;
+}
+.coach-entry-card {
+    flex: 1 !important;
+}
+
+/* 5. 重新定义卡片（Web级玻璃拟态） */
+.zen-card.zen-card-button, .zen-level-card.zen-level-card-button {
+	background: rgba(255, 255, 255, 0.8) !important;
+	backdrop-filter: blur(20px) !important;
+	-webkit-backdrop-filter: blur(20px) !important;
+	border: 2rpx solid rgba(255, 255, 255, 0.9) !important;
+	border-radius: 36rpx !important;
+	padding: 36rpx 40rpx !important;
+	box-shadow: 0 12rpx 40rpx rgba(31, 38, 135, 0.05), inset 0 2px 4px rgba(255, 255, 255, 0.8) !important;
+	display: flex !important;
+	flex-direction: column !important;
+	align-items: center !important;
+	text-align: center !important;
+	width: 100% !important;
+	line-height: normal !important;
+	box-sizing: border-box !important;
+	position: relative !important;
+	overflow: hidden !important;
+}
+
+.zen-card.zen-card-button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 100%;
+    background: linear-gradient(135deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 100%);
+    pointer-events: none;
+}
+
+.zen-card-content, .zen-level-info {
+	display: flex !important;
+	flex-direction: column !important;
+	gap: 8rpx !important;
+	width: 100% !important;
+}
+
+.zen-card-title, .zen-level-title {
+	font-size: 32rpx !important;
+	font-weight: 700 !important;
+	color: #1e293b !important;
+	display: block !important;
+}
+
+.zen-card-desc, .zen-level-desc-mini {
+	font-size: 24rpx !important;
+	color: #94a3b8 !important;
+	font-weight: 500 !important;
+	display: block !important;
+	white-space: normal !important;
+	word-wrap: break-word !important;
+	line-height: 1.4 !important;
+}
+
+/* 6. 解决输入区域上边缘过硬的问题 */
+.mp-chat-footer {
+	background: linear-gradient(to bottom, rgba(248,250,252,0) 0%, rgba(248,250,252,0.95) 20%, #f8fafc 100%) !important;
+}
+
+
+/* 修复教练与专家界面的高度重叠 */
+.coach-stage, .expert-stage, .mode-stage-offset {
+    margin-top: 180rpx !important;
+    padding-top: 40rpx !important;
+}
+.zen-card-title, .zen-level-title {
+    margin-top: 12rpx !important;
+    justify-content: center !important;
+    width: 100% !important;
+    text-align: center !important;
+}
+.zen-card-content, .zen-level-info {
+    align-items: center !important;
+    text-align: center !important;
+    width: 100% !important;
+}
+
+
+/* 实战情报中心折叠逻辑 */
+.combat-intel-panel.collapsed {
+    transform: translateX(110%) !important;
+    pointer-events: none !important;
+}
+
+.panel-header-btns {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.panel-collapse-btn {
+    font-size: 40rpx;
+    color: #64748b;
+    padding: 10rpx;
+    line-height: 1;
+}
+
+.combat-intel-minimized {
+    position: fixed;
+    right: 0;
+    top: 30%;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    border-right: none;
+    border-radius: 40rpx 0 0 40rpx;
+    padding: 16rpx 20rpx 16rpx 30rpx;
+    display: flex;
+    align-items: center;
+    gap: 8rpx;
+    box-shadow: -4rpx 8rpx 24rpx rgba(0, 0, 0, 0.1);
+    z-index: 999;
+    animation: slideInRight 0.3s ease;
+}
+
+@keyframes slideInRight {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+}
+
+.minimized-icon {
+    font-size: 32rpx;
+}
+
+.minimized-text {
+    font-size: 24rpx;
+    font-weight: 600;
+    color: #5046e5;
+    white-space: nowrap;
+}
+
 </style>
