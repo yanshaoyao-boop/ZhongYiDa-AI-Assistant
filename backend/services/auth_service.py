@@ -18,6 +18,7 @@ SECRET_KEY = _env_key
 
 ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "480"))
+REMEMBER_ME_EXPIRE_DAYS = int(os.getenv("REMEMBER_ME_EXPIRE_DAYS", "90"))
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """验证明文密码是否与哈希值匹配"""

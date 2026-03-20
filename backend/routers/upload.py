@@ -14,7 +14,7 @@ from services.doc_parser import chunk_text, parse_document
 from services.llm_client import analyze_coach_case, get_embedding
 from services.quote_service import DATA_DIR as QUOTE_DIR
 from services.quote_service import load_all_quotes, parse_quote_file
-from services.rag_service import add_documents_to_db, delete_documents_by_source
+from services.rag_service import add_documents_to_db, delete_documents_by_source, delete_documents_by_source_key
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 
@@ -31,6 +31,28 @@ _UPLOAD_TASKS = {}
 _UPLOAD_TASKS_LOCK = threading.Lock()
 _CHAT_IMAGE_UPLOADS = {}
 _CHAT_IMAGE_UPLOADS_LOCK = threading.Lock()
+DOCUMENT_CATEGORIES = {"admin", "biz"}
+
+
+def _normalize_document_category(category: str | None) -> str:
+    if category in DOCUMENT_CATEGORIES:
+        return str(category)
+    return "biz"
+
+
+def _get_docs_category_dir(category: str | None) -> str:
+    normalized = _normalize_document_category(category)
+    category_dir = os.path.join(UPLOAD_DOCS_DIR, normalized)
+    os.makedirs(category_dir, exist_ok=True)
+    return category_dir
+
+
+def _get_document_file_path(category: str | None, filename: str) -> str:
+    return os.path.join(_get_docs_category_dir(category), filename)
+
+
+def _build_source_key(category: str | None, filename: str) -> str:
+    return f"{_normalize_document_category(category)}::{filename}"
 
 
 def _task_timestamp():
@@ -136,7 +158,8 @@ async def _process_document_file(file_path: str, safe_filename: str, category: s
             processed_chunks=0,
         )
 
-    await asyncio.to_thread(delete_documents_by_source, safe_filename)
+    source_key = _build_source_key(category, safe_filename)
+    await asyncio.to_thread(delete_documents_by_source_key, source_key)
 
     batch_size = 5
     processed_chunks = 0
@@ -146,7 +169,7 @@ async def _process_document_file(file_path: str, safe_filename: str, category: s
         embeddings = await asyncio.gather(*[get_embedding(chunk) for chunk in batch])
 
         ids = [f"{safe_filename}_chunk_{batch_start + index}_{uuid.uuid4().hex[:8]}" for index in range(len(batch))]
-        metadatas = [{"source": safe_filename, "category": category}] * len(batch)
+        metadatas = [{"source": safe_filename, "source_key": source_key, "category": category}] * len(batch)
 
         await asyncio.to_thread(
             add_documents_to_db,
@@ -219,8 +242,9 @@ async def upload_document(
     async_mode: bool = False,
     admin: User = Depends(has_permission("edit_knowledge")),
 ):
+    category = _normalize_document_category(category)
     safe_filename = os.path.basename(file.filename or "")
-    file_path = os.path.join(UPLOAD_DOCS_DIR, safe_filename)
+    file_path = _get_document_file_path(category, safe_filename)
     content = await file.read()
 
     async with aiofiles.open(file_path, "wb") as buffer:
@@ -309,19 +333,24 @@ async def list_documents(
     user: User = Depends(get_current_user),
 ):
     try:
-        if not os.path.exists(UPLOAD_DOCS_DIR):
-            return {"files": []}
-
-        from services.rag_service import collection
-
         if category:
-            results = collection.get(where={"category": category}, include=["metadatas"])
-            files = list({metadata["source"] for metadata in results["metadatas"]})
+            category_dir = _get_docs_category_dir(category)
+            if not os.path.exists(category_dir):
+                return {"files": []}
+            files = [name for name in os.listdir(category_dir) if os.path.isfile(os.path.join(category_dir, name))]
+            files.sort(key=lambda name: os.path.getmtime(os.path.join(category_dir, name)), reverse=True)
         else:
-            files = [name for name in os.listdir(UPLOAD_DOCS_DIR) if os.path.isfile(os.path.join(UPLOAD_DOCS_DIR, name))]
-
-        files = [name for name in files if os.path.exists(os.path.join(UPLOAD_DOCS_DIR, name))]
-        files.sort(key=lambda name: os.path.getmtime(os.path.join(UPLOAD_DOCS_DIR, name)), reverse=True)
+            files = []
+            for doc_category in sorted(DOCUMENT_CATEGORIES):
+                category_dir = _get_docs_category_dir(doc_category)
+                if not os.path.exists(category_dir):
+                    continue
+                files.extend(
+                    name
+                    for name in os.listdir(category_dir)
+                    if os.path.isfile(os.path.join(category_dir, name))
+                )
+            files = sorted(set(files))
         return {"files": files}
     except Exception as error:
         raise HTTPException(status_code=500, detail=str(error))
@@ -330,15 +359,22 @@ async def list_documents(
 @router.delete("/document/{filename}")
 async def delete_document(
     filename: str,
+    category: str = None,
     admin: User = Depends(has_permission("edit_knowledge")),
 ):
     try:
         safe_filename = os.path.basename(filename)
-        file_path = os.path.join(UPLOAD_DOCS_DIR, safe_filename)
-        if os.path.exists(file_path):
-            os.remove(file_path)
+        categories = [_normalize_document_category(category)] if category else sorted(DOCUMENT_CATEGORIES)
+        deleted_any = False
+        for doc_category in categories:
+            file_path = _get_document_file_path(doc_category, safe_filename)
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                deleted_any = True
+            await asyncio.to_thread(delete_documents_by_source_key, _build_source_key(doc_category, safe_filename))
 
-        await asyncio.to_thread(delete_documents_by_source, safe_filename)
+        if not deleted_any and category is None:
+            await asyncio.to_thread(delete_documents_by_source, safe_filename)
         return {"status": "success", "message": f"Document {filename} deleted successfully."}
     except Exception as error:
         raise HTTPException(status_code=500, detail=str(error))

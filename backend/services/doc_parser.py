@@ -5,6 +5,15 @@ from docx import Document
 from typing import List
 from services.llm_client import describe_image
 
+PDF_VISION_MIN_TEXT_CHARS = 80
+PDF_VISION_MAX_IMAGES_PER_PAGE = 2
+
+
+def should_use_pdf_vision(page_text: str, image_count: int, min_text_chars: int = PDF_VISION_MIN_TEXT_CHARS) -> bool:
+    if image_count <= 0:
+        return False
+    return len((page_text or "").strip()) < min_text_chars
+
 async def extract_text_from_pdf(file_path: str) -> str:
     """Extract text from a PDF file using PyMuPDF and handle images vision-wise."""
     text = ""
@@ -14,11 +23,15 @@ async def extract_text_from_pdf(file_path: str) -> str:
             page = doc.load_page(page_num)
             
             # 1. 提取普通文字
-            text += page.get_text() + "\n"
+            page_text = page.get_text()
+            text += page_text + "\n"
             
             # 2. 提取图片并进行视觉描述
             image_list = page.get_images(full=True)
-            for img_index, img in enumerate(image_list):
+            if not should_use_pdf_vision(page_text, len(image_list)):
+                continue
+
+            for img_index, img in enumerate(image_list[:PDF_VISION_MAX_IMAGES_PER_PAGE]):
                 xref = img[0]
                 base_image = doc.extract_image(xref)
                 image_bytes = base_image["image"]

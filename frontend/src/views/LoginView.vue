@@ -38,6 +38,11 @@
           {{ auth.error }}
         </div>
 
+        <label class="remember-row">
+          <input v-model="rememberMe" type="checkbox" :disabled="auth.loading" />
+          <span>90天内免登录</span>
+        </label>
+
         <button type="submit" :disabled="auth.loading" class="login-btn">
           <span v-if="auth.loading" class="loader"></span>
           <span v-else>立即登录</span>
@@ -61,11 +66,12 @@ const auth = useAuthStore()
 
 const username = ref('')
 const password = ref('')
+const rememberMe = ref(true)
 
 const handleLogin = async () => {
   if (!username.value || !password.value) return
   
-  const success = await auth.login(username.value, password.value)
+  const success = await auth.login(username.value, password.value, rememberMe.value)
   if (success) {
     router.push('/')
   }
@@ -182,6 +188,20 @@ input:focus {
   font-size: 14px;
   font-weight: 500;
   text-align: center;
+}
+
+.remember-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #486581;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.remember-row input {
+  width: 16px;
+  height: 16px;
 }
 
 .login-btn {

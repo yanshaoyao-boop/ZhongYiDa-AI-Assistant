@@ -22,7 +22,7 @@
         <div class="user-list">
           <div 
             class="user-item" 
-            :class="{ active: selectedUserId === null }"
+            :class="{ active: selectedAuditKey === null }"
             @click="selectUser(null)"
           >
             <div class="user-main">
@@ -31,13 +31,13 @@
           </div>
           <div 
             v-for="stat in userStats" 
-            :key="stat.user_id" 
+            :key="stat.audit_key" 
             class="user-item"
-            :class="{ active: selectedUserId === stat.user_id }"
-            @click="selectUser(stat.user_id)"
+            :class="{ active: selectedAuditKey === stat.audit_key }"
+            @click="selectUser(stat.audit_key)"
           >
             <div class="user-main">
-              <span class="user-name">{{ stat.username }}</span>
+              <span class="user-name">{{ stat.display_name || stat.username }}</span>
               <span class="msg-count">{{ stat.message_count }} 条</span>
             </div>
             <div class="user-last-active">
@@ -72,7 +72,10 @@
           
           <div v-for="log in logs" :key="log.id" class="log-card">
             <div class="log-header">
-              <span class="user-badge">{{ log.username }}</span>
+              <span class="user-badge">{{ log.display_name || log.username }}</span>
+              <span v-if="log.login_username && log.login_username !== (log.display_name || log.username)" class="login-account">
+                账号: {{ log.login_username }}
+              </span>
               <span class="time">{{ new Date(log.created_at).toLocaleString() }}</span>
               <span class="cost-time" v-if="log.processing_time">耗时: {{ log.processing_time.toFixed(2) }}s</span>
             </div>
@@ -100,7 +103,7 @@ const logs = ref([])
 const userStats = ref([])
 const loading = ref(false)
 const searchQuery = ref('')
-const selectedUserId = ref(null)
+const selectedAuditKey = ref(null)
 const currentPage = ref(0)
 const limit = 20
 
@@ -124,7 +127,7 @@ const fetchLogs = async (page = 0) => {
       params: {
         skip: page * limit,
         limit,
-        user_id: selectedUserId.value === null ? undefined : selectedUserId.value,
+        audit_key: selectedAuditKey.value === null ? undefined : selectedAuditKey.value,
         search: searchQuery.value || undefined
       },
       headers: {
@@ -140,8 +143,8 @@ const fetchLogs = async (page = 0) => {
   }
 }
 
-const selectUser = (userId) => {
-  selectedUserId.value = userId
+const selectUser = (auditKey) => {
+  selectedAuditKey.value = auditKey
   fetchLogs(0)
 }
 
@@ -355,6 +358,11 @@ onMounted(() => {
   padding: 2px 8px;
   border-radius: 12px;
   font-weight: 600;
+}
+
+.login-account {
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .message-bubble {

@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import List, Optional
@@ -12,6 +12,14 @@ from dependencies import get_current_user, User
 from fastapi import Depends
 
 from services.llm_client import chat_completion_stream, get_embedding, DOUBAO_MODEL_ENDPOINT
+from services.chat_intelligence import (
+    build_document_search_query,
+    build_document_source_footer,
+    build_intent_clarification_message,
+    infer_knowledge_category,
+    rerank_similar_documents,
+    summarize_document_sources,
+)
 from services.rag_service import search_similar_documents
 from services.quote_service import get_quote_data_as_string
 from services.tracking_service import fetch_tracking_info
@@ -206,6 +214,8 @@ async def chat_stream(
             request.message = f"[图片解析失败，请提醒用户重新上传] " + request.message
 
     system_prompt = ""
+    document_source_footer = ""
+    prebuilt_response_text = ""
     
     if request.mode == "coach":
         # 检测是否是启动挑战场景的指令 (从当前消息或历史消息中寻找最近的指令)
@@ -376,8 +386,19 @@ async def chat_stream(
 """
 
     else:
-        intent, request.message = await classify_intent(request.message, request.history)
-        if intent == "quote":
+        try:
+            intent, request.message = await classify_intent(request.message, request.history)
+        except Exception as e:
+            print(f'Intent Error: {e}')
+            intent = 'document'
+        clarification_message = build_intent_clarification_message(
+            intent,
+            request.message,
+            request.history,
+        )
+        if clarification_message:
+            prebuilt_response_text = clarification_message
+        elif intent == "quote":
             # Handle Quote Query
             search_query = request.message
             if request.history:
@@ -492,24 +513,39 @@ async def chat_stream(
 
         else:
             # Handle RAG Document Query 
-            # --- 智能查询改写 (针对公司介绍类短查询) ---
-            search_query = request.message
-            if len(search_query) < 15 and any(kw in search_query for kw in COMPANY_INTRO_KEYWORDS):
-                search_query += " 仲易达集团公司简介、发展历程、核心业务、企业文化、优势特色"
+            search_query = build_document_search_query(
+                request.message,
+                request.history,
+                COMPANY_INTRO_KEYWORDS,
+            )
             
             # 执行检索：由后台设置决定是否开启 RAG
             context_text = ""
             best_distance = 1.0
             similar_docs = []
+            source_summary = ""
+            search_category = infer_knowledge_category(search_query)
             
             enable_rag = get_config("ai_enable_rag", "true").lower() == "true"
             if enable_rag:
-                query_embedding = await get_embedding(search_query)
-                top_k = int(get_config("ai_search_top_k", "5"))
-                similar_docs = await asyncio.to_thread(search_similar_documents, query_embedding, top_k)
+                try:
+                    query_embedding = await get_embedding(search_query)
+                    top_k = int(get_config('ai_search_top_k', '5'))
+                    similar_docs = await asyncio.to_thread(
+                        search_similar_documents,
+                        query_embedding,
+                        top_k,
+                        search_category,
+                    )
+                    similar_docs = rerank_similar_documents(search_query, similar_docs)
+                except Exception as e:
+                    print(f'RAG Search failed: {e}')
+                    similar_docs = []
                 
                 if similar_docs:
                     best_distance = similar_docs[0]["distance"]
+                    source_summary = summarize_document_sources(similar_docs)
+                    document_source_footer = build_document_source_footer(similar_docs)
                     print(f">> RAG Hit! Best distance: {best_distance:.4f}, Chunks: {len(similar_docs)}")
                     for i, doc in enumerate(similar_docs):
                         context_text += f"---\n[内部资料片段 {i+1} | 来源: {doc['metadata'].get('source', '未知文档')}]\n{doc['document']}\n"
@@ -517,7 +553,7 @@ async def chat_stream(
                 print(">> RAG is disabled by system settings.")
             
             # 标记 RAG 结果是否较差 (阈值微调为 0.58)
-            if not similar_docs or best_distance > 0.58:
+            if not similar_docs or best_distance > 0.65:
                  needs_realtime = True
             
             system_prompt = f"""你是一个名为“小易”的企业级高级助理，现在的身份是【仲易达内部专家顾问】。
@@ -539,6 +575,9 @@ async def chat_stream(
 
 【内部知识检索权威材料（必读）】：
 {context_text if context_text else '（内部文档库中暂无匹配内容，请结合联网搜索或引导用户咨询同事）'}
+
+【内部资料来源提示】：
+{source_summary if source_summary else '（本轮暂无明确来源文件）'}
 
 【回复风格】：干练、专业、有理有据。
 """
@@ -614,8 +653,8 @@ async def chat_stream(
 
     # 安全过滤：只允许 user / assistant 角色进入上下文，防止 Prompt Injection
     _ALLOWED_ROLES = {"user", "assistant"}
-    # 动态上下文窗口：从设置中读取
-    max_history = int(get_config("ai_max_history", "10"))
+    # 动态上下文窗口：从设置中读取 (默认提高到 40 条对话记录，支持长对话连贯性)
+    max_history = int(get_config("ai_max_history", "40"))
     if request.history:
         safe_history = [
             m for m in request.history[-max_history:]
@@ -631,7 +670,12 @@ async def chat_stream(
         """
         line_buffer = ""
         full_response = ""
+        stream_had_error = False
         start_time = time.time()
+        if prebuilt_response_text:
+            full_response = prebuilt_response_text
+            yield prebuilt_response_text
+            return
         # 确定最终使用的模型接入点
         # 如果 request.use_deepseek 为 True，则强行使用理性的推理接入点
         final_endpoint = DEEPSEEK_ENDPOINT if request.use_deepseek else DOUBAO_MODEL_ENDPOINT
@@ -666,6 +710,7 @@ async def chat_stream(
                             error_msg = err_obj.get("message", "API Error") if isinstance(err_obj, dict) else str(err_obj)
                             error_res = f"\n[模型服务错误：{error_msg}]"
                             full_response += error_res
+                            stream_had_error = True
                             yield error_res
                             break
                         
@@ -688,10 +733,14 @@ async def chat_stream(
                             error_msg = err_info.get("message", "Unknown error") if isinstance(err_info, dict) else str(err_info)
                             error_res = f"\n[实时搜索服务错误：{error_msg}]"
                             full_response += error_res
+                            stream_had_error = True
                             yield error_res
                             break
                     except json.JSONDecodeError:
                         continue
+            if document_source_footer and full_response and not stream_had_error:
+                full_response += document_source_footer
+                yield document_source_footer
         except Exception as e:
             import traceback
             traceback.print_exc()

@@ -239,6 +239,66 @@ export const useAuthStore = defineStore('auth', {
             }
         },
 
+        async changePassword(oldPassword, newPassword) {
+            this.loading = true
+            this.error = null
+
+            try {
+                // #ifdef MP-WEIXIN
+                return await new Promise((resolve) => {
+                    const requestUrl = resolveApiUrl('/api/auth/change-password')
+                    uni.request({
+                        url: requestUrl,
+                        method: 'POST',
+                        timeout: 15000,
+                        header: {
+                            Authorization: `Bearer ${this.token}`,
+                            'content-type': 'application/json'
+                        },
+                        data: {
+                            old_password: oldPassword,
+                            new_password: newPassword
+                        },
+                        success: (res) => {
+                            if (res.statusCode === 200) {
+                                resolve({ success: true, message: res.data?.message || '密码修改成功' })
+                                return
+                            }
+
+                            resolve({
+                                success: false,
+                                message: res.data?.detail || '修改失败，请检查当前密码是否正确'
+                            })
+                        },
+                        fail: (err) => {
+                            resolve({
+                                success: false,
+                                message: buildRequestFailMessage(err.errMsg, requestUrl)
+                            })
+                        }
+                    })
+                })
+                // #endif
+
+                // #ifndef MP-WEIXIN
+                const response = await axios.post('/api/auth/change-password', {
+                    old_password: oldPassword,
+                    new_password: newPassword
+                })
+                return { success: true, message: response.data?.message || '密码修改成功' }
+                // #endif
+            } catch (error) {
+                // #ifndef MP-WEIXIN
+                return {
+                    success: false,
+                    message: error.response?.data?.detail || '修改失败，请检查当前密码是否正确'
+                }
+                // #endif
+            } finally {
+                this.loading = false
+            }
+        },
+
         logout() {
             this.token = null
             this.user = null

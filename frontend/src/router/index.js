@@ -29,25 +29,25 @@ const routes = [
     path: '/admin/notices',
     name: 'NoticeManager',
     component: () => import('../views/NoticeView.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true }
+    meta: { requiresAuth: true, requiresAdmin: true, requiredPermission: 'edit_notices' }
   },
   {
     path: '/admin/staff',
     name: 'Staff',
     component: () => import('../views/StaffView.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true }
+    meta: { requiresAuth: true, requiresAdmin: true, requiredPermission: 'manage_staff' }
   },
   {
     path: '/admin/lab',
     name: 'Lab',
     component: () => import('../views/LabView.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true }
+    meta: { requiresAuth: true, requiresAdmin: true, requiredPermission: 'edit_settings' }
   },
   {
     path: '/admin/chat-logs',
     name: 'ChatLogs',
     component: () => import('../views/ChatLogsView.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true, requiresChatAudit: true }
+    meta: { requiresAuth: true, requiresAdmin: true, requiredPermission: 'view_logs' }
   }
 ]
 
@@ -70,7 +70,7 @@ router.beforeEach((to, from, next) => {
   else if (to.meta.requiresAdmin && !auth.isAdmin) {
     next('/')
   }
-  else if (to.meta.requiresChatAudit && !auth.canViewChatAudit) {
+  else if (to.meta.requiredPermission && !auth.hasPermission(to.meta.requiredPermission)) {
     next('/admin')
   }
   // 已登录状态访问登录页，跳转首页

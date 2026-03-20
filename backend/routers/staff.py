@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database import get_db
-from dependencies import get_admin_user, has_permission
+from dependencies import get_staff_admin_user, has_permission
 from models.user import Branch, Department, RoleTemplate as RoleTemplateModel, User
 from services.auth_service import get_password_hash
 
@@ -169,7 +169,7 @@ def _ensure_branch_admin_can_manage(
 
 
 @router.get("/users")
-def list_users(db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+def list_users(db: Session = Depends(get_db), admin: User = Depends(get_staff_admin_user)):
     query = db.query(User)
     if admin.role not in FULL_BRANCH_ACCESS_ROLES:
         query = query.filter(User.branch_id == admin.branch_id)
@@ -180,7 +180,7 @@ def list_users(db: Session = Depends(get_db), admin: User = Depends(get_admin_us
 def create_user(
     data: UserCreate,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_admin_user),
+    admin: User = Depends(get_staff_admin_user),
 ):
     existing = db.query(User).filter(User.username == data.username).first()
     if existing:
@@ -205,7 +205,7 @@ def create_user(
 
 
 @router.get("/users/export")
-def export_users(db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+def export_users(db: Session = Depends(get_db), admin: User = Depends(get_staff_admin_user)):
     query = db.query(User)
     if admin.role == "branch_admin":
         query = query.filter(User.branch_id == admin.branch_id)
@@ -243,7 +243,7 @@ def export_users(db: Session = Depends(get_db), admin: User = Depends(get_admin_
 async def import_users(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    admin: User = Depends(get_admin_user),
+    admin: User = Depends(get_staff_admin_user),
 ):
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="please upload an Excel file")
@@ -318,7 +318,7 @@ def update_user(
     user_id: int,
     data: UserUpdate,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_admin_user),
+    admin: User = Depends(get_staff_admin_user),
 ):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -351,7 +351,7 @@ def update_user_password(
     user_id: int,
     data: PasswordUpdate,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_admin_user),
+    admin: User = Depends(get_staff_admin_user),
 ):
     if not data.password.strip():
         raise HTTPException(status_code=400, detail="password cannot be empty")
@@ -372,7 +372,7 @@ def update_user_password(
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_admin_user),
+    admin: User = Depends(get_staff_admin_user),
 ):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -389,7 +389,7 @@ def delete_user(
 
 
 @router.get("/structure")
-def get_structure(db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+def get_structure(db: Session = Depends(get_db), admin: User = Depends(get_staff_admin_user)):
     query = db.query(Branch)
     if admin.role == "branch_admin":
         query = query.filter(Branch.id == admin.branch_id)
@@ -410,7 +410,7 @@ def get_structure(db: Session = Depends(get_db), admin: User = Depends(get_admin
 def create_branch(
     data: BranchBase,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_admin_user),
+    admin: User = Depends(get_staff_admin_user),
 ):
     if admin.role not in FULL_ORG_MANAGEMENT_ROLES:
         raise HTTPException(
@@ -428,7 +428,7 @@ def create_branch(
 def create_dept(
     data: DepartmentCreate,
     db: Session = Depends(get_db),
-    admin: User = Depends(get_admin_user),
+    admin: User = Depends(get_staff_admin_user),
 ):
     if admin.role == "branch_admin" and data.branch_id != admin.branch_id:
         raise HTTPException(
@@ -443,7 +443,7 @@ def create_dept(
 
 
 @router.get("/role-templates")
-def get_role_templates(db: Session = Depends(get_db), admin: User = Depends(get_admin_user)):
+def get_role_templates(db: Session = Depends(get_db), admin: User = Depends(get_staff_admin_user)):
     default_templates = _default_role_templates()
 
     try:

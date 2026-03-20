@@ -10,6 +10,7 @@
     "test:admin-upload-polling": "node scripts/test-admin-upload-polling.cjs",
     "test:backend-smoke": "node scripts/test-backend-smoke.cjs",
     "test:chat-page-bindings": "node scripts/test-chat-page-bindings.cjs",
+    "test:chat-settings-sync": "node scripts/test-chat-settings-sync.cjs",
     "test:chat-scroll-entry-polish": "node scripts/test-chat-scroll-entry-polish.cjs",
     "test:chat-message-composer-baseline": "node scripts/test-chat-message-composer-baseline.cjs",
     "test:chat-mp-tail-visibility": "node scripts/test-chat-mp-tail-visibility.cjs",

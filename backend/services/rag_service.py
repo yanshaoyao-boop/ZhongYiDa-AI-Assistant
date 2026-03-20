@@ -38,6 +38,16 @@ def delete_documents_by_source(source_name: str):
         print(f"Error deleting previous chunks for {source_name}: {e}")
 
 
+def delete_documents_by_source_key(source_key: str):
+    """Delete all chunks belonging to a specific categorized source from ChromaDB."""
+    try:
+        collection.delete(
+            where={"source_key": source_key}
+        )
+    except Exception as e:
+        print(f"Error deleting previous chunks for {source_key}: {e}")
+
+
 def search_similar_documents(query_embedding: list[float], n_results: int = 3, category: str = None):
     """Search for the most similar document chunks given a query embedding"""
     

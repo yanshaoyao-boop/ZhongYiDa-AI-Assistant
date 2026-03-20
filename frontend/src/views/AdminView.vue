@@ -15,9 +15,9 @@
             </span>
             <button @click="auth.logout(); router.push('/login')" class="logout-btn">退出登录</button>
           </div>
-          <router-link to="/admin/notices" class="nav-btn">通知管理</router-link>
-          <router-link to="/admin/staff" class="nav-btn">账号管理</router-link>
-          <router-link to="/admin/lab" class="nav-btn">小易实验室</router-link>
+          <router-link v-if="auth.canEditNotices" to="/admin/notices" class="nav-btn">通知管理</router-link>
+          <router-link v-if="auth.canManageStaff" to="/admin/staff" class="nav-btn">账号管理</router-link>
+          <router-link v-if="auth.canEditSettings" to="/admin/lab" class="nav-btn">小易实验室</router-link>
           <router-link v-if="auth.canViewChatAudit" to="/admin/chat-logs" class="nav-btn">会话审计</router-link>
           <router-link to="/" class="nav-btn-outline">返回助手</router-link>
         </div>
@@ -61,7 +61,7 @@
           <ul>
             <li v-for="file in uploadedAdmin" :key="file">
               <span class="file-name">{{ file }}</span>
-              <button class="btn-delete" @click="deleteDoc(file)" title="删除">🗑️</button>
+              <button class="btn-delete" @click="deleteDoc(file, 'admin')" title="删除">🗑️</button>
             </li>
           </ul>
         </div>
@@ -102,7 +102,7 @@
           <ul>
             <li v-for="file in uploadedBiz" :key="file">
               <span class="file-name">{{ file }}</span>
-              <button class="btn-delete" @click="deleteDoc(file)" title="删除">🗑️</button>
+              <button class="btn-delete" @click="deleteDoc(file, 'biz')" title="删除">🗑️</button>
             </li>
           </ul>
         </div>
@@ -414,10 +414,10 @@ const {
 })
 
 // ─── 删除文档 ─────────────────────────────────────────────────
-const deleteDoc = async (filename) => {
+const deleteDoc = async (filename, category) => {
   if (!confirm(`确定要从系统记忆中删除【${filename}】吗？删除后不可恢复。`)) return
   try {
-    await axios.delete(`${BASE_URL}/document/${encodeURIComponent(filename)}`)
+    await axios.delete(`${BASE_URL}/document/${encodeURIComponent(filename)}?category=${encodeURIComponent(category)}`)
     fetchUploadedDocs()
   } catch (err) {
     alert(`删除失败: ${err.response?.data?.detail || err.message}`)

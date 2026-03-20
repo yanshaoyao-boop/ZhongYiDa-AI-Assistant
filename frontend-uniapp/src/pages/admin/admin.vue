@@ -1,11 +1,11 @@
-<template>
+﻿<template>
 	<!-- #ifdef H5 -->
 	<view class="desktop-admin-shell-v2">
 		<view class="desktop-admin-layout">
 			<view class="desktop-admin-sidebar">
 				<view class="brand-zone" @tap="navigateToHome">
 					<image src="/static/logo.png" mode="aspectFit" class="desktop-logo" />
-					<text class="desktop-brand-name">小易智能后台</text>
+					<text class="desktop-brand-name">灏忔槗鏅鸿兘鍚庡彴</text>
 				</view>
 
 				<view class="sidebar-menu">
@@ -24,7 +24,7 @@
 				<view class="sidebar-footer">
 					<view class="user-pill-pc">
 						<text class="user-pill-name-pc">{{ auth.userName }}</text>
-						<view class="logout-mini-pc" @tap="handleRouterLogout">退出</view>
+                        <view class="logout-mini-pc" @tap="handleRouterLogout">退出</view>
 					</view>
 				</view>
 			</view>
@@ -33,17 +33,17 @@
 				<view v-if="currentActiveTab === 'knowledge'" class="admin-panel knowledge-panel">
 					<view class="panel-header">
 						<view>
-							<text class="panel-title">业务知识库管理</text>
-							<text class="panel-subtitle">上传知识文档并同步到当前后端，不改动小易原有后端逻辑。</text>
+                            <text class="panel-title">业务知识库管理</text>
+                            <text class="panel-subtitle">上传知识文档并同步到当前后端，不改动小易原有后端逻辑。</text>
 						</view>
 					</view>
 
 					<view class="upload-sections">
 						<view class="upload-card">
-							<text class="section-title">行政资料</text>
+                            <text class="section-title">行政资料</text>
 							<view class="drop-zone" @tap="triggerAdminSelect" @drop.prevent="handleAdminDrop" @dragover.prevent>
 								<IconUpload size="32" color="#6366f1" />
-								<text>点击或拖拽上传文档</text>
+                                <text>点击或拖拽上传文档</text>
 								<input ref="adminInput" type="file" style="display:none" multiple @change="handleAdminSelected" />
 							</view>
 							<text v-if="adminMessage" class="upload-message">{{ adminMessage }}</text>
@@ -51,16 +51,16 @@
 								<view v-for="file in uploadedAdmin" :key="file" class="file-item">
 									<IconFileBox size="16" />
 									<text class="filename">{{ file }}</text>
-									<text class="delete-btn" @tap="deleteDoc(file)">删除</text>
+                                    <text class="delete-btn" @tap="deleteDoc(file)">删除</text>
 								</view>
 							</view>
 						</view>
 
 						<view class="upload-card">
-							<text class="section-title">业务资料</text>
+                            <text class="section-title">业务资料</text>
 							<view class="drop-zone" @tap="triggerBizSelect" @drop.prevent="handleBizDrop" @dragover.prevent>
 								<IconUpload size="32" color="#10b981" />
-								<text>点击或拖拽上传文档</text>
+                                <text>点击或拖拽上传文档</text>
 								<input ref="bizInput" type="file" style="display:none" multiple @change="handleBizSelected" />
 							</view>
 							<text v-if="bizMessage" class="upload-message">{{ bizMessage }}</text>
@@ -68,7 +68,7 @@
 								<view v-for="file in uploadedBiz" :key="file" class="file-item">
 									<IconFileBox size="16" />
 									<text class="filename">{{ file }}</text>
-									<text class="delete-btn" @tap="deleteDoc(file)">删除</text>
+                                    <text class="delete-btn" @tap="deleteDoc(file)">删除</text>
 								</view>
 							</view>
 						</view>
@@ -77,8 +77,8 @@
 
 				<view v-else class="admin-panel placeholder-panel">
 					<view class="info-alert">
-						<text>这个模块已迁移为独立管理页，入口仍复用原后端接口。</text>
-						<button class="go-detail-btn" @tap="navigateToCurrentTab">立即前往</button>
+                        <text>这个模块已迁移为独立管理页，入口仍复用原后端接口。</text>
+                        <button class="go-detail-btn" @tap="navigateToCurrentTab">立即前往</button>
 					</view>
 				</view>
 			</view>
@@ -92,7 +92,7 @@
 			<view class="nav-btn-circle" @tap="navigateToHome">
 				<IconHome size="20" />
 			</view>
-			<text class="page-title">管理后台</text>
+			<text class="page-title">绠＄悊鍚庡彴</text>
 			<view style="width: 72rpx;"></view>
 		</view>
 
@@ -141,76 +141,96 @@
 
 			<view v-if="currentKnowledgeSection === 'admin'" class="mp-knowledge-card">
 				<view class="mp-knowledge-head">
-					<text class="mp-knowledge-title">行政资料</text>
+                    <text class="mp-knowledge-title">行政资料</text>
 					<button class="mp-knowledge-btn" :disabled="mpUploading" @tap="selectAndUploadDocument('admin')">
-						{{ mpUploading ? '上传中' : '上传文件' }}
+                        {{ mpUploading ? '上传中' : '上传文件' }}
 					</button>
 				</view>
 				<text v-if="mpUploadMessage" class="mp-knowledge-meta">{{ mpUploadMessage }}</text>
 				<text v-if="mpUploadCategory === 'admin' && mpUploadStage" class="mp-knowledge-meta subtle">
-					{{ mpUploadStage }}<text v-if="mpUploadProgress > 0"> · {{ mpUploadProgress }}%</text>
+                    {{ mpUploadStage }}<text v-if="mpUploadProgress > 0"> · {{ mpUploadProgress }}%</text>
 				</text>
-				<view v-if="uploadedAdmin.length === 0" class="mp-knowledge-empty">暂无文件</view>
+                <view v-if="uploadedAdmin.length === 0" class="mp-knowledge-empty">暂无文件</view>
 				<view v-for="file in uploadedAdmin" :key="`admin-${file}`" class="mp-knowledge-item">
 					<text class="mp-knowledge-name">{{ file }}</text>
-					<text class="mp-knowledge-delete" @tap="deleteDoc(file)">删除</text>
+                    <text class="mp-knowledge-delete" @tap="deleteDoc(file)">删除</text>
 				</view>
 			</view>
 
 			<view v-else-if="currentKnowledgeSection === 'biz'" class="mp-knowledge-card">
 				<view class="mp-knowledge-head">
-					<text class="mp-knowledge-title">业务资料</text>
+                    <text class="mp-knowledge-title">业务资料</text>
 					<button class="mp-knowledge-btn" :disabled="mpUploading" @tap="selectAndUploadDocument('biz')">
-						{{ mpUploading ? '上传中' : '上传文件' }}
+                        {{ mpUploading ? '上传中' : '上传文件' }}
 					</button>
 				</view>
 				<text v-if="mpUploadMessage" class="mp-knowledge-meta">{{ mpUploadMessage }}</text>
 				<text v-if="mpUploadCategory === 'biz' && mpUploadStage" class="mp-knowledge-meta subtle">
-					{{ mpUploadStage }}<text v-if="mpUploadProgress > 0"> · {{ mpUploadProgress }}%</text>
+                    {{ mpUploadStage }}<text v-if="mpUploadProgress > 0"> · {{ mpUploadProgress }}%</text>
 				</text>
-				<view v-if="uploadedBiz.length === 0" class="mp-knowledge-empty">暂无文件</view>
+                <view v-if="uploadedBiz.length === 0" class="mp-knowledge-empty">暂无文件</view>
 				<view v-for="file in uploadedBiz" :key="`biz-${file}`" class="mp-knowledge-item">
 					<text class="mp-knowledge-name">{{ file }}</text>
-					<text class="mp-knowledge-delete" @tap="deleteDoc(file)">删除</text>
+                    <text class="mp-knowledge-delete" @tap="deleteDoc(file)">删除</text>
 				</view>
 			</view>
 
 			<view v-else-if="currentKnowledgeSection === 'quotes'" class="mp-knowledge-card">
 				<view class="mp-knowledge-head">
-					<text class="mp-knowledge-title">报价表</text>
+                    <text class="mp-knowledge-title">报价表</text>
 					<button class="mp-knowledge-btn quote" :disabled="quoteUploading" @tap="selectAndUploadQuote">
-						{{ quoteUploading ? '上传中' : '更新报价' }}
+                        {{ quoteUploading ? '上传中' : '更新报价' }}
 					</button>
 				</view>
 				<text v-if="quoteMessage" class="mp-knowledge-meta">{{ quoteMessage }}</text>
 				<text v-if="quoteStage" class="mp-knowledge-meta subtle">
-					{{ quoteStage }}<text v-if="quoteProgress > 0"> · {{ quoteProgress }}%</text>
+                    {{ quoteStage }}<text v-if="quoteProgress > 0"> · {{ quoteProgress }}%</text>
 				</text>
-				<view v-if="uploadedQuotes.length === 0" class="mp-knowledge-empty">暂无报价表</view>
+                <view v-if="uploadedQuotes.length === 0" class="mp-knowledge-empty">暂无报价表</view>
 				<view v-for="file in uploadedQuotes" :key="`quote-${file}`" class="mp-knowledge-item">
 					<text class="mp-knowledge-name">{{ file }}</text>
-					<text class="mp-knowledge-delete" @tap="deleteQuote(file)">删除</text>
+                    <text class="mp-knowledge-delete" @tap="deleteQuote(file)">删除</text>
 				</view>
 			</view>
 
 			<view v-else-if="currentKnowledgeSection === 'cases'" class="mp-knowledge-card">
 				<view class="mp-knowledge-head">
-					<text class="mp-knowledge-title">教练案例</text>
+                    <text class="mp-knowledge-title">教练案例</text>
 					<button class="mp-knowledge-btn coach" :disabled="caseUploading" @tap="selectAndUploadCoachCase">
-						{{ caseUploading ? '分析中' : '上传案例' }}
+                        {{ caseUploading ? '分析中' : '上传案例' }}
 					</button>
 				</view>
 				<text v-if="caseMessage" class="mp-knowledge-meta">{{ caseMessage }}</text>
 				<text v-if="caseStage" class="mp-knowledge-meta subtle">
-					{{ caseStage }}<text v-if="caseProgress > 0"> · {{ caseProgress }}%</text>
+                    {{ caseStage }}<text v-if="caseProgress > 0"> · {{ caseProgress }}%</text>
 				</text>
-				<view v-if="coachCases.length === 0" class="mp-knowledge-empty">暂无案例</view>
+                <view v-if="coachCases.length === 0" class="mp-knowledge-empty">暂无案例</view>
 				<view v-for="item in coachCases" :key="`case-${item.id}`" class="mp-knowledge-item stacked">
 					<view class="mp-knowledge-stack">
-						<text class="mp-knowledge-name">{{ item.name || '未命名案例' }}</text>
-						<text class="mp-knowledge-caption">{{ item.category || '未分类' }}</text>
+                        <text class="mp-knowledge-name">{{ item.name || '未命名案例' }}</text>
+                        <text class="mp-knowledge-caption">{{ item.category || '未分类' }}</text>
 					</view>
-					<text class="mp-knowledge-delete" @tap="deleteCase(item.id)">删除</text>
+                    <text class="mp-knowledge-delete" @tap="deleteCase(item.id)">删除</text>
+				</view>
+			</view>
+			<view v-else-if="currentKnowledgeSection === 'quiz'" class="mp-knowledge-card">
+				<view class="mp-knowledge-head">
+                    <text class="mp-knowledge-title">教练出题题库</text>
+					<button class="mp-knowledge-btn coach" :disabled="quizUploading" @tap="selectAndUploadQuizBank">
+                        {{ quizUploading ? '导入中' : '上传题库' }}
+					</button>
+				</view>
+				<text v-if="quizMessage" class="mp-knowledge-meta">{{ quizMessage }}</text>
+				<text v-if="quizStage" class="mp-knowledge-meta subtle">
+                    {{ quizStage }}<text v-if="quizProgress > 0"> · {{ quizProgress }}%</text>
+				</text>
+                <view v-if="quizQuestions.length === 0" class="mp-knowledge-empty">暂无题目</view>
+				<view v-for="item in quizQuestions" :key="`quiz-${item.id}`" class="mp-knowledge-item stacked">
+					<view class="mp-knowledge-stack">
+                        <text class="mp-knowledge-name">{{ item.question || '未命名题目' }}</text>
+                        <text class="mp-knowledge-caption">{{ item.category || '未分类' }}</text>
+					</view>
+                    <text class="mp-knowledge-delete" @tap="deleteQuizQuestion(item.id)">删除</text>
 				</view>
 			</view>
 		</view>
@@ -218,9 +238,9 @@
 		<view v-else-if="currentActiveTab === 'notices'" class="mp-notice-panel">
 			<view class="mp-notice-card">
 				<view class="mp-knowledge-head">
-					<text class="mp-knowledge-title">通知管理</text>
+                    <text class="mp-knowledge-title">通知管理</text>
 					<button class="mp-knowledge-btn notice" :disabled="noticeSending" @tap="sendNotice">
-						{{ noticeSending ? '发布中' : '发布通知' }}
+                        {{ noticeSending ? '发布中' : '发布通知' }}
 					</button>
 				</view>
 				<textarea
@@ -228,50 +248,30 @@
 					class="mp-notice-textarea"
 					auto-height
 					maxlength="-1"
-					placeholder="输入通知内容，发布后小程序通知中心会默认显示本周通知。"
+                    placeholder="输入通知内容，发布后小程序通知中心会默认显示本周通知。"
 				></textarea>
 				<text v-if="noticeMessage" class="mp-knowledge-meta">{{ noticeMessage }}</text>
 			</view>
 
 			<view class="mp-notice-card">
 				<view class="mp-knowledge-head">
-					<text class="mp-knowledge-title">历史通知</text>
-					<button class="mp-notice-refresh" @tap="fetchNoticeHistory">刷新</button>
+                    <text class="mp-knowledge-title">历史通知</text>
+					<button class="mp-notice-refresh" @tap="fetchNoticeHistory">鍒锋柊</button>
 				</view>
-				<view v-if="noticeHistory.length === 0" class="mp-knowledge-empty">暂无通知</view>
+                <view v-if="noticeHistory.length === 0" class="mp-knowledge-empty">暂无通知</view>
 				<view v-for="notice in noticeHistory" :key="notice.id" class="mp-notice-history-item">
 					<view class="mp-notice-history-content">
 						<text class="mp-notice-history-date">{{ formatNoticeDate(notice.created_at) }}</text>
 						<text class="mp-notice-history-text">{{ notice.content }}</text>
 					</view>
-					<text class="mp-knowledge-delete" @tap="deleteNotice(notice.id)">删除</text>
+                    <text class="mp-knowledge-delete" @tap="deleteNotice(notice.id)">删除</text>
 				</view>
 			</view>
 
-			<view v-else class="mp-knowledge-card">
-				<view class="mp-knowledge-head">
-					<text class="mp-knowledge-title">教练出题题库</text>
-					<button class="mp-knowledge-btn coach" :disabled="quizUploading" @tap="selectAndUploadQuizBank">
-						{{ quizUploading ? '导入中' : '上传题库' }}
-					</button>
-				</view>
-				<text v-if="quizMessage" class="mp-knowledge-meta">{{ quizMessage }}</text>
-				<text v-if="quizStage" class="mp-knowledge-meta subtle">
-					{{ quizStage }}<text v-if="quizProgress > 0"> 路 {{ quizProgress }}%</text>
-				</text>
-				<view v-if="quizQuestions.length === 0" class="mp-knowledge-empty">暂无题目</view>
-				<view v-for="item in quizQuestions" :key="`quiz-${item.id}`" class="mp-knowledge-item stacked">
-					<view class="mp-knowledge-stack">
-						<text class="mp-knowledge-name">{{ item.question || '未命名题目' }}</text>
-						<text class="mp-knowledge-caption">{{ item.category || '未分类' }}</text>
-					</view>
-					<text class="mp-knowledge-delete" @tap="deleteQuizQuestion(item.id)">删除</text>
-				</view>
-			</view>
 		</view>
 
 		<view class="mp-admin-footer">
-			<text>© 2026 仲易达集团 · 内部管理系统</text>
+			<text>漏 2026 浠叉槗杈鹃泦鍥?路 鍐呴儴绠＄悊绯荤粺</text>
 		</view>
 	</view>
 	<!-- #endif -->
@@ -522,12 +522,12 @@ const sendNotice = async () => {
 
 const deleteNotice = async (noticeId) => {
 	uni.showModal({
-		title: '删除通知',
-		content: '确定要删除这条通知吗？',
+		 title: '删除通知',
+		 content: '确定要删除这条通知吗？',
 		success: async ({ confirm }) => {
 			if (!confirm) return
 			try {
-				await requestUploadApi(`/api/notices/${encodeURIComponent(noticeId)}`, { method: 'DELETE' })
+				await requestUploadApi('/api/notices/' + encodeURIComponent(noticeId), { method: 'DELETE' })
 				noticeMessage.value = '通知已删除'
 				await fetchNoticeHistory()
 			} catch (error) {
@@ -588,11 +588,11 @@ const {
 	url: `${BASE_URL}/document?category=admin&async_mode=true`,
 	onSuccess: (count) => {
 		fetchUploadedDocs()
-		return `成功处理 ${count} 份行政资料`
+        return `成功处理 ${count} 份行政资料`
 	},
 	onError: (count, errors) => {
 		fetchUploadedDocs()
-		return `处理完成，成功 ${count}，失败 ${errors.length}`
+        return `处理完成，成功 ${count}，失败 ${errors.length}`
 	},
 })
 
@@ -607,11 +607,11 @@ const {
 	url: `${BASE_URL}/document?category=biz&async_mode=true`,
 	onSuccess: (count) => {
 		fetchUploadedDocs()
-		return `成功处理 ${count} 份业务资料`
+        return `成功处理 ${count} 份业务资料`
 	},
 	onError: (count, errors) => {
 		fetchUploadedDocs()
-		return `处理完成，成功 ${count}，失败 ${errors.length}`
+        return `处理完成，成功 ${count}，失败 ${errors.length}`
 	},
 })
 
@@ -637,26 +637,26 @@ const handleBizDrop = async (event) => {
 
 const deleteDoc = async (filename) => {
 	// #ifdef H5
-	const confirmed = window.confirm(`确定要删除 ${filename} 吗？`)
+    const confirmed = window.confirm('确定要删除 ' + filename + ' 吗？')
 	if (!confirmed) return
 
 	try {
-		await requestUploadApi(`/api/upload/document/${encodeURIComponent(filename)}`, { method: 'DELETE' })
+		await requestUploadApi('/api/upload/document/' + encodeURIComponent(filename), { method: 'DELETE' })
 		await fetchUploadedDocs()
 	} catch (error) {
-		window.alert(error.response?.data?.detail || error.message || '删除失败')
+        window.alert(error.response?.data?.detail || error.message || '删除失败')
 	}
 	// #endif
 
 	// #ifndef H5
 	uni.showModal({
-		title: '删除文件',
-		content: `确定要删除 ${filename} 吗？`,
+		 title: '删除文件',
+		content: '确定要删除 ' + filename + ' 吗？',
 		success: async ({ confirm }) => {
 			if (!confirm) return
 			try {
-				await requestUploadApi(`/api/upload/document/${encodeURIComponent(filename)}`, { method: 'DELETE' })
-				mpUploadMessage.value = `${filename} 已删除`
+				await requestUploadApi('/api/upload/document/' + encodeURIComponent(filename), { method: 'DELETE' })
+				mpUploadMessage.value = filename + ' 已删除'
 				await fetchUploadedDocs()
 			} catch (error) {
 				uni.showToast({ title: error.message || '删除失败', icon: 'none' })
@@ -668,16 +668,16 @@ const deleteDoc = async (filename) => {
 
 const deleteQuote = async (filename) => {
 	uni.showModal({
-		title: '删除报价表',
-		content: `确定要删除 ${filename} 吗？`,
+        title: '删除报价表',
+        content: '确定要删除 ' + filename + ' 吗？',
 		success: async ({ confirm }) => {
 			if (!confirm) return
 			try {
-				await requestUploadApi(`/api/upload/quote/${encodeURIComponent(filename)}`, { method: 'DELETE' })
-				quoteMessage.value = `${filename} 已删除`
+				await requestUploadApi('/api/upload/quote/' + encodeURIComponent(filename), { method: 'DELETE' })
+                quoteMessage.value = filename + ' 已删除'
 				await fetchUploadedQuotes()
 			} catch (error) {
-				uni.showToast({ title: error.message || '删除失败', icon: 'none' })
+                uni.showToast({ title: error.message || '删除失败', icon: 'none' })
 			}
 		},
 	})
@@ -690,7 +690,7 @@ const deleteCase = async (caseId) => {
 		success: async ({ confirm }) => {
 			if (!confirm) return
 			try {
-				await requestUploadApi(`/api/upload/coach-case/${encodeURIComponent(caseId)}`, { method: 'DELETE' })
+				await requestUploadApi('/api/upload/coach-case/' + encodeURIComponent(caseId), { method: 'DELETE' })
 				caseMessage.value = '案例已删除'
 				await fetchCoachCases()
 			} catch (error) {
@@ -702,12 +702,12 @@ const deleteCase = async (caseId) => {
 
 const deleteQuizQuestion = async (questionId) => {
 	uni.showModal({
-		title: '删除题目',
-		content: '确定要删除这道题吗？',
+		 title: '删除题目',
+		 content: '确定要删除这道题吗？',
 		success: async ({ confirm }) => {
 			if (!confirm) return
 			try {
-				await requestUploadApi(`/api/coach-quiz/bank/${encodeURIComponent(questionId)}`, { method: 'DELETE' })
+				await requestUploadApi('/api/coach-quiz/bank/' + encodeURIComponent(questionId), { method: 'DELETE' })
 				quizMessage.value = '题目已删除'
 				await fetchQuizQuestions()
 			} catch (error) {
@@ -719,7 +719,7 @@ const deleteQuizQuestion = async (questionId) => {
 
 const pollUploadTask = async (taskId) => {
 	for (let attempt = 0; attempt < 180; attempt += 1) {
-		const task = await requestUploadApi(`/api/upload/tasks/${encodeURIComponent(taskId)}`)
+		const task = await requestUploadApi('/api/upload/tasks/' + encodeURIComponent(taskId))
 		mpUploadStage.value = task.message || task.stage || '正在处理'
 		if (task.status === 'success') return task
 		if (task.status === 'error') throw new Error(task.error || task.message || 'upload failed')
@@ -753,11 +753,11 @@ const selectAndUploadDocument = async (category) => {
 		mpUploadCategory.value = category
 		mpUploadStage.value = '正在上传'
 		mpUploadProgress.value = 0
-		mpUploadMessage.value = `${targetFile.name || '文件'} 上传中`
+		mpUploadMessage.value = (targetFile.name || '文件') + ' 上传中'
 
 		const uploadResult = await new Promise((resolve, reject) => {
 			const uploadTask = uni.uploadFile({
-				url: `${resolveApiUrl('/api/upload/document')}?category=${encodeURIComponent(category)}&async_mode=true`,
+				url: resolveApiUrl('/api/upload/document') + '?category=' + encodeURIComponent(category) + '&async_mode=true',
 				filePath: targetFile.path,
 				name: 'file',
 				header: readToken() ? { Authorization: `Bearer ${readToken()}` } : {},
@@ -767,7 +767,7 @@ const selectAndUploadDocument = async (category) => {
 			if (uploadTask && typeof uploadTask.onProgressUpdate === 'function') {
 				uploadTask.onProgressUpdate((progressEvent) => {
 					mpUploadProgress.value = Number(progressEvent.progress || 0)
-					mpUploadStage.value = progressEvent.progress >= 100 ? '文件已传输，等待后端处理' : '正在上传'
+					mpUploadStage.value = progressEvent.progress >= 100 ? '文件已上传，等待后端处理' : '正在上传'
 				})
 			}
 		})
@@ -777,11 +777,11 @@ const selectAndUploadDocument = async (category) => {
 			throw new Error(payload.detail || payload.message || 'missing task id')
 		}
 
-		mpUploadMessage.value = `${targetFile.name || '文件'} 正在处理`
+		mpUploadMessage.value = (targetFile.name || '文件') + ' 正在处理'
 		const task = await pollUploadTask(payload.task_id)
 		mpUploadProgress.value = 100
 		mpUploadStage.value = '处理完成'
-		mpUploadMessage.value = task.message || `${targetFile.name || '文件'} 处理完成`
+		mpUploadMessage.value = task.message || ((targetFile.name || '文件') + ' 处理完成')
 		await fetchUploadedDocs()
 		uni.showToast({ title: '上传完成', icon: 'success' })
 	} catch (error) {
@@ -814,7 +814,7 @@ const uploadSingleFile = async ({ chooseType, uploadUrl, title, successMessageRe
 		loadingRef.value = true
 		progressRef.value = 0
 		stageRef.value = '正在上传'
-		successMessageRef.value = `${targetFile.name || title} 上传中`
+		successMessageRef.value = (targetFile.name || title) + ' 上传中'
 
 		const uploadResult = await new Promise((resolve, reject) => {
 			const uploadTask = uni.uploadFile({
@@ -828,7 +828,7 @@ const uploadSingleFile = async ({ chooseType, uploadUrl, title, successMessageRe
 			if (uploadTask && typeof uploadTask.onProgressUpdate === 'function') {
 				uploadTask.onProgressUpdate((progressEvent) => {
 					progressRef.value = Number(progressEvent.progress || 0)
-					stageRef.value = progressEvent.progress >= 100 ? '文件已传输，等待服务器响应' : '正在上传'
+					stageRef.value = progressEvent.progress >= 100 ? '文件已上传，等待服务端处理' : '正在上传'
 				})
 			}
 		})
@@ -836,14 +836,14 @@ const uploadSingleFile = async ({ chooseType, uploadUrl, title, successMessageRe
 		const payload = JSON.parse(uploadResult.data || '{}')
 		progressRef.value = 100
 		stageRef.value = '处理完成'
-		successMessageRef.value = payload.message || `${targetFile.name || title} 处理完成`
+		successMessageRef.value = payload.message || ((targetFile.name || title) + ' 处理完成')
 		if (afterSuccess) {
 			await afterSuccess(payload)
 		}
 		uni.showToast({ title: '上传完成', icon: 'success' })
 	} catch (error) {
 		stageRef.value = '处理失败'
-		successMessageRef.value = error.message || `${title} 上传失败`
+		successMessageRef.value = error.message || (title + ' 上传失败')
 		uni.showToast({ title: successMessageRef.value, icon: 'none' })
 	} finally {
 		loadingRef.value = false
@@ -875,7 +875,7 @@ const selectAndUploadCoachCase = async () => {
 		progressRef: caseProgress,
 		loadingRef: caseUploading,
 		afterSuccess: async (payload) => {
-			caseMessage.value = payload.note ? `${payload.note}` : (payload.processed_count !== undefined ? `成功生成 ${payload.processed_count} 条案例` : caseMessage.value)
+			caseMessage.value = payload.note ? String(payload.note) : (payload.processed_count !== undefined ? ('成功生成 ' + payload.processed_count + ' 条案例') : caseMessage.value)
 			await fetchCoachCases()
 		},
 	})
@@ -892,7 +892,7 @@ const selectAndUploadQuizBank = async () => {
 		loadingRef: quizUploading,
 		afterSuccess: async (payload) => {
 			quizMessage.value = payload.imported_count !== undefined
-				? `成功导入 ${payload.imported_count} 道题`
+			? ('成功导入 ' + payload.imported_count + ' 道题')
 				: quizMessage.value
 			await fetchQuizQuestions()
 		},

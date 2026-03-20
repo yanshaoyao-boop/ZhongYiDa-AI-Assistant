@@ -51,15 +51,6 @@ def get_admin_user(current_user: User = Depends(get_current_user)):
         )
     return current_user
 
-def get_chat_audit_user(current_user: User = Depends(get_current_user)):
-    """Only owners, executives, and super admins can access chat audit."""
-    if current_user.role not in ["owner", "executive", "super_admin"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only owners, executives, and super admins can access chat audit"
-        )
-    return current_user
-
 def get_super_admin(current_user: User = Depends(get_current_user)):
     """校验是否为顶级控制权角色 (老板 或 历史遗留超级管理员)"""
     if current_user.role not in ["owner", "super_admin"]:
@@ -93,3 +84,11 @@ def has_permission(perm: str):
             detail=f"权限不足，需要功能权限: {perm}"
         )
     return _perm_dependency
+
+def get_staff_admin_user(current_user: User = Depends(get_current_user)):
+    """Only users with manage_staff can access staff management."""
+    return has_permission("manage_staff")(current_user)
+
+def get_chat_audit_user(current_user: User = Depends(get_current_user)):
+    """Only users with view_logs can access chat audit."""
+    return has_permission("view_logs")(current_user)

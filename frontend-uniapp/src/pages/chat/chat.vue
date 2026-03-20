@@ -23,6 +23,7 @@
 			</scroll-view>
 
 			<view class="sidebar-footer">
+				<button class="sidebar-settings-btn" @tap="openSettings">⚙️ 设置</button>
 				<button v-if="auth.isAdmin" class="sidebar-admin-btn" @tap="goToAdmin">管理后台</button>
 
 				<view class="sidebar-user-info sidebar-account-card">
@@ -522,6 +523,66 @@
 			</view>
 		</view>
 
+		<view v-if="showSettings" class="settings-overlay" @tap="closeSettings">
+			<view class="settings-sheet" @tap.stop>
+				<view class="settings-sheet-header">
+					<view>
+						<text class="settings-sheet-title">用户设置</text>
+						<text class="settings-sheet-desc">调整回复详略程度，并修改当前账号密码</text>
+					</view>
+					<text class="settings-sheet-close" @tap="closeSettings">×</text>
+				</view>
+
+				<view class="settings-section">
+					<text class="settings-section-title">输出长度</text>
+					<text class="settings-section-desc">控制小易每次回答内容的详尽程度</text>
+					<view class="length-option-list">
+						<button
+							v-for="option in outputLengthOptions"
+							:key="option.value"
+							:class="['length-option-btn', { active: outputLength === option.value }]"
+							@tap="setOutputLength(option.value)"
+						>
+							<view class="length-option-main">
+								<text class="length-option-icon">{{ option.icon }}</text>
+								<text class="length-option-label">{{ option.label }}</text>
+							</view>
+							<text class="length-option-desc">{{ option.desc }}</text>
+						</button>
+					</view>
+				</view>
+
+				<view class="settings-section">
+					<text class="settings-section-title">修改密码</text>
+					<text class="settings-section-desc">需要先验证当前密码，新密码至少 6 位</text>
+					<input
+						v-model="pwdForm.oldPwd"
+						class="settings-input"
+						type="password"
+						password
+						placeholder="当前密码"
+					/>
+					<input
+						v-model="pwdForm.newPwd"
+						class="settings-input"
+						type="password"
+						password
+						placeholder="新密码（至少 6 位）"
+					/>
+					<input
+						v-model="pwdForm.confirmPwd"
+						class="settings-input"
+						type="password"
+						password
+						placeholder="确认新密码"
+					/>
+					<button class="settings-submit-btn" :disabled="pwdLoading" @tap="submitChangePassword">
+						{{ pwdLoading ? '提交中...' : '确认修改密码' }}
+					</button>
+				</view>
+			</view>
+		</view>
+
 		<view v-if="showNoticeCenter" class="notice-center-overlay" @tap="closeNoticeCenter">
 			<view class="notice-center-sheet" @tap.stop>
 				<view class="notice-center-head">
@@ -602,9 +663,19 @@ const currentNotices = ref([])
 const noticeHistory = ref([])
 const noticesLoading = ref(false)
 const hasUnreadNotices = ref(false)
+const showSettings = ref(false)
 
 const POST_LOGIN_FRESH_CHAT_KEY = 'zyd_post_login_fresh_chat'
 const LAST_CHAT_MODE_KEY = 'zyd_last_chat_mode'
+const OUTPUT_LENGTH_KEY = 'zyd_output_length'
+const outputLengthOptions = [
+	{ value: 'short', icon: '⚡', label: '简洁', desc: '精炼核心要点，适合快速查询' },
+	{ value: 'medium', icon: '📋', label: '标准', desc: '均衡详细，适合日常对话' },
+	{ value: 'long', icon: '📄', label: '详细', desc: '完整展开，适合复杂分析' },
+]
+const outputLength = ref(uni.getStorageSync(OUTPUT_LENGTH_KEY) || 'medium')
+const pwdForm = ref({ oldPwd: '', newPwd: '', confirmPwd: '' })
+const pwdLoading = ref(false)
 
 const coachRegions = [
 	{ name: '美国线', short: 'US', desc: '重视海派、邮编偏远、计费重量规则。' },
@@ -655,6 +726,64 @@ const currentCoachStep = computed(() => {
 	if (!selectedPersona.value) return '第二步 · 选择客户背景'
 	return '第三步 · 选择练习科目'
 })
+
+const openSettings = () => {
+	showSettings.value = true
+	isSidebarOpen.value = false
+}
+
+const closeSettings = () => {
+	showSettings.value = false
+	pwdForm.value = { oldPwd: '', newPwd: '', confirmPwd: '' }
+	pwdLoading.value = false
+}
+
+const setOutputLength = (value) => {
+	outputLength.value = value
+	uni.setStorageSync(OUTPUT_LENGTH_KEY, value)
+	uni.showToast({ title: '输出偏好已保存', icon: 'none' })
+}
+
+const buildMessageWithOutputPreference = (content) => {
+	if (!content) {
+		return content
+	}
+	if (outputLength.value === 'short') {
+		return `[输出偏好:极致精简] ${content}`
+	}
+	if (outputLength.value === 'long') {
+		return `[输出偏好:详尽展开] ${content}`
+	}
+	return content
+}
+
+const submitChangePassword = async () => {
+	const { oldPwd, newPwd, confirmPwd } = pwdForm.value
+	if (!oldPwd || !newPwd || !confirmPwd) {
+		uni.showToast({ title: '请填写完整密码信息', icon: 'none' })
+		return
+	}
+	if (newPwd.length < 6) {
+		uni.showToast({ title: '新密码至少 6 位', icon: 'none' })
+		return
+	}
+	if (newPwd !== confirmPwd) {
+		uni.showToast({ title: '两次输入的新密码不一致', icon: 'none' })
+		return
+	}
+
+	pwdLoading.value = true
+	const result = await auth.changePassword(oldPwd, newPwd)
+	pwdLoading.value = false
+
+	if (result?.success) {
+		uni.showToast({ title: '密码修改成功', icon: 'success' })
+		closeSettings()
+		return
+	}
+
+	uni.showToast({ title: result?.message || '修改失败，请重试', icon: 'none' })
+}
 
 const persistLastMode = (mode) => {
 	try {
@@ -1022,6 +1151,7 @@ const handleComposerInput = (event) => {
 
 const sendMessage = async () => {
 	const content = inputMsg.value.trim()
+	const messageWithPreference = buildMessageWithOutputPreference(content)
 	console.info('[chat-debug] send-attempt', {
 		content,
 		raw: inputMsg.value,
@@ -1078,7 +1208,7 @@ const sendMessage = async () => {
 				'content-type': 'application/json',
 			},
 			data: {
-				message: content,
+				message: messageWithPreference,
 				mode: currentMode.value,
 				image_upload_id: currentImageUploadId,
 				image_base64: currentImageBase64,
@@ -1589,6 +1719,7 @@ watch(messages, (value) => {
 }
 
 .coach-mode .new-chat-btn,
+.coach-mode .sidebar-settings-btn,
 .coach-mode .sidebar-admin-btn,
 .coach-mode .user-avatar-sidebar {
 	color: var(--accent-color);
@@ -1599,6 +1730,7 @@ watch(messages, (value) => {
 }
 
 .expert-mode .new-chat-btn,
+.expert-mode .sidebar-settings-btn,
 .expert-mode .sidebar-admin-btn,
 .expert-mode .user-avatar-sidebar {
 	color: var(--accent-color);
@@ -1687,6 +1819,7 @@ watch(messages, (value) => {
 
 .new-chat-btn::after,
 .delete-btn::after,
+.sidebar-settings-btn::after,
 .sidebar-admin-btn::after,
 .logout-link-sidebar::after,
 .zen-send-btn::after,
@@ -1747,6 +1880,7 @@ watch(messages, (value) => {
 	gap: 16rpx;
 }
 
+.sidebar-settings-btn,
 .sidebar-admin-btn {
 	margin: 0;
 	height: 80rpx;
@@ -1759,6 +1893,149 @@ watch(messages, (value) => {
 	font-size: 30rpx;
 	line-height: 1;
 	text-align: center;
+	font-weight: 700;
+}
+
+.sidebar-settings-btn {
+	background: linear-gradient(135deg, #2563eb 0%, #5046e5 100%);
+}
+
+.settings-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 70;
+	background: rgba(15, 23, 42, 0.46);
+	display: flex;
+	align-items: flex-end;
+	justify-content: center;
+	padding: 32rpx 24rpx calc(32rpx + env(safe-area-inset-bottom));
+}
+
+.settings-sheet {
+	width: 100%;
+	max-width: 720rpx;
+	background: rgba(255, 255, 255, 0.98);
+	border-radius: 32rpx;
+	padding: 28rpx;
+	box-shadow: 0 24rpx 60rpx rgba(15, 23, 42, 0.18);
+	display: flex;
+	flex-direction: column;
+	gap: 24rpx;
+}
+
+.settings-sheet-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 24rpx;
+}
+
+.settings-sheet-title {
+	display: block;
+	font-size: 34rpx;
+	font-weight: 800;
+	color: #0f172a;
+}
+
+.settings-sheet-desc {
+	display: block;
+	margin-top: 8rpx;
+	font-size: 24rpx;
+	line-height: 1.5;
+	color: #64748b;
+}
+
+.settings-sheet-close {
+	font-size: 44rpx;
+	line-height: 1;
+	color: #64748b;
+	padding: 4rpx 8rpx;
+}
+
+.settings-section {
+	display: flex;
+	flex-direction: column;
+	gap: 14rpx;
+}
+
+.settings-section-title {
+	font-size: 28rpx;
+	font-weight: 700;
+	color: #0f172a;
+}
+
+.settings-section-desc {
+	font-size: 22rpx;
+	line-height: 1.5;
+	color: #64748b;
+}
+
+.length-option-list {
+	display: flex;
+	flex-direction: column;
+	gap: 12rpx;
+}
+
+.length-option-btn {
+	margin: 0;
+	padding: 20rpx 22rpx;
+	border-radius: 24rpx;
+	background: #f8fafc;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 8rpx;
+	border: 2rpx solid transparent;
+}
+
+.length-option-btn.active {
+	background: rgba(80, 70, 229, 0.08);
+	border-color: rgba(80, 70, 229, 0.25);
+}
+
+.length-option-main {
+	display: flex;
+	align-items: center;
+	gap: 12rpx;
+}
+
+.length-option-icon {
+	font-size: 28rpx;
+}
+
+.length-option-label {
+	font-size: 28rpx;
+	font-weight: 700;
+	color: #0f172a;
+}
+
+.length-option-desc {
+	font-size: 22rpx;
+	line-height: 1.5;
+	color: #64748b;
+}
+
+.settings-input {
+	width: 100%;
+	min-height: 84rpx;
+	border-radius: 22rpx;
+	background: #f8fafc;
+	padding: 0 24rpx;
+	font-size: 28rpx;
+	color: #0f172a;
+	box-sizing: border-box;
+}
+
+.settings-submit-btn {
+	margin: 8rpx 0 0;
+	height: 86rpx;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 24rpx;
+	background: linear-gradient(135deg, #2563eb 0%, #5046e5 100%);
+	color: #ffffff;
+	font-size: 28rpx;
 	font-weight: 700;
 }
 

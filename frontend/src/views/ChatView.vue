@@ -17,6 +17,10 @@
       </div>
 
       <div class="sidebar-footer">
+        <!-- 设置按钮 -->
+        <button class="sidebar-settings-btn" @click="showSettings = true">
+          <IconSettings size="16" /> 设置
+        </button>
         <a v-if="auth.isAdmin" href="/admin" target="_blank" class="sidebar-admin-btn">
           <IconShieldCheck size="18" /> 管理员入口
         </a>
@@ -424,6 +428,75 @@
         </div>
       </div>
     </Teleport>
+
+    <!-- 设置弹窗 -->
+    <Teleport to="body">
+      <div v-if="showSettings" class="premium-modal-backdrop" @click.self="closeSettings">
+        <div class="premium-modal settings-modal animate-modal">
+          <div class="modal-header">
+            <div class="header-top">
+              <div class="header-main">
+                <IconSettings class="header-icon" />
+                <h3>用户设置</h3>
+              </div>
+              <button class="close-btn-inner" @click="closeSettings"><IconX /></button>
+            </div>
+          </div>
+
+          <div class="modal-body custom-scrollbar">
+            <!-- 输出长度 -->
+            <div class="settings-section">
+              <div class="settings-label">📝 小易回复长度偏好</div>
+              <p class="settings-desc">控制小易每次回答内容的详尽程度</p>
+              <div class="output-length-group">
+                <button
+                  v-for="opt in outputLengthOptions"
+                  :key="opt.value"
+                  :class="['length-btn', { active: outputLength === opt.value }]"
+                  @click="setOutputLength(opt.value)"
+                >
+                  <span class="length-icon">{{ opt.icon }}</span>
+                  <span class="length-label">{{ opt.label }}</span>
+                  <span class="length-desc">{{ opt.desc }}</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="settings-divider"></div>
+
+            <!-- 修改密码 -->
+            <div class="settings-section">
+              <div class="settings-label">🔑 修改密码</div>
+              <p class="settings-desc">修改您的登录密码（至少 6 位）</p>
+              <div class="pwd-form">
+                <input
+                  v-model="pwdForm.oldPwd"
+                  type="password"
+                  placeholder="请输入当前密码"
+                  class="settings-input"
+                />
+                <input
+                  v-model="pwdForm.newPwd"
+                  type="password"
+                  placeholder="请输入新密码（至少 6 位）"
+                  class="settings-input"
+                />
+                <input
+                  v-model="pwdForm.confirmPwd"
+                  type="password"
+                  placeholder="再次确认新密码"
+                  class="settings-input"
+                />
+                <div v-if="pwdMsg" :class="['pwd-msg', pwdMsg.type]">{{ pwdMsg.text }}</div>
+                <button class="pwd-submit-btn" @click="submitChangePassword" :disabled="pwdLoading">
+                  {{ pwdLoading ? '提交中...' : '确认修改' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -449,7 +522,8 @@ import {
   ArrowLeft as IconArrowLeft,
   CheckCircle as IconCheckCircle,
   AlertCircle as IconAlertCircle,
-  Trophy as IconTrophy
+  Trophy as IconTrophy,
+  Settings as IconSettings
 } from 'lucide-vue-next'
 // 使用相对路径，配合 vite.config.js 中的 dev proxy 转发到后端
 // 生产环境由 nginx/反向代理处理 /api 路由
@@ -457,6 +531,55 @@ const API_BASE = ''
 
 const auth = useAuthStore()
 const router = useRouter()
+
+// ====== 设置弹窗逻辑 ======
+const showSettings = ref(false)
+const closeSettings = () => { showSettings.value = false; pwdMsg.value = null; pwdForm.value = { oldPwd: '', newPwd: '', confirmPwd: '' } }
+
+// 输出长度偏好
+const OUTPUT_LENGTH_KEY = 'zyd_output_length'
+const outputLengthOptions = [
+  { value: 'short', icon: '⚡', label: '简洁', desc: '精炼核心要点，适合快速查询' },
+  { value: 'medium', icon: '📋', label: '标准', desc: '均衡详细，适合日常对话' },
+  { value: 'long', icon: '📄', label: '详细', desc: '完整展开，适合复杂分析' }
+]
+const outputLength = ref(localStorage.getItem(OUTPUT_LENGTH_KEY) || 'medium')
+const setOutputLength = (val) => {
+  outputLength.value = val
+  localStorage.setItem(OUTPUT_LENGTH_KEY, val)
+}
+
+// 修改密码
+const pwdForm = ref({ oldPwd: '', newPwd: '', confirmPwd: '' })
+const pwdMsg = ref(null)
+const pwdLoading = ref(false)
+const submitChangePassword = async () => {
+  pwdMsg.value = null
+  const { oldPwd, newPwd, confirmPwd } = pwdForm.value
+  if (!oldPwd || !newPwd || !confirmPwd) {
+    pwdMsg.value = { type: 'error', text: '请填写所有密码字段' }
+    return
+  }
+  if (newPwd !== confirmPwd) {
+    pwdMsg.value = { type: 'error', text: '两次输入的新密码不一致' }
+    return
+  }
+  if (newPwd.length < 6) {
+    pwdMsg.value = { type: 'error', text: '新密码不能少于 6 位' }
+    return
+  }
+  pwdLoading.value = true
+  try {
+    await axios.post('/api/auth/change-password', { old_password: oldPwd, new_password: newPwd })
+    pwdMsg.value = { type: 'success', text: '✅ 密码修改成功！下次登录将使用新密码。' }
+    pwdForm.value = { oldPwd: '', newPwd: '', confirmPwd: '' }
+  } catch (err) {
+    pwdMsg.value = { type: 'error', text: err?.response?.data?.detail || '修改失败，请检查当前密码是否正确' }
+  } finally {
+    pwdLoading.value = false
+  }
+}
+
 
 const messages = ref([])
 const inputMsg = ref('')
@@ -1009,7 +1132,7 @@ const sendMessage = async () => {
         'Authorization': `Bearer ${auth.token}`
       },
       body: JSON.stringify({
-        message: content,
+        message: (outputLength.value === 'short' ? '[输出偏好:极致精简] ' : outputLength.value === 'long' ? '[输出偏好:详尽展开] ' : '') + content,
         mode: currentMode.value,
         image_base64: currentImage ? currentImage.split(',')[1] : null,
         history: messages.value.slice(0, Math.max(0, messages.value.length - 2)).map(m => ({
@@ -2639,4 +2762,145 @@ const truncate = (text, len) => {
     transform: translateX(0);
   }
 }
+
+/* ====== 设置按钮 (同步管理员入口风格) ====== */
+/* ====== 设置按钮 (同步管理员入口风格 - 深度优化) ====== */
+.sidebar-settings-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  background: #4f46e5;
+  color: white;
+  border-radius: 8px;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  justify-content: center;
+  transition: all 0.2s;
+  display: flex; /* 确保内容居中 */
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  cursor: pointer;
+  border: none;
+  font-family: inherit; /* 统一字体 */
+}
+
+.sidebar-settings-btn:hover {
+  background: #4338ca;
+  transform: translateY(-1px);
+  opacity: 0.9; 
+}
+
+.sidebar-settings-btn:active {
+  transform: translateY(1px);
+  background: #3730a3;
+}
+
+/* ====== 设置弹窗 ====== */
+.settings-modal {
+  width: 460px;
+  max-width: 95vw;
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.settings-section {
+  padding: 20px 0;
+}
+.settings-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+.settings-desc {
+  font-size: 12px;
+  color: #94a3b8;
+  margin: 0 0 14px;
+}
+.settings-divider {
+  height: 1px;
+  background: #f1f5f9;
+  margin: 4px 0;
+}
+
+/* 输出长度选项 */
+.output-length-group {
+  display: flex;
+  gap: 10px;
+}
+.length-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 8px;
+  border: 2px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.length-btn:hover {
+  border-color: #6366f1;
+  background: #f0f0ff;
+}
+.length-btn.active {
+  border-color: #6366f1;
+  background: linear-gradient(135deg, #ede9fe, #e0e7ff);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+.length-icon { font-size: 22px; }
+.length-label { font-size: 13px; font-weight: 700; color: #1e293b; }
+.length-desc { font-size: 10px; color: #94a3b8; text-align: center; line-height: 1.3; }
+
+/* 密码修改表单 */
+.pwd-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.settings-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 13px;
+  color: #1e293b;
+  background: #f8fafc;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+.settings-input:focus {
+  border-color: #6366f1;
+  background: #fff;
+}
+.pwd-msg {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.pwd-msg.success { background: #f0fdf4; color: #16a34a; }
+.pwd-msg.error { background: #fff1f2; color: #dc2626; }
+.pwd-submit-btn {
+  padding: 11px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.pwd-submit-btn:hover:not(:disabled) { opacity: 0.88; }
+.pwd-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
 </style>

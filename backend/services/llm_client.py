@@ -20,6 +20,12 @@ DOUBAO_VISION_ENDPOINT = os.getenv("DOUBAO_VISION_ENDPOINT", DOUBAO_MODEL_ENDPOI
 DOUBAO_EMBEDDING_ENDPOINT = os.getenv("DOUBAO_EMBEDDING_ENDPOINT", "")
 BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 
+# --- 【新增】配置自检提示 ---
+if not DOUBAO_API_KEY:
+    print("⚠️  [警告] 系统未发现 DOUBAO_API_KEY，AI 对话功能将失效！请检查 .env 文件。")
+if not DOUBAO_MODEL_ENDPOINT:
+    print("⚠️  [警告] 系统未发现 DOUBAO_MODEL_ENDPOINT，请确认环境变量。")
+
 # 全局复用 HTTP 客户端平衡连接池 (Task 2)
 _http_client = httpx.AsyncClient(timeout=httpx.Timeout(90.0, connect=10.0))
 
