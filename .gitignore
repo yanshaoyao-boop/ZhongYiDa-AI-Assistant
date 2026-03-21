@@ -79,6 +79,10 @@ xingye_output.txt
 *.zip
 *.7z
 *.rar
+*.docx
+batch_feed_cases.py
+parser_test.py
+search_price_*.py
 
 # Local business data and reference assets
 /价格表/
