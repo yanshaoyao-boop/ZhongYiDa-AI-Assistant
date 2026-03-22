@@ -1,8 +1,8 @@
 :root {
   /* Professional Light Theme Core Constants */
-  --bg-primary: #f8fafc;
+  --bg-primary: #ffffff;
   --bg-secondary: #ffffff;
-  --bg-tertiary: #f1f5f9;
+  --bg-tertiary: #f9fafb;
   --text-primary: #0f172a;
   --text-secondary: #475569;
   --accent-color: #2563eb;
@@ -11,8 +11,8 @@
   --danger-color: #ef4444;
   --success-color: #10b981;
   --border-color: rgba(0, 0, 0, 0.08);
-  --glass-bg: rgba(255, 255, 255, 0.85);
-  --glass-border: rgba(0, 0, 0, 0.1);
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(0, 0, 0, 0.06);
 
   /* Gradients */
   --primary-gradient: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);

@@ -122,6 +122,12 @@ export const createMpStreamChatController = (config = {}) => {
 				if (typeof onStatus === 'function') {
 					onStatus(response.statusCode)
 				}
+				if ((response?.statusCode || 0) >= 400) {
+					rejectOnce(createError('REQUEST_FAILED', `HTTP ${response.statusCode}`, {
+						retryable: false,
+						receivedChunk,
+					}))
+				}
 			},
 			fail: (error) => {
 				if (timedOut) return

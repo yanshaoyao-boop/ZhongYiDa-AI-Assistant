@@ -1,9 +1,10 @@
 import asyncio
-from playwright.async_api import async_playwright
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError, async_playwright
 from playwright_stealth import Stealth
 import re
 
 TRACKING_URL = "http://mrzx.rtb56.com/track_query.aspx"
+RESULT_SELECTOR = ".layui-table-body, .order-list, .empty-cont-hint, #labMessage"
 
 # 全局浏览器实例（复用）
 _browser = None
@@ -27,6 +28,14 @@ async def close_browser():
     if _playwright_instance:
         await _playwright_instance.stop()
         _playwright_instance = None
+
+
+async def wait_for_tracking_results(page, timeout: int = 15000, timeout_error=PlaywrightTimeoutError) -> bool:
+    try:
+        await page.wait_for_selector(RESULT_SELECTOR, timeout=timeout)
+    except timeout_error:
+        return False
+    return True
 
 async def fetch_tracking_info(track_number: str) -> dict:
     """
@@ -61,10 +70,7 @@ async def fetch_tracking_info(track_number: str) -> dict:
         await asyncio.sleep(5)
         
         # 等待结果或验证码 (速递管家通常会弹出一个 layui 的层或者 order-list)
-        try:
-            await page.wait_for_selector(".layui-table-body, .order-list, .empty-cont-hint, #labMessage", timeout=15000)
-        except:
-            pass
+        await wait_for_tracking_results(page)
         
         # 检查验证码 (如果有 layer-content 通常是弹窗拦截)
         if await page.is_visible("#divVerify") or await page.is_visible(".layui-layer-content"):

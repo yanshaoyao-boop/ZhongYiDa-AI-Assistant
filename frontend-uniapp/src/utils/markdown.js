@@ -1,10 +1,23 @@
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 
+const renderer = new marked.Renderer()
+const defaultRenderer = new marked.Renderer()
+
+renderer.table = (token) => {
+    const html = defaultRenderer.table(token)
+    return `
+    <div class="chat-table-wrap">
+        ${html.replace('<table>', '<table class="chat-markdown-table">')}
+    </div>
+    `
+}
+
 // 统一配置
 marked.setOptions({
     breaks: true,
     gfm: true,
+    renderer,
 })
 
 /**

@@ -216,6 +216,8 @@ async def chat_stream(
     system_prompt = ""
     document_source_footer = ""
     prebuilt_response_text = ""
+    intent = "document" # 预设默认意图
+    needs_realtime = False
     
     if request.mode == "coach":
         # 检测是否是启动挑战场景的指令 (从当前消息或历史消息中寻找最近的指令)
@@ -358,31 +360,33 @@ async def chat_stream(
 4. **拉锯战**：你的任务是磨练业务员的逼单和谈判能力。不要轻易妥协，试着极限拉扯利润空间、时效赔偿或免仓期条款。
 """
     elif request.mode == "expert":
-        request.use_deepseek = True
+        # 专家模式：极简原则，强制换行
+        request.use_deepseek = False
         assistant_replies = [m for m in request.history if m.get("role") == "assistant"]
         reply_round = len(assistant_replies) + 1
+        intent = "expert"
         
-        system_prompt = f"""你是一个名为“小易”的企业级【专家指导顾问】。
-当前正处于【专家模式】，你的核心目标是帮业务员解决“发散、模糊、复杂”的工作难题。
+        system_prompt = f"""你是一个专业的【诊断专家小易】。禁止废话，结论先行，必须换行。
 
-**当前回复阶段：第 【{reply_round}】 轮交互（总共 2 轮提问 + 1 轮终结建议）**
+**当前：第 {reply_round} 轮**
 
-【核心工作协议】：为了确保建议的精准度，你必须执行“2轮深度问诊”：
+【协议】：
+- 第 1-2 轮：给出初步判断，然后**追问用户**选择情况（必须提供 3-4 个选项）。
+- 第 3 轮起：根据前两轮信息，直接给出最终建议和话术，停止追问。
 
-1. **第 1 轮与第 2 轮（回复阶段 1 和 2）- 必须追问**：
-   - 严禁直接给出最终结论或长篇大论的建议。
-   - 你必须基于用户的描述，精准锁定一个最核心的待补齐信息点。
-   - **强制要求：你必须给用户提供 3-4 个预设选项（A、B、C、D）**，让用户通过简单的选择（或补充）来快速回复。
-   - 语气应当像一位资深且耐心的导师：“这事儿我得帮您把把关，为了定位准确，请问目前是哪种情况？（请直接选择或回复序号）”
+【排版死命令】：
+每个选项必须独占一行，且与下一选项之间必须空一行。严禁用横线或空格连在同一行！
 
-2. **第 3 轮（回复阶段 3 及以后）- 最终方案**：
-   - **停止追问！** 结合前两轮用户选择的信息，给出最终的、系统性的解决方案。
-   - 包含：【底层逻辑分析】、【利弊权衡】、【最终话术建议】及【后续行动指南】。
+格式范例：
+初步判断：[一句话诊断]
 
-【排版规范】：
-- **选项展示**：每个 A/B/C/D 选项必须**独立占据一行**，禁止挤在一起。
-- **追问环节**：保持明快样式，1个核心问题 + 多个带字母/序号的选项。
-- **最终回复**：使用 Markdown 结构化排版，关键动作加粗。
+请选择：
+
+1. 情况一
+
+2. 情况二
+
+3. 情况三
 """
 
     else:
@@ -610,6 +614,10 @@ async def chat_stream(
                 request.use_deepseek = True
 
     # 注入全局输出格式规范
+    if request.mode == "expert":
+        system_prompt += "\n\n⚠️【排版最终通牒】：为了确保移动端可读性，你提供的所有选项必须使用 Markdown 无序列表（- A. ..., - B. ...）书写，且每个选项之间必须有换行。绝对禁止在同一行输出多个选项！"
+
+    # 注入全局输出格式规范
     detail_keywords = ["详细", "具体", "完整", "展开", "多说点", "细说", "列表", "全部"]
     # 如果用户明确要求详细，或者是在询问功能说明、报价相关内容，则开启详尽模式
     wants_detail = any(kw in request.message for kw in detail_keywords) or \
@@ -629,11 +637,12 @@ async def chat_stream(
         global_style_prompt = """
 
 ⚠️【全局输出表达规范】（最高级别的核心指令）：
-1. **极致精简**：拒绝长篇大论、无意义的寒暄与废话，用最精准、直白、易读的短句迅速作答。能用30字说清的绝不用50字。
-2. **关键标粗**：务必使用 Markdown 语法对【价格/金额】、【重量/尺寸/体积】、【关键地址/邮编】、【单号/最新状态】、【行动建议】等核心信息进行加粗（如：**核心结论**）。
-3. **结构清晰**：第一行直给结论。并大量使用短句和项目列表（-），确保业务员只需看一眼就能提炼出全部价值。
-4. **专有名词理解**：当资料或用户对话中提到“明日”时，极大概率指的是公司的特色物流渠道“明日之星”。请结合语境优先将其理解为该渠道。
+1. **极致精简**：拒绝长篇大论、无意义的寒暄与废话，用最精准、直白、易读的短句迅速作答。
+2. **结构清晰**：必须使用**换行和分段**来保证结构清晰。第一行直给结论。大量使用短句和项目列表（-），确保业务员只需看一眼就能提炼出全部价值。
+3. **关键标粗**：务必使用 Markdown 语法对【价格/金额】、【重量/尺寸/体积】、【关键地址/邮编】、【单号/最新状态】、【行动建议】等核心信息进行加粗（如：**核心结论**）。
+4. **专有名词理解**：优先将“明日”理解为公司渠道“明日之星”。
 """
+    # 专家模式和对练阶段排除通用风格注入，避免指令冲突，保持其独立的高强度追问/对练逻辑
     if request.mode not in ["coach", "expert"] or (request.mode == "coach" and request.message.startswith("【结束对练】")):
         system_prompt += global_style_prompt
 
@@ -661,6 +670,13 @@ async def chat_stream(
             if m.get("role") in _ALLOWED_ROLES and isinstance(m.get("content"), str)
         ]
         messages.extend(safe_history)
+
+    # 针对专家模式，在历史消息之后、用户消息之前追加排版增强指令
+    if request.mode == "expert":
+        messages.append({
+            "role": "system", 
+            "content": "⚠️ 禁止废话，每个选项必须物理换行且中间留空行。"
+        })
         
     messages.append({"role": "user", "content": request.message})
 
@@ -680,8 +696,12 @@ async def chat_stream(
         # 如果 request.use_deepseek 为 True，则强行使用理性的推理接入点
         final_endpoint = DEEPSEEK_ENDPOINT if request.use_deepseek else DOUBAO_MODEL_ENDPOINT
         
+        # 专家模式使用低采样温度（0.1）保证排版稳定性
+        temp = float(get_config("ai_temperature", "0.3"))
+        if request.mode == "expert":
+            temp = 0.1
+            
         try:
-            temp = float(get_config("ai_temperature", "0.3"))
             async for raw_chunk in chat_completion_stream(
                 messages, 
                 use_bot=False, 

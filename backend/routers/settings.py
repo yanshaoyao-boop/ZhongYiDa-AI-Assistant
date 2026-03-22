@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from dependencies import has_permission
 from models.user import SystemSetting, User
+from services.settings_service import serialize_public_settings
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -50,4 +51,4 @@ def update_settings(
 def get_public_settings(db: Session = Depends(get_db)):
     public_keys = ["welcome_message", "slogan", "app_name"]
     settings = db.query(SystemSetting).filter(SystemSetting.key.in_(public_keys)).all()
-    return {setting.key: setting.value for setting in settings}
+    return serialize_public_settings({setting.key: setting.value for setting in settings})

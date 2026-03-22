@@ -131,6 +131,39 @@ const importModule = async (filePath) => {
     console.error('Expected mp stream controller to abort and reject on stalled chunks.');
     process.exit(1);
   }
+
+  const statusController = createMpStreamChatController({
+    requestImpl: (options) => {
+      const task = {
+        abort: () => {},
+        onChunkReceived: () => {},
+        onHeadersReceived: () => {},
+      };
+      setTimeout(() => {
+        options.success?.({ statusCode: 503 });
+        options.complete?.();
+      }, 0);
+      return task;
+    },
+    buildRequestOptions: () => ({
+      url: '/api/chat/stream',
+      method: 'POST',
+    }),
+    chunkTimeoutMs: 20,
+    retryLimit: 0,
+  });
+
+  let rejectedStatus = false;
+  try {
+    await statusController.start({ onText: () => {} });
+  } catch (error) {
+    rejectedStatus = error?.code === 'REQUEST_FAILED' && error?.message === 'HTTP 503';
+  }
+
+  if (!rejectedStatus) {
+    console.error('Expected mp stream controller to reject when HTTP status is 4xx/5xx.');
+    process.exit(1);
+  }
 })().catch((error) => {
   console.error(error?.stack || error?.message || String(error));
   process.exit(1);

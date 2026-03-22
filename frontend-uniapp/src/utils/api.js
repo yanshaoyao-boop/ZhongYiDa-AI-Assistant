@@ -1,16 +1,21 @@
 const API_BASE_STORAGE_KEY = 'zyd_api_base_url'
 
 const trimTrailingSlash = (value = '') => value.replace(/\/+$/, '')
+const normalizeApiBase = (value = '') => {
+	const normalizedValue = trimTrailingSlash(String(value || '').trim())
+	if (!normalizedValue) return ''
+	return normalizedValue.replace(/\/api$/i, '')
+}
 
 const readStoredApiBase = () => {
 	try {
-		return trimTrailingSlash(uni.getStorageSync(API_BASE_STORAGE_KEY) || '')
+		return normalizeApiBase(uni.getStorageSync(API_BASE_STORAGE_KEY) || '')
 	} catch (error) {
 		return ''
 	}
 }
 
-const readEnvApiBase = () => trimTrailingSlash(import.meta.env.VITE_API_BASE_URL || '')
+const readEnvApiBase = () => normalizeApiBase(import.meta.env.VITE_API_BASE_URL || '')
 const readMpDevApiBase = () => import.meta.env.DEV ? readEnvApiBase() : ''
 
 export const getApiBase = () => {
@@ -46,7 +51,7 @@ export const ensureApiBaseConfigured = () => {
 }
 
 export const setApiBase = (value) => {
-	const normalizedValue = trimTrailingSlash(String(value || '').trim())
+	const normalizedValue = normalizeApiBase(value)
 	try {
 		if (normalizedValue) {
 			uni.setStorageSync(API_BASE_STORAGE_KEY, normalizedValue)

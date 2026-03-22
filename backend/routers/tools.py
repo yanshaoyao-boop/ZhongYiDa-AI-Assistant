@@ -1,4 +1,4 @@
-﻿import base64
+import base64
 import importlib.util
 import json
 import sys
@@ -54,7 +54,7 @@ TOOL_GROUPS = [
                 "summary": "保留原始 UI 的 FBA 合票工具。",
                 "runtime_path": "/api/tools/runtime/business/hepiao/",
                 "kind": "html_file",
-                "source": TOOLS_SOURCE_ROOT / "业务工具" / "合票工具" / "FBA合票神器Pro_v2.0_浅色版.html",
+                "source": TOOLS_SOURCE_ROOT / "业务工具" / "合票工具" / "dist" / "index.html",
             },
             {
                 "slug": "self-order-form",
@@ -62,7 +62,7 @@ TOOL_GROUPS = [
                 "summary": "保留原始 UI 的自助下单表工具。",
                 "runtime_path": "/api/tools/runtime/business/self-order-form/",
                 "kind": "html_file",
-                "source": TOOLS_SOURCE_ROOT / "业务工具" / "自助下单表工具" / "fba_tool_v2.html",
+                "source": TOOLS_SOURCE_ROOT / "业务工具" / "自助下单表工具" / "fba-tool-pro" / "dist" / "index.html",
             },
             {
                 "slug": "reconciliation",
@@ -70,7 +70,7 @@ TOOL_GROUPS = [
                 "summary": "保留原始 UI 的自助对账工具。",
                 "runtime_path": "/api/tools/runtime/business/reconciliation/",
                 "kind": "html_file",
-                "source": TOOLS_SOURCE_ROOT / "业务工具" / "自助对账工具（应收）" / "自动对账助手_Pro_终极版.html",
+                "source": TOOLS_SOURCE_ROOT / "业务工具" / "自助对账工具（应收）" / "ReconciliationPro" / "dist" / "index.html",
             },
         ],
     },
@@ -84,7 +84,7 @@ TOOL_GROUPS = [
                 "summary": "保留原始 UI 的客服下单表转换工具。",
                 "runtime_path": "/api/tools/runtime/admin/order-sheet-transform/",
                 "kind": "directory",
-                "source": TOOLS_RUNTIME_ROOT / "order-sheet-transform",
+                "source": TOOLS_SOURCE_ROOT / "行政工具" / "下单表转换工具（客服专用）" / "excel-transformer",
             },
             {
                 "slug": "fist-transfer",

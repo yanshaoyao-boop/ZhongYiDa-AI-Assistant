@@ -3,12 +3,26 @@ from typing import Iterable
 
 
 COMPANY_INTRO_EXPANSION = "公司简介 发展历程 核心业务 企业文化 优势特色"
+ASSISTANT_CAPABILITY_QUERY_MARKERS = (
+    "你能做什么",
+    "你会什么",
+    "你能帮我做什么",
+    "怎么用",
+    "如何使用",
+    "正确的使用",
+    "用法",
+    "功能",
+    "操作说明",
+    "使用指南",
+    "自我介绍",
+)
+ASSISTANT_CAPABILITY_EXPANSION = "小易 使用指南 操作说明 自我介绍 功能说明 核心能力 助手赋能 白皮书"
 AMBIGUOUS_FOLLOW_UPS = {
     "这个",
-    "这个呢",
+    "这个吗",
     "那个",
-    "那个呢",
-    "还有呢",
+    "那个吗",
+    "还有吗",
     "然后呢",
     "展开下",
     "细说",
@@ -33,6 +47,21 @@ SIGNAL_KEYWORDS = (
     "迟到",
     "SOP",
 )
+ADMIN_ROLE_LOOKUP_KEYWORDS = (
+    "职位",
+    "职务",
+    "岗位",
+    "找谁",
+    "对接",
+    "负责人",
+    "谁负责",
+    "电话",
+    "微信",
+    "联系方式",
+    "负责什么",
+)
+ADMIN_ROLE_DIRECTORY_EXPANSION = "行政部门 岗位职责 对接人 负责人 职位 职务 联系方式"
+ADMIN_ATTENDANCE_EXPANSION = "考勤制度 迟到 早退 漏打卡 未打卡 扣款 满勤 旷工 请假 薪酬 管理制度"
 QUOTE_HINT_KEYWORDS = ("报价", "价格", "多少钱", "费用", "卖价", "单价", "运费")
 ADDRESS_HINT_KEYWORDS = ("偏远", "地址", "邮编", "仓库", "送吗", "哪里")
 REGION_KEYWORDS = ("美东", "美中", "美西", "欧洲", "英国", "加拿大", "澳洲", "华东", "华南")
@@ -41,14 +70,24 @@ ZIP_CODE_PATTERN = re.compile(r"(?<!\d)\d{5}(?!\d)")
 WEIGHT_VOLUME_PATTERN = re.compile(r"\d+(?:\.\d+)?\s*(?:kg|公斤|cbm|方|立方)", re.IGNORECASE)
 ADMIN_KNOWLEDGE_KEYWORDS = (
     "考勤",
+    "迟到",
+    "早退",
+    "未打卡",
+    "漏打卡",
+    "扣款",
+    "满勤",
+    "旷工",
     "请假",
     "报销",
     "工资",
+    "薪资",
+    "薪酬",
     "绩效",
     "人事",
     "制度",
     "晋升",
     "调休",
+    *ADMIN_ROLE_LOOKUP_KEYWORDS,
 )
 BUSINESS_KNOWLEDGE_KEYWORDS = (
     "物流",
@@ -112,6 +151,9 @@ def _has_address_target(text: str) -> bool:
 
 def infer_knowledge_category(message: str) -> str | None:
     normalized = _normalize_text(message)
+    if any(keyword in normalized for keyword in ADMIN_ROLE_LOOKUP_KEYWORDS):
+        return "admin"
+
     admin_score = sum(1 for keyword in ADMIN_KNOWLEDGE_KEYWORDS if keyword in normalized)
     biz_score = sum(1 for keyword in BUSINESS_KNOWLEDGE_KEYWORDS if keyword.lower() in normalized.lower())
 
@@ -150,6 +192,15 @@ def build_document_search_query(
     if len(current_message) < 15 and any(keyword in current_message for keyword in company_intro_keywords):
         search_query = f"{search_query} {COMPANY_INTRO_EXPANSION}".strip()
 
+    if any(keyword in current_message for keyword in ASSISTANT_CAPABILITY_QUERY_MARKERS):
+        search_query = f"{search_query} {ASSISTANT_CAPABILITY_EXPANSION}".strip()
+
+    if any(keyword in current_message for keyword in ADMIN_ROLE_LOOKUP_KEYWORDS):
+        search_query = f"{search_query} {ADMIN_ROLE_DIRECTORY_EXPANSION}".strip()
+
+    if any(keyword in current_message for keyword in ADMIN_KNOWLEDGE_KEYWORDS):
+        search_query = f"{search_query} {ADMIN_ATTENDANCE_EXPANSION}".strip()
+
     return search_query
 
 
@@ -182,8 +233,7 @@ def rerank_similar_documents(query: str, documents: list[dict] | None) -> list[d
         distance = float(doc.get("distance", 1.0))
         return (keyword_hits, -distance, -index)
 
-    ranked = sorted(docs, key=lambda doc_with_index: score(doc_with_index, docs.index(doc_with_index)), reverse=True)
-    return ranked
+    return sorted(docs, key=lambda doc_with_index: score(doc_with_index, docs.index(doc_with_index)), reverse=True)
 
 
 def summarize_document_sources(documents: list[dict] | None, limit: int = 3) -> str:
@@ -248,7 +298,7 @@ def should_ask_document_clarification(message: str, history: list[dict] | None) 
     if not current_message or len(current_message) > 8:
         return False
 
-    if current_message not in AMBIGUOUS_FOLLOW_UPS:
+    if not any(marker in current_message for marker in AMBIGUOUS_FOLLOW_UPS):
         return False
 
     recent_user_messages = []
