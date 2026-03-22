@@ -1,103 +1,120 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # /srv/xiaoyi/bin/deploy_from_github.sh
-# 小易智能助手 - 从 GitHub 自动部署脚本
 
-set -e # 遇到错误立即停止
+set -euo pipefail
 
-# 配置变量
 PROJECT_ROOT="/var/www/zyd-bot"
 BACKUP_SCRIPT="/srv/xiaoyi/bin/backup.sh"
 SERVICE_NAME="zyd-bot"
 ENV_FILE="${PROJECT_ROOT}/backend/.env"
 DB_FILE="${PROJECT_ROOT}/backend/data/prod.db"
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+TIMESTAMP="$(date +"%Y%m%d_%H%M%S")"
+# Comma-separated tool directory names to skip during sub-tool builds.
+# Temporary default skips "合票工具" so other modules can be deployed first.
+SKIP_SUBTOOLS="${SKIP_SUBTOOLS:-合票工具}"
 
-echo ">>> [1/11] 开始部署流程 ($TIMESTAMP)..."
+echo ">>> [1/11] Starting deploy (${TIMESTAMP})..."
 
-# 1. 执行现有备份脚本
-echo ">>> [2/11] 正在执行系统备份..."
+echo ">>> [2/11] Running backup..."
 if [ -f "$BACKUP_SCRIPT" ]; then
     bash "$BACKUP_SCRIPT"
 else
-    echo "警告: 备份脚本 $BACKUP_SCRIPT 未找到，跳过系统备份。"
+    echo "WARNING: backup script not found: $BACKUP_SCRIPT"
 fi
 
-# 2. 核心私有文件快照
-echo ">>> [3/11] 为核心私有文件创建快照..."
+echo ">>> [3/11] Snapshotting private files..."
 mkdir -p "${PROJECT_ROOT}/backend/data/snapshots"
 [ -f "$ENV_FILE" ] && cp "$ENV_FILE" "${PROJECT_ROOT}/backend/data/snapshots/.env.${TIMESTAMP}.bak"
 [ -f "$DB_FILE" ] && cp "$DB_FILE" "${PROJECT_ROOT}/backend/data/snapshots/prod.db.${TIMESTAMP}.bak"
 
-# 3. 记录当前 Git Commit，用于回滚
 cd "$PROJECT_ROOT"
-CURRENT_COMMIT=$(git rev-parse HEAD)
+CURRENT_COMMIT="$(git rev-parse HEAD)"
 echo "$CURRENT_COMMIT" > "${PROJECT_ROOT}/.last_deployed_commit"
-echo ">>> [4/11] 当前 Commit: $CURRENT_COMMIT 已记录。"
+echo ">>> [4/11] Recorded current commit: $CURRENT_COMMIT"
 
-# 4. Git Fetch & Pull
-echo ">>> [5/11] 正在从 GitHub 获取代码 (main 分支)..."
+echo ">>> [5/11] Fetching latest code from origin/main..."
 git fetch origin main
-
-# 尝试 fast-forward pull
 if ! git pull --ff-only origin main; then
-    echo "错误: git pull 失败！检测到服务器端有手动代码改动，请先清理或保存手动冲突。"
-    echo "部署已终止。线上应用未受影响。"
+    echo "ERROR: git pull failed. Clean up local server changes first."
     exit 1
 fi
 
-# 5. 安装/更新后端依赖
-echo ">>> [6/11] 正在安装后端依赖..."
+echo ">>> [6/11] Installing backend dependencies..."
 cd "${PROJECT_ROOT}/backend"
-# 假设使用 venv
 if [ -d "venv" ]; then
+    # shellcheck disable=SC1091
     source venv/bin/activate
-    pip install -r requirements.txt
-else
-    pip install -r requirements.txt
 fi
+pip install -r requirements.txt
 
-# 6. 构建前端主体
-echo ">>> [7/11] 正在构建前端主体..."
+echo ">>> [7/11] Building frontend..."
 cd "${PROJECT_ROOT}/frontend"
 npm install
 npm run build
 
-# 6.1 构建智能工具子模块
-echo ">>> [7.1/11] 正在扫描并构建智能工具子模块..."
-TOOLS_DIR="${PROJECT_ROOT}/智能工具源代码"
-# 找到所有包含 package.json 的子目录（不包含 node_modules）
-find "$TOOLS_DIR" -maxdepth 4 -name "package.json" -not -path "*/node_modules/*" | while read -r pkg; do
-    tool_path=$(dirname "$pkg")
-    tool_name=$(basename "$tool_path")
-    echo "    正在构建工具: $tool_name..."
-    cd "$tool_path"
-    npm install --no-audit --no-fund
-    npm run build
-done
+echo ">>> [7.1/11] Building sub-tools..."
+if ! command -v find >/dev/null 2>&1; then
+    echo "ERROR: find command is required but not available."
+    exit 1
+fi
+
+should_skip_tool() {
+    local tool_name="$1"
+    local item
+    IFS=',' read -r -a skip_list <<< "$SKIP_SUBTOOLS"
+    for item in "${skip_list[@]}"; do
+        item="$(echo "$item" | xargs)"
+        if [ -n "$item" ] && [ "$item" = "$tool_name" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+while IFS= read -r -d '' pkg; do
+    tool_path="$(dirname "$pkg")"
+    tool_name="$(basename "$tool_path")"
+    if should_skip_tool "$tool_name"; then
+        echo "    Skipping tool: $tool_name"
+        continue
+    fi
+    echo "    Building tool: $tool_name"
+    (
+        cd "$tool_path"
+        npm install --no-audit --no-fund
+        npm run build
+    )
+done < <(
+    find "$PROJECT_ROOT" \
+        \( \
+            -path "$PROJECT_ROOT/backend" -o \
+            -path "$PROJECT_ROOT/frontend" -o \
+            -path "$PROJECT_ROOT/frontend-uniapp" -o \
+            -path "$PROJECT_ROOT/frontend-uniapp-old-webpack" \
+        \) -prune -o \
+        -name "package.json" -not -path "*/node_modules/*" -print0
+)
+
 cd "$PROJECT_ROOT"
 
-# 7. 重启后端服务
-echo ">>> [8/11] 正在重启服务 $SERVICE_NAME..."
+echo ">>> [8/11] Restarting service: $SERVICE_NAME"
 sudo systemctl restart "$SERVICE_NAME"
 
-# 8. 检查 Nginx 配置
-echo ">>> [9/11] 正在检查 Nginx 配置..."
+echo ">>> [9/11] Validating nginx config..."
 sudo nginx -t
 
-# 9. 重载 Nginx
-echo ">>> [10/11] 正在重载 Nginx..."
+echo ">>> [10/11] Reloading nginx..."
 sudo systemctl reload nginx
 
-# 10. 健康检查
-echo ">>> [11/11] 正在进行系统健康检查..."
+echo ">>> [11/11] Running health checks..."
 sleep 3
-BACKEND_HEALTH=$(curl -s http://127.0.0.1:8000/)
-FRONTEND_HEALTH=$(curl -kIs https://127.0.0.1/ | head -n 1) || true
+BACKEND_HEALTH="$(curl -s http://127.0.0.1:8000/)"
+FRONTEND_HEALTH="$(curl -kIs https://127.0.0.1/ | head -n 1 || true)"
 
-echo "后端检查 (8000): $BACKEND_HEALTH"
-echo "前端检查 (HTTPS): $FRONTEND_HEALTH"
+echo "Backend (8000): $BACKEND_HEALTH"
+echo "Frontend (HTTPS): $FRONTEND_HEALTH"
 
 echo "=========================================="
-echo "部署完成！当前版本: $(git rev-parse --short HEAD)"
-echo "完成时间: $(date)"
+echo "Deploy finished at commit $(git rev-parse --short HEAD)"
+echo "Finished at: $(date)"
 echo "=========================================="

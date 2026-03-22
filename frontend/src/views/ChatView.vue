@@ -175,7 +175,7 @@ import WebWelcomeScreen from './chat/components/WebWelcomeScreen.vue'
 // 基础常量
 const auth = useAuthStore()
 const router = useRouter()
-const XIAOYI_AVATAR_IMG = '/src/assets/xiaoyi_avatar.png'
+const XIAOYI_AVATAR_IMG = '/xiaoyi-avatar.png'
 const OUTPUT_LENGTH_KEY = 'zyd_output_length'
 const LAST_CHAT_MODE_KEY = 'zyd_last_chat_mode'
 const NOTICE_SEEN_STORAGE_KEY = 'last_read_notice_id'
