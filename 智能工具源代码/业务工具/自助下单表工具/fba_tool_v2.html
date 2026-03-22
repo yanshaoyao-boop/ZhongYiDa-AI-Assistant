@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FBA智能下单表生成工具 (图片增强版)</title>
+    
+    <!-- 1. 引入 Vue 2 -->
+    <script src="https://unpkg.com/vue@2.7.16/dist/vue.js"></script>
+    
+    <!-- 2. 引入 Element UI -->
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+    
+    <!-- 3. 核心工具库: ExcelJS (处理图片关键), JSZip -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+    <style>
+        body {
+            font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "微软雅黑", Arial, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            overflow: hidden;
+            min-height: 80vh;
+        }
+        /* 头部样式 */
+        .header {
+            background: linear-gradient(135deg, #1890ff, #36cfc9);
+            color: #fff;
+            padding: 24px 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 600; }
+        .header p { margin: 8px 0 0; font-size: 14px; opacity: 0.9; }
+        
+        /* 内容区 */
+        .content { padding: 32px; }
+        
+        /* 步骤条 */
+        .steps-box {
+            margin-bottom: 40px;
+            padding: 20px;
+            background: #fafafa;
+            border-radius: 6px;
+        }
+
+        /* 上传区域 */
+        .upload-area {
+            border: 2px dashed #d9d9d9;
+            border-radius: 6px;
+            padding: 40px 0;
+            text-align: center;
+            transition: border-color .3s;
+            background: #fff;
+        }
+        .upload-area:hover { border-color: #409EFF; }
+        .upload-icon { font-size: 48px; color: #c0c4cc; margin-bottom: 16px; }
+        
+        /* 配置区域 */
+        .config-panel { display: flex; gap: 24px; }
+        .config-left { flex: 2; }
+        .config-right { flex: 1; display: flex; flex-direction: column; gap: 20px; }
+        
+        /* 映射项 */
+        .mapping-card {
+            background: #fcfcfc;
+            border: 1px solid #ebeef5;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+        .mapping-title { font-weight: bold; font-size: 14px; margin-bottom: 8px; display: flex; justify-content: space-between; }
+        
+        /* 日志窗口 */
+        .log-window {
+            background: #1e1e1e;
+            color: #67c23a;
+            padding: 16px;
+            border-radius: 6px;
+            font-family: Consolas, monospace;
+            font-size: 12px;
+            height: 300px;
+            overflow-y: auto;
+            line-height: 1.5;
+        }
+        .log-entry { border-bottom: 1px solid #333; padding: 2px 0; }
+        .log-warn { color: #e6a23c; }
+        .log-error { color: #f56c6c; }
+
+        .image-col-tag { 
+            background: #e6f7ff; 
+            color: #1890ff; 
+            border: 1px solid #91d5ff; 
+            padding: 2px 6px; 
+            border-radius: 4px; 
+            font-size: 12px; 
+            display: inline-block;
+            margin-top: 5px;
+        }
+
+        .dimension-mapping { display: flex; flex-direction: column; gap: 4px; margin-top: 5px; }
+        .dim-row { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+        .dim-row span { width: 25px; color: #909399; }
+
+        [v-cloak] { display: none; }
+    </style>
+</head>
+<body>
+    <div id="app" class="container" v-cloak>
+        <!-- 头部 -->
+        <div class="header">
+            <div>
+                <h1>FBA智能下单表工具 <span style="font-size:14px; background:rgba(255,255,255,0.2); padding:2px 8px; border-radius:10px;">V2.0 图片版</span></h1>
+                <p>支持Excel图片自动识别、模糊行匹配与居中迁移</p>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <el-button size="mini" icon="el-icon-download" round @click="exportConfig">导出配置</el-button>
+                <el-button size="mini" icon="el-icon-upload2" round @click="$refs.configInput.click()">导入配置</el-button>
+                <input type="file" ref="configInput" hidden accept=".json" @change="handleConfigImport">
+                <el-button size="small" icon="el-icon-refresh-left" circle @click="reset" title="重置"></el-button>
+            </div>
+        </div>
+
+        <div class="content">
+            <!-- 步骤进度 -->
+            <div class="steps-box">
+                <el-steps :active="step - 1" finish-status="success" align-center>
+                    <el-step title="加载模板" description="空白表格样式"></el-step>
+                    <el-step title="导入数据源" description="含产品图的Excel"></el-step>
+                    <el-step title="生成分仓表" description="自动拆分与填充"></el-step>
+                </el-steps>
+            </div>
+
+            <!-- 第一步：模板 -->
+            <div v-if="step === 1" class="step-content">
+                <div class="upload-area" @dragover.prevent @drop.prevent="onTemplateDrop">
+                    <i class="el-icon-upload upload-icon"></i>
+                    <h3>点击或拖拽上传 [下单表模板]</h3>
+                    <p style="color:#999; font-size:13px;">请确保第 11 行为表头，数据从第 12 行开始填充</p>
+                    <input type="file" ref="templateInput" hidden accept=".xlsx" @change="handleTemplateFile">
+                    <el-button type="primary" size="small" @click="$refs.templateInput.click()">选择文件</el-button>
+                </div>
+            </div>
+
+            <!-- 第二步：数据源 -->
+            <div v-if="step === 2" class="step-content">
+                <el-alert :title="`已加载模板：${templateFileName} (${templateColumns.length}列)`" type="success" :closable="false" show-icon style="margin-bottom:20px;"></el-alert>
+                
+                <div class="upload-area" @dragover.prevent @drop.prevent="onDataDrop">
+                    <i class="el-icon-picture-outline upload-icon"></i>
+                    <h3>点击或拖拽上传 [数据源表格]</h3>
+                    <p style="color:#999; font-size:13px;">支持 .xlsx 格式，程序将自动提取行内图片</p>
+                    <input type="file" ref="dataInput" hidden accept=".xlsx" multiple @change="handleDataFile">
+                    <el-button type="success" size="small" @click="$refs.dataInput.click()">选择数据源 (支持多选)</el-button>
+                </div>
+            </div>
+
+            <!-- 第三步：配置与生成 -->
+            <div v-if="step === 3" class="config-panel">
+                <div class="config-left">
+                    <el-card shadow="never">
+                        <div slot="header"><b>⚙️ 核心逻辑配置</b></div>
+                        <el-form label-position="top" size="small">
+                            <el-row :gutter="20">
+                                <el-col :span="12">
+                                    <el-form-item label="分仓字段 (Grouper)">
+                                        <el-select v-model="config.groupBy" filterable placeholder="选择仓库列" style="width:100%">
+                                            <el-option v-for="h in dataHeaders" :key="h" :label="h" :value="h"></el-option>
+                                        </el-select>
+                                    </el-form-item>
+                                </el-col>
+                                <el-col :span="12">
+                                    <el-form-item label="总箱数统计 (Sum)">
+                                        <el-select v-model="config.sumBy" filterable placeholder="选择箱数列" style="width:100%">
+                                            <el-option v-for="h in dataHeaders" :key="h" :label="h" :value="h"></el-option>
+                                        </el-select>
+                                    </el-form-item>
+                                </el-col>
+                            </el-row>
+                            <el-form-item label="B9 报关方式">
+                                <el-radio-group v-model="config.declareType">
+                                    <el-radio-button label="单独报关件"></el-radio-button>
+                                    <el-radio-button label="非报关件"></el-radio-button>
+                                    <el-radio-button label="合并报关件"></el-radio-button>
+                                </el-radio-group>
+                            </el-form-item>
+                        </el-form>
+                    </el-card>
+
+                    <el-card shadow="never" style="margin-top:20px;">
+                        <div slot="header"><b>🔗 字段映射 (已自动匹配)</b></div>
+                        <div style="max-height: 400px; overflow-y: auto; padding-right:10px;">
+                            <el-row :gutter="10">
+                                <el-col :span="12" v-for="col in templateColumns" :key="col.index">
+                                    <div class="mapping-card">
+                                        <div class="mapping-title">
+                                            <span>{{ col.name }}</span>
+                                            <span style="color:#aaa; font-weight:normal;">{{ getColLetter(col.index) }}</span>
+                                        </div>
+                                        
+                                        <!-- 维度匹配：显示三个下拉框 -->
+                                        <div v-if="isDimensionCol(col.name)" class="dimension-mapping">
+                                            <div class="dim-row">
+                                                <span>长:</span>
+                                                <el-select v-model="mapping[col.name + '_L']" size="mini" clearable filterable style="width:100%" placeholder="长">
+                                                    <el-option v-for="h in dataHeaders" :key="h" :label="h" :value="h"></el-option>
+                                                </el-select>
+                                            </div>
+                                            <div class="dim-row">
+                                                <span>宽:</span>
+                                                <el-select v-model="mapping[col.name + '_W']" size="mini" clearable filterable style="width:100%" placeholder="宽">
+                                                    <el-option v-for="h in dataHeaders" :key="h" :label="h" :value="h"></el-option>
+                                                </el-select>
+                                            </div>
+                                            <div class="dim-row">
+                                                <span>高:</span>
+                                                <el-select v-model="mapping[col.name + '_H']" size="mini" clearable filterable style="width:100%" placeholder="高">
+                                                    <el-option v-for="h in dataHeaders" :key="h" :label="h" :value="h"></el-option>
+                                                </el-select>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- 普通匹配 -->
+                                        <el-select v-else v-model="mapping[col.name]" size="mini" clearable filterable style="width:100%" placeholder="不填充">
+                                            <el-option v-for="h in dataHeaders" :key="h" :label="h" :value="h"></el-option>
+                                        </el-select>
+                                        
+                                        <!-- 图片特殊标记 -->
+                                        <div v-if="isImageCol(col.name)" class="image-col-tag">
+                                            <i class="el-icon-picture"></i> 自动迁移图片
+                                        </div>
+                                    </div>
+                                </el-col>
+                            </el-row>
+                        </div>
+                    </el-card>
+                </div>
+
+                <div class="config-right">
+                    <el-button type="primary" size="large" icon="el-icon-download" :loading="isProcessing" 
+                        @click="processAndDownload" style="height: 60px; font-size: 16px;">
+                        {{ isProcessing ? '正在处理图片...' : '生成并下载 ZIP' }}
+                    </el-button>
+
+                    <div class="log-window" ref="logBox">
+                        <div v-for="(log, i) in logs" :key="i" class="log-entry" :class="log.type">
+                            <span style="opacity:0.5;">[{{ log.time }}]</span> {{ log.msg }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        new Vue({
+            el: '#app',
+            data: {
+                step: 1,
+                isProcessing: false,
+                templateFileName: '',
+                templateBuffer: null,
+                templateColumns: [],
+                
+                dataHeaders: [],
+                mergedData: [],
+                
+                config: {
+                    groupBy: '',
+                    sumBy: '',
+                    declareType: '单独报关件'
+                },
+                mapping: {},
+                logs: [],
+                
+                CONST: {
+                    HEADER_Row: 11, // ExcelJS 1-based index (对应第11行)
+                    DATA_START: 12  // 数据从第12行开始
+                }
+            },
+            methods: {
+                /* 工具函数 */
+                log(msg, type = '') {
+                    const time = new Date().toTimeString().split(' ')[0];
+                    this.logs.push({ time, msg, type: type === 'error' ? 'log-error' : (type === 'warn' ? 'log-warn' : '') });
+                    this.$nextTick(() => {
+                        if(this.$refs.logBox) this.$refs.logBox.scrollTop = this.$refs.logBox.scrollHeight;
+                    });
+                },
+                getColLetter(idx) { return String.fromCharCode(65 + idx); },
+                fileToBuffer(file) {
+                    return new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = e => resolve(e.target.result);
+                        reader.onerror = reject;
+                        reader.readAsArrayBuffer(file);
+                    });
+                },
+                isImageCol(name) { return name.includes('图片') || name.includes('Photo') || name.includes('Image'); },
+                isDimensionCol(name) { 
+                    return name.includes('材积') || (name.includes('长') && name.includes('宽') && name.includes('高')); 
+                },
+
+                // 导出配置
+                exportConfig() {
+                    const data = {
+                        mapping: this.mapping,
+                        config: this.config
+                    };
+                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `fba_config_${new Date().toISOString().slice(0, 10)}.json`;
+                    link.click();
+                    this.log('配置已导出');
+                },
+                // 导入配置
+                handleConfigImport(e) {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                        try {
+                            const data = JSON.parse(ev.target.result);
+                            if (data.mapping) this.mapping = Object.assign({}, this.mapping, data.mapping);
+                            if (data.config) this.config = Object.assign({}, this.config, data.config);
+                            this.log('配置导入成功');
+                            this.$message.success('配置已导入');
+                        } catch (err) {
+                            this.$message.error('配置文件格式错误');
+                        }
+                    };
+                    reader.readAsText(file);
+                    e.target.value = ''; // reset
+                },
+
+                /* 第一步：处理模板 */
+                async handleTemplateFile(e) { await this.processTemplate(e.target.files[0]); },
+                async onTemplateDrop(e) { await this.processTemplate(e.dataTransfer.files[0]); },
+                
+                async processTemplate(file) {
+                    if (!file) return;
+                    try {
+                        this.templateFileName = file.name;
+                        this.templateBuffer = await this.fileToBuffer(file);
+                        
+                        const wb = new ExcelJS.Workbook();
+                        await wb.xlsx.load(this.templateBuffer);
+                        const ws = wb.getWorksheet(1);
+                        
+                        const headerRow = ws.getRow(this.CONST.HEADER_Row);
+                        this.templateColumns = [];
+                        
+                        headerRow.eachCell((cell, colNumber) => {
+                            const val = cell.text ? cell.text.trim() : '';
+                            if (val) {
+                                this.templateColumns.push({
+                                    index: colNumber - 1, // 0-based
+                                    name: val
+                                });
+                            }
+                        });
+
+                        if (this.templateColumns.length === 0) throw new Error('第11行未检测到表头，请检查模板格式');
+                        
+                        this.step = 2;
+                        this.log(`模板解析成功: ${file.name}`);
+                    } catch (err) {
+                        this.$message.error(err.message);
+                        this.log(err.message, 'error');
+                    }
+                },
+
+                /* 第二步：处理数据源 (包含核心图片逻辑) */
+                async handleDataFile(e) { await this.processDataFiles(e.target.files); },
+                async onDataDrop(e) { await this.processDataFiles(e.dataTransfer.files); },
+
+                async processDataFiles(fileList) {
+                    if (!fileList || fileList.length === 0) return;
+                    this.isProcessing = true;
+                    this.log('开始解析数据源...');
+                    
+                    try {
+                        let allData = [];
+                        let headersSet = new Set();
+                        let totalImgs = 0;
+
+                        for (let i = 0; i < fileList.length; i++) {
+                            const file = fileList[i];
+                            this.log(`📄 正在读取: ${file.name}`);
+                            
+                            const buffer = await this.fileToBuffer(file);
+                            const wb = new ExcelJS.Workbook();
+                            await wb.xlsx.load(buffer);
+                            const ws = wb.getWorksheet(1);
+
+                            // --- 核心：图片抓取算法 ---
+                            const imgs = ws.getImages();
+                            totalImgs += imgs.length;
+                            const rowToImgMap = {}; // rowNumber -> [imgData]
+                            
+                            if (imgs.length > 0) this.log(`   发现 ${imgs.length} 张图片，正在建立锚点索引...`);
+
+                            imgs.forEach(img => {
+                                // 获取图片位置信息
+                                const range = img.range; 
+                                const tl = range.tl; // top-left {nativeCol, nativeColOff, nativeRow, nativeRowOff} or {col, row}
+                                const br = range.br; 
+
+                                // 模糊判定行归属：取图片垂直中心点
+                                // tl.row 是 0-based，+1 变成 Excel 行号
+                                const startRow = Math.floor(tl.row) + 1;
+                                const endRow = Math.floor(br.row) + 1;
+                                const centerRow = Math.floor((tl.row + br.row) / 2) + 1;
+
+                                // 优先归合到 startRow，除非 startRow 是表头
+                                let targetRow = startRow;
+                                if (targetRow < 2) targetRow = centerRow; // 防止归到表头
+
+                                if (!rowToImgMap[targetRow]) rowToImgMap[targetRow] = [];
+                                
+                                const imgAsset = wb.getImage(img.imageId);
+                                rowToImgMap[targetRow].push({
+                                    buffer: imgAsset.buffer,
+                                    extension: imgAsset.extension,
+                                    // 记录宽高比例或许有用，暂时不用
+                                });
+                            });
+
+                            // 读取数据行
+                            // 假设第一行是表头
+                            const headerRow = ws.getRow(1);
+                            const fileColMap = []; // index -> name
+                            headerRow.eachCell((cell, colNum) => {
+                                const val = cell.text.trim();
+                                if (val) {
+                                    fileColMap[colNum] = val;
+                                    headersSet.add(val);
+                                }
+                            });
+
+                            ws.eachRow((row, rowNum) => {
+                                if (rowNum <= 1) return; // 跳过表头
+                                const rowObj = { _source: file.name };
+                                
+                                // 填充文本数据
+                                fileColMap.forEach((key, colIdx) => {
+                                    const cell = row.getCell(colIdx);
+                                    rowObj[key] = (cell.value && cell.value.result) ? cell.value.result : cell.value; // 处理公式
+                                });
+
+                                // 挂载图片
+                                if (rowToImgMap[rowNum]) {
+                                    rowObj._images = rowToImgMap[rowNum];
+                                }
+                                
+                                // 只有当行内有数据或有图片时才添加
+                                if (Object.keys(rowObj).length > 1 || rowObj._images) {
+                                    allData.push(rowObj);
+                                }
+                            });
+                        }
+
+                        this.dataHeaders = Array.from(headersSet);
+                        this.mergedData = allData;
+                        this.log(`✅ 解析完成：共 ${allData.length} 条数据，关联 ${totalImgs} 张图片`);
+                        
+                        // 自动匹配字段
+                        this.autoMapFields();
+                        this.step = 3;
+
+                    } catch (err) {
+                        this.log(err.message, 'error');
+                        console.error(err);
+                    } finally {
+                        this.isProcessing = false;
+                    }
+                },
+
+                autoMapFields() {
+                    const map = {};
+                    this.templateColumns.forEach(tCol => {
+                        if (this.isDimensionCol(tCol.name)) {
+                            this.$set(this.mapping, tCol.name + '_L', this.dataHeaders.find(h => h.includes('长') || h.toLowerCase().includes('length')) || '');
+                            this.$set(this.mapping, tCol.name + '_W', this.dataHeaders.find(h => h.includes('宽') || h.toLowerCase().includes('width')) || '');
+                            this.$set(this.mapping, tCol.name + '_H', this.dataHeaders.find(h => h.includes('高') || h.toLowerCase().includes('height')) || '');
+                        } else {
+                            const match = this.dataHeaders.find(dh => dh.includes(tCol.name) || tCol.name.includes(dh));
+                            if (match) this.$set(this.mapping, tCol.name, match);
+                        }
+                    });
+                    
+                    // 自动配置
+                    const findHeader = (keywords) => this.dataHeaders.find(h => keywords.some(k => h.includes(k)));
+                    this.config.groupBy = findHeader(['仓库', 'Warehouse', 'FBA']);
+                    this.config.sumBy = findHeader(['箱数', 'CTN', 'Qty', '数量']);
+                },
+
+                /* 第三步：生成下载 */
+                async processAndDownload() {
+                    if (!this.config.groupBy) return this.$message.warning('请选择分仓依据列');
+                    
+                    this.isProcessing = true;
+                    this.log('🚀 开始生成表格...');
+                    
+                    try {
+                        const zip = new JSZip();
+                        
+                        // 按仓库分组
+                        const groups = {};
+                        this.mergedData.forEach(row => {
+                            let key = row[this.config.groupBy];
+                            key = key ? String(key).trim() : '未分类';
+                            // 简单的文件名清理
+                            key = key.replace(/[\\/:*?"<>|]/g, '-'); 
+                            if (!groups[key]) groups[key] = [];
+                            groups[key].push(row);
+                        });
+
+                        this.log(`数据已分为 ${Object.keys(groups).length} 个组（仓库）`);
+
+                        // 遍历生成文件
+                        for (const groupName of Object.keys(groups)) {
+                            const groupRows = groups[groupName];
+                            
+                            // 读取模板
+                            const wb = new ExcelJS.Workbook();
+                            await wb.xlsx.load(this.templateBuffer);
+                            const ws = wb.getWorksheet(1);
+                            
+                            // 1. 填写表头固定信息
+                            // M8: 仓库
+                            const cellM8 = ws.getCell('M8');
+                            if(cellM8) cellM8.value = groupName;
+                            
+                            // B9: 报关方式
+                            const cellB9 = ws.getCell('B9');
+                            if(cellB9) cellB9.value = this.config.declareType;
+
+                            // F3: 总箱数
+                            if (this.config.sumBy) {
+                                const total = groupRows.reduce((sum, r) => {
+                                    const val = parseFloat(r[this.config.sumBy]);
+                                    return sum + (isNaN(val) ? 0 : val);
+                                }, 0);
+                                const cellF3 = ws.getCell('F3');
+                                if(cellF3) cellF3.value = total;
+                            }
+                            
+                            // B3联动：填入第一行的SKU/Reference ID (假设映射到第一列或第二列)
+                            // 这里做一个通用的尝试：找 A12 的值
+                            // 但由于 A12 还没填，我们稍后处理，或者取 groupRows[0] 的对应映射值
+
+                            // 2. 填充数据行
+                            for (let i = 0; i < groupRows.length; i++) {
+                                const rowData = groupRows[i];
+                                const targetRowIdx = this.CONST.DATA_START + i;
+                                const row = ws.getRow(targetRowIdx);
+
+                                // 填充各列
+                                this.templateColumns.forEach(col => {
+                                    const sourceKey = this.mapping[col.name];
+                                    
+                                    // 文本填充
+                                    if (this.isDimensionCol(col.name) && this.mapping[col.name + '_L']) {
+                                        const l = rowData[this.mapping[col.name + '_L']] || '';
+                                        const w = rowData[this.mapping[col.name + '_W']] || '';
+                                        const h = rowData[this.mapping[col.name + '_H']] || '';
+                                        if (l || w || h) {
+                                            row.getCell(col.index + 1).value = `${l}*${w}*${h}`;
+                                        }
+                                    } else if (sourceKey && rowData[sourceKey] !== undefined) {
+                                        row.getCell(col.index + 1).value = rowData[sourceKey];
+                                    }
+
+                                    // 图片填充 (如果该列被标记为图片列，且源数据有图)
+                                    if (this.isImageCol(col.name) && rowData._images && rowData._images.length > 0) {
+                                        // 哪怕源数据这一行有多个图，我们通常只填第一个，或者全部叠在一起
+                                        // 为了美观，我们只取第一个
+                                        const imgObj = rowData._images[0];
+                                        
+                                        const imgId = wb.addImage({
+                                            buffer: imgObj.buffer,
+                                            extension: imgObj.extension
+                                        });
+
+                                        // 居中计算：使用相对定位 (20% 左边距, 15% 上边距)
+                                        ws.addImage(imgId, {
+                                            tl: { col: col.index + 0.2, row: targetRowIdx - 1 + 0.15 },
+                                            ext: { width: 50, height: 50 },
+                                            editAs: 'oneCell'
+                                        });
+
+                                        // 增加行高以适应图片 (60px)
+                                        row.height = 60;
+                                        // 设置单元格居中属性
+                                        row.getCell(col.index + 1).alignment = { vertical: 'middle', horizontal: 'center' };
+                                    }
+                                });
+                                
+                                row.commit();
+                            }
+                            
+                            // 补一下 B3 (用第一行数据填)
+                            const refKey = this.mapping['Reference ID'] || this.mapping['FBA编号'] || Object.values(this.mapping)[0];
+                            if (refKey && groupRows.length > 0) {
+                                ws.getCell('B3').value = groupRows[0][refKey];
+                            }
+
+                            const buffer = await wb.xlsx.writeBuffer();
+                            zip.file(`${groupName}_下单表.xlsx`, buffer);
+                        }
+
+                        // 打包下载
+                        const content = await zip.generateAsync({type:"blob"});
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(content);
+                        link.download = `FBA自动分仓下单表_${new Date().toISOString().slice(0,10)}.zip`;
+                        link.click();
+                        
+                        this.log('🎉 生成完成！浏览器已开始下载。');
+                        this.$message.success('处理成功');
+
+                    } catch (err) {
+                        console.error(err);
+                        this.log(err.message, 'error');
+                        this.$message.error('生成失败，请看日志');
+                    } finally {
+                        this.isProcessing = false;
+                    }
+                },
+                
+                reset() {
+                    Object.assign(this.$data, this.$options.data());
+                    this.log('状态已重置');
+                    // 重新让 input 可选
+                    if (this.$refs.templateInput) this.$refs.templateInput.value = '';
+                    if (this.$refs.dataInput) this.$refs.dataInput.value = '';
+                }
+            }
+        });
+    </script>
+</body>
+</html>
