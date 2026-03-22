@@ -56,11 +56,25 @@ else
     pip install -r requirements.txt
 fi
 
-# 6. 构建前端
-echo ">>> [7/11] 正在构建前端..."
+# 6. 构建前端主体
+echo ">>> [7/11] 正在构建前端主体..."
 cd "${PROJECT_ROOT}/frontend"
 npm install
 npm run build
+
+# 6.1 构建智能工具子模块
+echo ">>> [7.1/11] 正在扫描并构建智能工具子模块..."
+TOOLS_DIR="${PROJECT_ROOT}/智能工具源代码"
+# 找到所有包含 package.json 的子目录（不包含 node_modules）
+find "$TOOLS_DIR" -maxdepth 4 -name "package.json" -not -path "*/node_modules/*" | while read -r pkg; do
+    tool_path=$(dirname "$pkg")
+    tool_name=$(basename "$tool_path")
+    echo "    正在构建工具: $tool_name..."
+    cd "$tool_path"
+    npm install --no-audit --no-fund
+    npm run build
+done
+cd "$PROJECT_ROOT"
 
 # 7. 重启后端服务
 echo ">>> [8/11] 正在重启服务 $SERVICE_NAME..."

@@ -61,8 +61,8 @@ TOOL_GROUPS = [
                 "title": "自助下单表工具",
                 "summary": "保留原始 UI 的自助下单表工具。",
                 "runtime_path": "/api/tools/runtime/business/self-order-form/",
-                "kind": "html_file",
-                "source": TOOLS_SOURCE_ROOT / "业务工具" / "自助下单表工具" / "fba-tool-pro" / "dist" / "index.html",
+                "kind": "directory",
+                "source": TOOLS_SOURCE_ROOT / "业务工具" / "自助下单表工具" / "fba-tool-pro" / "dist",
             },
             {
                 "slug": "reconciliation",
@@ -84,7 +84,7 @@ TOOL_GROUPS = [
                 "summary": "保留原始 UI 的客服下单表转换工具。",
                 "runtime_path": "/api/tools/runtime/admin/order-sheet-transform/",
                 "kind": "directory",
-                "source": TOOLS_SOURCE_ROOT / "行政工具" / "下单表转换工具（客服专用）" / "excel-transformer",
+                "source": TOOLS_SOURCE_ROOT / "行政工具" / "下单表转换工具（客服专用）" / "excel-transformer" / "dist",
             },
             {
                 "slug": "fist-transfer",

@@ -12,7 +12,6 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: resolve(__dirname, '../../../../backend/data/tools/order-sheet-transform'),
     emptyOutDir: true,
   },
 })
