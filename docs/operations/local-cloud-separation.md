@@ -32,6 +32,7 @@
 1. 构建前端 `frontend/dist`
 2. 只打包允许上云的后端代码
 3. 生成两个安全发布包到 `release-artifacts/`
+4. 同步智能工具运行资源到 `backend/data/tools`
 
 生成结果：
 
@@ -39,6 +40,9 @@
 - `release-artifacts/frontend-release.zip`
 
 以后上传服务器时，只上传这两个包，不再把整个项目目录直接覆盖到云端。
+
+> `backend-release.zip` 现在默认包含智能工具运行所需资源（位于 `backend/data/tools`），
+> 云端同步后可直接使用 `/api/tools/runtime/...`。
 
 ## 云端自己的数据
 

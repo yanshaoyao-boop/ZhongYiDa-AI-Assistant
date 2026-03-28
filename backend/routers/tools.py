@@ -17,7 +17,14 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 TOOLS_SOURCE_ROOT = REPO_ROOT / "智能工具源代码"
 TOOLS_RUNTIME_ROOT = REPO_ROOT / "backend" / "data" / "tools"
 
-FIST_TOOL_DIR = TOOLS_SOURCE_ROOT / "行政工具" / "客服转单工具（Fist专用）"
+def _resolve_tools_asset(*parts: str) -> Path:
+    source_path = TOOLS_SOURCE_ROOT.joinpath(*parts)
+    if source_path.exists():
+        return source_path
+    return TOOLS_RUNTIME_ROOT.joinpath(*parts)
+
+
+FIST_TOOL_DIR = _resolve_tools_asset("行政工具", "客服转单工具（Fist专用）")
 FIST_TEMPLATE_PATH = FIST_TOOL_DIR / "templates" / "index.html"
 FIST_STATIC_DIR = FIST_TOOL_DIR / "static"
 FIST_GENERATED_DIR = FIST_TOOL_DIR / "generated"
@@ -54,7 +61,7 @@ TOOL_GROUPS = [
                 "summary": "保留原始 UI 的 FBA 合票工具。",
                 "runtime_path": "/api/tools/runtime/business/hepiao/",
                 "kind": "html_file",
-                "source": TOOLS_SOURCE_ROOT / "业务工具" / "合票工具" / "dist" / "index.html",
+                "source": _resolve_tools_asset("业务工具", "合票工具", "dist", "index.html"),
             },
             {
                 "slug": "self-order-form",
@@ -62,7 +69,7 @@ TOOL_GROUPS = [
                 "summary": "保留原始 UI 的自助下单表工具。",
                 "runtime_path": "/api/tools/runtime/business/self-order-form/",
                 "kind": "directory",
-                "source": TOOLS_SOURCE_ROOT / "业务工具" / "自助下单表工具" / "fba-tool-pro" / "dist",
+                "source": _resolve_tools_asset("业务工具", "自助下单表工具", "fba-tool-pro", "dist"),
             },
             {
                 "slug": "reconciliation",
@@ -70,7 +77,7 @@ TOOL_GROUPS = [
                 "summary": "保留原始 UI 的自助对账工具。",
                 "runtime_path": "/api/tools/runtime/business/reconciliation/",
                 "kind": "directory",
-                "source": TOOLS_SOURCE_ROOT / "业务工具" / "自助对账工具（应收）" / "ReconciliationPro" / "dist",
+                "source": _resolve_tools_asset("业务工具", "自助对账工具（应收）", "ReconciliationPro", "dist"),
             },
         ],
     },
@@ -84,7 +91,7 @@ TOOL_GROUPS = [
                 "summary": "保留原始 UI 的客服下单表转换工具。",
                 "runtime_path": "/api/tools/runtime/admin/order-sheet-transform/",
                 "kind": "directory",
-                "source": TOOLS_SOURCE_ROOT / "行政工具" / "下单表转换工具（客服专用）" / "excel-transformer" / "dist",
+                "source": _resolve_tools_asset("行政工具", "下单表转换工具（客服专用）", "excel-transformer", "dist"),
             },
             {
                 "slug": "fist-transfer",
@@ -92,7 +99,7 @@ TOOL_GROUPS = [
                 "summary": "保留原始 UI 的客服转单工具。",
                 "runtime_path": "/api/tools/runtime/admin/fist-transfer/",
                 "kind": "html_file",
-                "source": FIST_TOOL_DIR / "客服转单工具_Fist专用.html",
+                "source": _resolve_tools_asset("行政工具", "客服转单工具（Fist专用）", "客服转单工具_Fist专用.html"),
             },
         ],
     },

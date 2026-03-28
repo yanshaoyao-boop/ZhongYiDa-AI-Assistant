@@ -10,8 +10,8 @@ ENV_FILE="${PROJECT_ROOT}/backend/.env"
 DB_FILE="${PROJECT_ROOT}/backend/data/prod.db"
 TIMESTAMP="$(date +"%Y%m%d_%H%M%S")"
 # Comma-separated tool directory names to skip during sub-tool builds.
-# Temporary default skips "合票工具" so other modules can be deployed first.
-SKIP_SUBTOOLS="${SKIP_SUBTOOLS:-合票工具}"
+# Default is empty to build all smart tools.
+SKIP_SUBTOOLS="${SKIP_SUBTOOLS:-}"
 
 echo ">>> [1/11] Starting deploy (${TIMESTAMP})..."
 
