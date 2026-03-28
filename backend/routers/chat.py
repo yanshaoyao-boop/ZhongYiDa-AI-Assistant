@@ -14,7 +14,6 @@ from fastapi import Depends
 from services.llm_client import chat_completion_stream, get_embedding, DOUBAO_MODEL_ENDPOINT
 from services.chat_intelligence import (
     build_document_search_query,
-    build_document_source_footer,
     build_intent_clarification_message,
     infer_knowledge_category,
     rerank_similar_documents,
@@ -60,6 +59,20 @@ def invalidate_config_cache():
 WH_PATTERN = re.compile(r'[A-Z]{3,4}\d+[A-Z]?')
 # 5位邮编正则
 ZIP_PATTERN = re.compile(r'(?<!\d)\d{5}(?!\d)')
+ADDRESS_SOURCE_KEYWORDS = [
+    "\u6765\u6e90",
+    "\u6750\u6599",
+    "\u54ea\u4efd",
+    "\u54ea\u4e2a\u8868",
+    "\u54ea\u4e00\u4efd",
+    "\u4f9d\u636e",
+    "\u4ece\u54ea\u67e5",
+    "\u67e5\u7684\u4ec0\u4e48",
+    "\u6570\u636e\u6e90",
+]
+TABLE_SEPARATOR_PATTERN = re.compile(r"^\s*\|(?:\s*:?-{3,}:?\s*\|)+\s*$")
+MARKDOWN_HEADING_PATTERN = re.compile(r"^\s{0,3}#{1,6}\s*")
+MARKDOWN_LINK_PATTERN = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 
 # 定义 DeepSeek 接入点
 DEEPSEEK_ENDPOINT = os.getenv("DEEPSEEK_MODEL_ENDPOINT", DOUBAO_MODEL_ENDPOINT)
@@ -101,6 +114,84 @@ def is_image_analysis_failure(image_desc: str) -> bool:
         "暂不可用",
     ]
     return any(marker in lowered for marker in failure_markers)
+
+
+def sanitize_markdown_text(text: str) -> str:
+    """Normalize model output to plain readable text with one-item-per-line layout."""
+    if not text:
+        return ""
+
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n").replace("<br>", "\n")
+    output_lines: List[str] = []
+
+    for raw_line in normalized.split("\n"):
+        line = raw_line
+        if TABLE_SEPARATOR_PATTERN.match(line):
+            continue
+
+        stripped = line.strip()
+        if stripped.startswith("|") and stripped.endswith("|") and "|" in stripped[1:-1]:
+            cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+            cells = [cell for cell in cells if cell]
+            if cells:
+                line = "  ".join(cells)
+            else:
+                continue
+
+        line = MARKDOWN_HEADING_PATTERN.sub("", line)
+        line = line.replace("**", "").replace("__", "").replace("`", "")
+        line = MARKDOWN_LINK_PATTERN.sub(r"\1 (\2)", line)
+        output_lines.append(line)
+
+    sanitized = "\n".join(output_lines)
+    # Force inline list items into independent lines
+    sanitized = re.sub(r"(?<=\S)\s+-\s+", "\n- ", sanitized)
+    sanitized = re.sub(r"(?<=\S)\s+([A-Za-z]\.)\s+", r"\n\1 ", sanitized)
+    sanitized = re.sub(r"(?<=\S)\s+(\d+\.)\s+", r"\n\1 ", sanitized)
+    sanitized = re.sub(r"(?<=\S)\s+([一二三四五六七八九十]{1,3}、)\s*", r"\n\1 ", sanitized)
+    sanitized = re.sub(r"(?<=\S)\s+([（(]\d+[)）])\s*", r"\n\1 ", sanitized)
+    sanitized = re.sub(r"(?<=\S)\s+([①②③④⑤⑥⑦⑧⑨⑩])\s*", r"\n\1 ", sanitized)
+    sanitized = re.sub(r"(?<!\n)(?<=\S)([一二三四五六七八九十]{1,3}、)\s*", r"\n\1 ", sanitized)
+    sanitized = re.sub(r"(?<!\n)(?<=\S)([（(]\d+[)）])\s*", r"\n\1 ", sanitized)
+    sanitized = re.sub(r"(?<!\n)(?<=\S)([①②③④⑤⑥⑦⑧⑨⑩])\s*", r"\n\1 ", sanitized)
+    sanitized = re.sub(r"(?<=[。！？；])\s*-\s+", r"\n- ", sanitized)
+    sanitized = re.sub(r"(?<=[。！？；])\s*(\d+\.)\s*", r"\n\1 ", sanitized)
+    sanitized = re.sub(r"(?<=[。！？；])\s*([A-Za-z]\.)\s*", r"\n\1 ", sanitized)
+    sanitized = re.sub(r"(?<=[。！？；：])\s*([一二三四五六七八九十]{1,3}、)\s*", r"\n\1 ", sanitized)
+    sanitized = re.sub(r"(?<=[。！？；：])\s*([（(]\d+[)）])\s*", r"\n\1 ", sanitized)
+    sanitized = re.sub(r"(?<=[。！？；：])\s*([①②③④⑤⑥⑦⑧⑨⑩])\s*", r"\n\1 ", sanitized)
+    sanitized = re.sub(r"\n{3,}", "\n\n", sanitized).strip()
+    return sanitized
+
+
+def extract_address_targets_from_text(text: str) -> List[str]:
+    if not text:
+        return []
+    wh_codes = WH_PATTERN.findall(text.upper())
+    zips = ZIP_PATTERN.findall(text)
+    # Keep order stable while de-duplicating
+    return list(dict.fromkeys(wh_codes + zips))
+
+
+def find_recent_address_targets(history: List[dict], limit: int = 3) -> List[str]:
+    if not history:
+        return []
+
+    collected: List[str] = []
+    for msg in reversed(history):
+        if msg.get("role") not in {"user", "assistant"}:
+            continue
+        content = msg.get("content") or ""
+        for target in extract_address_targets_from_text(content):
+            if target not in collected:
+                collected.append(target)
+            if len(collected) >= limit:
+                return collected
+    return collected
+
+
+def is_address_source_question(message: str) -> bool:
+    return any(kw in message for kw in ADDRESS_SOURCE_KEYWORDS)
     
 async def classify_intent(message: str, history: List[dict] = None) -> str:
     """Classify user intent to determine routing (simple heuristic or LLM based)"""
@@ -121,6 +212,7 @@ async def classify_intent(message: str, history: List[dict] = None) -> str:
     has_remote_kw = any(kw in message for kw in remote_keywords)
     has_zip = ZIP_PATTERN.search(message)
     has_wh = WH_PATTERN.search(msg_upper)
+    asks_source = is_address_source_question(message)
     
     if has_remote_kw and (has_zip or has_wh or len(message) > 8):
         return "address", message
@@ -135,9 +227,11 @@ async def classify_intent(message: str, history: List[dict] = None) -> str:
     if re.match(r'^\d{5}$', message.strip()):
         return "address", message
 
-    # 2. Quote check
-    if has_wh:
+    # 2. Quote / Address disambiguation for warehouse code
+    if has_wh and any(kw in message for kw in QUOTE_KEYWORDS):
         return "quote", message
+    if has_wh:
+        return "address", message
     
     for kw in QUOTE_KEYWORDS:
         if kw in message:
@@ -172,7 +266,14 @@ async def classify_intent(message: str, history: List[dict] = None) -> str:
     if any(kw in message for kw in internal_keywords):
         return "document", message
 
-    # 6. If it's a short message or followup, check recent history for context
+    # 6. Source follow-up should inherit address context if recent turns include warehouse/zip
+    if asks_source and history:
+        for old_msg in reversed(history[-8:]):
+            content = old_msg.get("content", "")
+            if ZIP_PATTERN.search(content) or WH_PATTERN.search(content.upper()):
+                return "address", message
+
+    # 7. If it's a short message or followup, check recent history for context
     if history and len(history) > 0:
         recent_msgs = [m.get("content", "") for m in history[-4:] if m.get("role") == "user"]
         for old_msg in recent_msgs:
@@ -214,7 +315,6 @@ async def chat_stream(
             request.message = f"[图片解析失败，请提醒用户重新上传] " + request.message
 
     system_prompt = ""
-    document_source_footer = ""
     prebuilt_response_text = ""
     intent = "document" # 预设默认意图
     needs_realtime = False
@@ -460,13 +560,33 @@ async def chat_stream(
 
         elif intent == "address":
             from services.address_service import address_service
-            wh_codes = re.findall(r'[A-Z]{3,4}\d+[A-Z]?', request.message.upper())
-            zips = re.findall(r'(?<!\d)\d{5}(?!\d)', request.message)
-            targets = list(set(wh_codes + zips))
+            targets = extract_address_targets_from_text(request.message)
+            if not targets:
+                targets = find_recent_address_targets(request.history, limit=3)
             
-            address_context = ""
+            query_results = []
             for t in targets:
                 res = await asyncio.to_thread(address_service.query, t)
+                query_results.append(res)
+
+            if is_address_source_question(request.message):
+                source_name_map = {
+                    "primary": "\u539f\u4ed3\u5e93\u4fe1\u606f\uff08\u504f\u8fdc\u5730\u5740/\u4e9a\u9a6c\u900a\u4ed3\u5e93\u540d\u5355.xlsx\uff09",
+                    "yiyang": "\u4ebf\u9633\u4ed3\u5e93\uff08\u504f\u8fdc\u5730\u5740/\u4ebf\u9633\u4ed3\u5e93.xlsx\uff09",
+                    "web": "\u8054\u7f51\u67e5\u8be2\uff08\u672c\u5730\u4ed3\u5e93\u672a\u547d\u4e2d\u540e\u89e6\u53d1\uff09",
+                    "input": "\u7528\u6237\u8f93\u5165\u90ae\u7f16\uff08\u672c\u5730\u504f\u8fdc\u89c4\u5219\u6821\u9a8c\uff09",
+                }
+                if not query_results:
+                    prebuilt_response_text = "\u8fd9\u6b21\u6d88\u606f\u91cc\u6ca1\u6709\u8bc6\u522b\u5230\u4ed3\u5e93\u4ee3\u7801\u6216\u90ae\u7f16\u3002\u8bf7\u76f4\u63a5\u53d1\u4ed3\u5e93\u4ee3\u7801\uff08\u5982 MCC1\uff09\u62165\u4f4d\u90ae\u7f16\uff0c\u6211\u9a6c\u4e0a\u544a\u8bc9\u4f60\u5177\u4f53\u6765\u6e90\u3002"
+                else:
+                    lines = ["\u672c\u6b21\u4ed3\u5e93/\u90ae\u7f16\u67e5\u8be2\u7684\u6765\u6e90\u5982\u4e0b\uff1a"]
+                    for row in query_results:
+                        source_label = source_name_map.get(row.get("source"), "\u672a\u547d\u4e2d\u672c\u5730\u4ed3\u5e93\uff0c\u4e5f\u672a\u8054\u7f51\u547d\u4e2d")
+                        lines.append(f"{row['target']}\uff1a{source_label}")
+                    prebuilt_response_text = "\n".join(lines)
+
+            address_context = ""
+            for res in query_results:
                 addr_str = f"【{res['target']}】地址详情："
                 if res["address"]:
                     addr_str += f"\n- 详细地址: {res['address']}\n- 城市: {res['city']}\n- 州: {res['state']}"
@@ -489,6 +609,9 @@ async def chat_stream(
 3. 明确告知其【偏远状态】。如果是极偏远，请用加粗、感叹号等方式极力提醒。
 4. 友情提醒战友务必在报价中核算这部分高昂的附加费成本。语气要像经验丰富的老鸟，专业且严谨。
 """
+
+            if not prebuilt_response_text and not query_results:
+                prebuilt_response_text = "\u8bf7\u63d0\u4f9b\u4ed3\u5e93\u4ee3\u7801\uff08\u5982 MCC1\uff09\u62165\u4f4d\u90ae\u7f16\uff0c\u6211\u518d\u7ed9\u4f60\u67e5\u8be6\u7ec6\u5730\u5740\u3001\u90ae\u7f16\u548c\u504f\u8fdc\u72b6\u6001\u3002"
 
         elif intent == "tracking":
             track_match = re.search(r'(?:FBA|YT|UJ|LP|AG|SF|TB|JD)\d+[A-Z0-9]*|\b\d{10,20}\b', request.message.upper())
@@ -549,7 +672,6 @@ async def chat_stream(
                 if similar_docs:
                     best_distance = similar_docs[0]["distance"]
                     source_summary = summarize_document_sources(similar_docs)
-                    document_source_footer = build_document_source_footer(similar_docs)
                     print(f">> RAG Hit! Best distance: {best_distance:.4f}, Chunks: {len(similar_docs)}")
                     for i, doc in enumerate(similar_docs):
                         context_text += f"---\n[内部资料片段 {i+1} | 来源: {doc['metadata'].get('source', '未知文档')}]\n{doc['document']}\n"
@@ -686,12 +808,28 @@ async def chat_stream(
         """
         line_buffer = ""
         full_response = ""
+        raw_full_response = ""
+        plain_emitted = ""
         stream_had_error = False
         start_time = time.time()
         if prebuilt_response_text:
-            full_response = prebuilt_response_text
-            yield prebuilt_response_text
+            full_response = sanitize_markdown_text(prebuilt_response_text)
+            yield full_response
             return
+        
+        def append_and_diff(raw_delta: str) -> str:
+            nonlocal raw_full_response, plain_emitted, full_response
+            raw_full_response += raw_delta
+            plain_now = sanitize_markdown_text(raw_full_response)
+            common_len = 0
+            for old_char, new_char in zip(plain_emitted, plain_now):
+                if old_char != new_char:
+                    break
+                common_len += 1
+            delta_text = plain_now[common_len:]
+            plain_emitted = plain_now
+            full_response = plain_now
+            return delta_text
         # 确定最终使用的模型接入点
         # 如果 request.use_deepseek 为 True，则强行使用理性的推理接入点
         final_endpoint = DEEPSEEK_ENDPOINT if request.use_deepseek else DOUBAO_MODEL_ENDPOINT
@@ -729,9 +867,10 @@ async def chat_stream(
                             err_obj = data["error"]
                             error_msg = err_obj.get("message", "API Error") if isinstance(err_obj, dict) else str(err_obj)
                             error_res = f"\n[模型服务错误：{error_msg}]"
-                            full_response += error_res
+                            delta_text = append_and_diff(error_res)
                             stream_had_error = True
-                            yield error_res
+                            if delta_text:
+                                yield delta_text
                             break
                         
                         # Standard OpenAI compatible
@@ -739,34 +878,35 @@ async def chat_stream(
                             delta = data["choices"][0].get("delta", {})
                             content = delta.get("content", "")
                             if content:
-                                full_response += content
-                                yield content
+                                delta_text = append_and_diff(content)
+                                if delta_text:
+                                    yield delta_text
                         # Volcengine Responses API Streaming
                         elif "type" in data and data["type"] == "response.output_text.delta":
                             content = data.get("delta", "")
                             if content:
-                                full_response += content
-                                yield content
+                                delta_text = append_and_diff(content)
+                                if delta_text:
+                                    yield delta_text
                         # Volcengine Responses API Error or Other types
                         elif "type" in data and data["type"] == "error":
                             err_info = data.get("error", {})
                             error_msg = err_info.get("message", "Unknown error") if isinstance(err_info, dict) else str(err_info)
                             error_res = f"\n[实时搜索服务错误：{error_msg}]"
-                            full_response += error_res
+                            delta_text = append_and_diff(error_res)
                             stream_had_error = True
-                            yield error_res
+                            if delta_text:
+                                yield delta_text
                             break
                     except json.JSONDecodeError:
                         continue
-            if document_source_footer and full_response and not stream_had_error:
-                full_response += document_source_footer
-                yield document_source_footer
         except Exception as e:
             import traceback
             traceback.print_exc()
             error_res = f"\n[系统提示：后端处理发生异常 {str(e)}]"
-            full_response += error_res
-            yield error_res
+            delta_text = append_and_diff(error_res)
+            if delta_text:
+                yield delta_text
         finally:
             # Save history to DB
             processing_time = time.time() - start_time
