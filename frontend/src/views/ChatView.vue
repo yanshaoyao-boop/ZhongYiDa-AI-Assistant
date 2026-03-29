@@ -27,6 +27,7 @@
 						<img src="/logo.png" alt="仲易达集团" class="company-logo" />
 						<span class="brand-divider">|</span>
 						<span class="gradient-text">小易智能助手</span>
+						<span class="app-version" :title="versionTooltip">{{ versionBadge }}</span>
 					</div>
 					<!-- 移动端情报开关 -->
 					<button v-if="currentMode === 'coach' && currentScenario" 
@@ -179,6 +180,8 @@ const XIAOYI_AVATAR_IMG = '/xiaoyi-avatar.png'
 const OUTPUT_LENGTH_KEY = 'zyd_output_length'
 const LAST_CHAT_MODE_KEY = 'zyd_last_chat_mode'
 const NOTICE_SEEN_STORAGE_KEY = 'last_read_notice_id'
+const APP_VERSION = __APP_VERSION__
+const APP_BUILD_TIME = __APP_BUILD_TIME__
 
 // 配置信息
 const coachRegions = [
@@ -249,6 +252,14 @@ const messageInputRef = ref(null)
 // 计算属性
 const inputPlaceholder = computed(() => currentMode.value === 'coach' ? '与客户对话中...' : '发送消息、粘贴或拖入图片...')
 const formatDisplayNotices = computed(() => noticeTab.value === 'history' ? allNotices.value.history : allNotices.value.current)
+const versionBadge = computed(() => `v${APP_VERSION}`)
+const versionTooltip = computed(() => {
+	const date = new Date(APP_BUILD_TIME)
+	const buildTimeText = Number.isNaN(date.getTime())
+		? APP_BUILD_TIME
+		: date.toLocaleString('zh-CN', { hour12: false })
+	return `当前版本 ${APP_VERSION} | 构建时间 ${buildTimeText}`
+})
 const personalizedWelcomeMsg = computed(() => {
 	const displayName = String(auth.userName || '').trim()
 	return `${displayName || '您'}您好！我是小易，有什么可以帮你的吗？`
@@ -578,6 +589,17 @@ onMounted(() => {
     background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
 }
+.app-version {
+	font-size: 12px;
+	font-weight: 600;
+	color: #64748b;
+	background: #f8fafc;
+	border: 1px solid #e2e8f0;
+	border-radius: 999px;
+	padding: 2px 8px;
+	line-height: 1.4;
+	white-space: nowrap;
+}
 
 .main-body-wrapper {
 	flex: 1;
@@ -619,6 +641,7 @@ onMounted(() => {
     .company-logo { height: 26px; }
     .brand-divider { display: none; }
     .gradient-text { font-size: 16px; white-space: nowrap; }
+    .app-version { font-size: 11px; padding: 2px 6px; }
     .intel-toggle-mobile { padding: 4px 8px; font-size: 13px; white-space: nowrap; }
 }
 

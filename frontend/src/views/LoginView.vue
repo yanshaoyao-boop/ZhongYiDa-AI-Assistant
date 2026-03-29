@@ -51,13 +51,14 @@
 
       <div class="login-footer">
         <p>&copy; 2026 仲易达集团</p>
+        <p class="version-text" :title="buildInfoTooltip">{{ buildInfoText }}</p>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../store/auth'
 
@@ -67,6 +68,17 @@ const auth = useAuthStore()
 const username = ref('')
 const password = ref('')
 const rememberMe = ref(true)
+const APP_VERSION = __APP_VERSION__
+const APP_BUILD_TIME = __APP_BUILD_TIME__
+
+const buildInfoText = computed(() => `版本 v${APP_VERSION}`)
+const buildInfoTooltip = computed(() => {
+  const date = new Date(APP_BUILD_TIME)
+  const buildTimeText = Number.isNaN(date.getTime())
+    ? APP_BUILD_TIME
+    : date.toLocaleString('zh-CN', { hour12: false })
+  return `当前版本 ${APP_VERSION} | 构建时间 ${buildTimeText}`
+})
 
 const handleLogin = async () => {
   if (!username.value || !password.value) return
@@ -239,6 +251,12 @@ input:focus {
   color: #829ab1;
   font-size: 13px;
   font-weight: 500;
+}
+
+.version-text {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #64748b;
 }
 
 .loader {

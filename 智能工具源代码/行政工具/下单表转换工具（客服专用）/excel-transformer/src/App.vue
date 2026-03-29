@@ -181,7 +181,7 @@ const parseExcelData = async (buffer: ArrayBuffer, fileName: string): Promise<So
 
       // 读取仓库代码 M8 (Row 8, Col 13)
       // ExcelJS 1-based. Row 8 = 8. Col M = 13.
-      warehouseCode = String(ws.getCell(8, 13).value || '').trim();
+      warehouseCode = extractCellText(ws.getCell(8, 13).value);
       
       // ★ 读取地址信息 (A表位置)
       // M7 = 省份, H7 = 城市, H6 = 地址, M5 = 邮编, H8 = 电话
@@ -191,7 +191,7 @@ const parseExcelData = async (buffer: ArrayBuffer, fileName: string): Promise<So
       zipCode = extractCellText(ws.getCell('M5').value);
       phone = extractCellText(ws.getCell('H8').value);
       totalBoxes = extractCellText(ws.getCell('F3').value); // 提取总箱数
-      console.log(`地址信息提取: 省份=${province}, 城市=${city}, 地址=${address}, 邮编=${zipCode}, 电话=${phone}, 总箱数=${totalBoxes}`);
+      console.log(`关键信息提取: 仓库=${warehouseCode}, 省份=${province}, 城市=${city}, 地址=${address}, 邮编=${zipCode}, 电话=${phone}, 总箱数=${totalBoxes}`);
 
       // 读取表头 (Row 11)
       const headerRow = ws.getRow(11);
@@ -304,15 +304,15 @@ const parseExcelData = async (buffer: ArrayBuffer, fileName: string): Promise<So
 
   // 1. 读取仓库代码 M8
   const cellM8 = ws['M8'];
-  warehouseCode = cellM8 ? String(cellM8.v || '').trim() : '';
+  warehouseCode = cellM8 ? extractCellText(cellM8.v) : '';
 
   // ★ 读取地址信息 (SheetJS fallback)
-  province = ws['M7'] ? String(ws['M7'].v || '').trim() : '';
-  city = ws['H7'] ? String(ws['H7'].v || '').trim() : '';
-  address = ws['H6'] ? String(ws['H6'].v || '').trim() : '';
-  zipCode = ws['M5'] ? String(ws['M5'].v || '').trim() : '';
-  phone = ws['H8'] ? String(ws['H8'].v || '').trim() : '';
-  totalBoxes = ws['F3'] ? String(ws['F3'].v || '').trim() : '';
+  province = ws['M7'] ? extractCellText(ws['M7'].v) : '';
+  city = ws['H7'] ? extractCellText(ws['H7'].v) : '';
+  address = ws['H6'] ? extractCellText(ws['H6'].v) : '';
+  zipCode = ws['M5'] ? extractCellText(ws['M5'].v) : '';
+  phone = ws['H8'] ? extractCellText(ws['H8'].v) : '';
+  totalBoxes = ws['F3'] ? extractCellText(ws['F3'].v) : '';
 
   // 2. 读取表头 (第11行 -> index 10)
   const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1, range: 10 });
@@ -719,10 +719,11 @@ const processConversion = async () => {
       } // end if rows > 0
 
       // ★ 生成 Excel Buffer 并添加到 Zip
-      const buffer = await workbook.xlsx.writeBuffer();
-      // 输出文件名格式：仓库代码_模版名称.xlsx (如 ONT8_亿阳.xlsx)
+      // ★ 获取文件名：第一行 FBA 编码 + _模版名称 (如 FBA12345_星夜.xlsx)
       const templateName = getTemplateName();
-      const outputName = `${sourceFile.warehouseCode || 'Unknown'}_${templateName}.xlsx`;
+      const outputName = `${firstRowFbaCode || sourceFile.warehouseCode || 'Unknown'}_${templateName}.xlsx`;
+      
+      const buffer = await workbook.xlsx.writeBuffer();
       outputZip.file(outputName, buffer);
       console.log(`生成文件: ${outputName}`);
 
