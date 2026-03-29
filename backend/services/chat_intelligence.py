@@ -62,6 +62,7 @@ ADMIN_ROLE_LOOKUP_KEYWORDS = (
 )
 ADMIN_ROLE_DIRECTORY_EXPANSION = "行政部门 岗位职责 对接人 负责人 职位 职务 联系方式"
 ADMIN_ATTENDANCE_EXPANSION = "考勤制度 迟到 早退 漏打卡 未打卡 扣款 满勤 旷工 请假 薪酬 管理制度"
+ADMIN_REIMBURSEMENT_EXPANSION = "费用报销 报销制度 报销标准 报销流程 发票 审批 时效"
 QUOTE_HINT_KEYWORDS = ("报价", "价格", "多少钱", "费用", "卖价", "单价", "运费")
 ADDRESS_HINT_KEYWORDS = ("偏远", "地址", "邮编", "仓库", "送吗", "哪里")
 REGION_KEYWORDS = ("美东", "美中", "美西", "欧洲", "英国", "加拿大", "澳洲", "华东", "华南")
@@ -99,6 +100,23 @@ BUSINESS_KNOWLEDGE_KEYWORDS = (
     "轨迹",
     "偏远",
     "操作流程",
+)
+ADMIN_ATTENDANCE_KEYWORDS = (
+    "考勤",
+    "迟到",
+    "早退",
+    "未打卡",
+    "漏打卡",
+    "满勤",
+    "旷工",
+    "请假",
+    "调休",
+)
+ADMIN_REIMBURSEMENT_KEYWORDS = (
+    "报销",
+    "费用",
+    "发票",
+    "审批",
 )
 
 
@@ -198,7 +216,9 @@ def build_document_search_query(
     if any(keyword in current_message for keyword in ADMIN_ROLE_LOOKUP_KEYWORDS):
         search_query = f"{search_query} {ADMIN_ROLE_DIRECTORY_EXPANSION}".strip()
 
-    if any(keyword in current_message for keyword in ADMIN_KNOWLEDGE_KEYWORDS):
+    if any(keyword in current_message for keyword in ADMIN_REIMBURSEMENT_KEYWORDS):
+        search_query = f"{search_query} {ADMIN_REIMBURSEMENT_EXPANSION}".strip()
+    elif any(keyword in current_message for keyword in ADMIN_ATTENDANCE_KEYWORDS):
         search_query = f"{search_query} {ADMIN_ATTENDANCE_EXPANSION}".strip()
 
     return search_query
