@@ -117,6 +117,7 @@ defineExpose({
 <style scoped>
 .chat-footer {
 	padding: 24px 32px 32px;
+	padding-bottom: calc(32px + env(safe-area-inset-bottom, 0px));
 	max-width: 900px;
 	margin: 0 auto;
 	width: 100%;
@@ -124,7 +125,7 @@ defineExpose({
 
 @media screen and (max-width: 768px) {
 	.chat-footer {
-		padding: 16px 20px 24px;
+		padding: 16px 20px calc(24px + env(safe-area-inset-bottom, 0px));
 	}
 }
 

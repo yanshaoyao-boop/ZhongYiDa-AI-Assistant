@@ -67,6 +67,7 @@
         </div>
 
         <div class="logs-scroller">
+          <div v-if="errorMsg" class="error-state">{{ errorMsg }}</div>
           <div v-if="loading" class="loading-state">数据加载中...</div>
           <div v-else-if="logs.length === 0" class="empty-state">目前没有找到任何对话记录。</div>
           
@@ -77,7 +78,7 @@
                 账号: {{ log.login_username }}
               </span>
               <span class="time">{{ formatDateTime(log.created_at) }}</span>
-              <span class="cost-time" v-if="log.processing_time">耗时: {{ log.processing_time.toFixed(2) }}s</span>
+              <span class="cost-time" v-if="hasProcessingTime(log.processing_time)">耗时: {{ formatProcessingTime(log.processing_time) }}</span>
             </div>
             <div class="message-bubble user-msg">
               <div class="bubble-title">员工:</div>
@@ -102,6 +103,7 @@ import { renderMarkdown } from '@/utils/markdown'
 const logs = ref([])
 const userStats = ref([])
 const loading = ref(false)
+const errorMsg = ref('')
 const searchQuery = ref('')
 const selectedAuditKey = ref(null)
 const currentPage = ref(0)
@@ -110,19 +112,30 @@ const limit = 20
 const fetchUserStats = async () => {
   try {
     const token = localStorage.getItem('token')
+    if (!token) {
+      errorMsg.value = '登录状态已失效，请重新登录后再查看会话审计。'
+      return
+    }
     const res = await axios.get('/api/admin/chat-logs/users', {
       headers: { 'Authorization': `Bearer ${token}` }
     })
     userStats.value = res.data
   } catch (e) {
+    errorMsg.value = `员工列表加载失败（${e?.response?.status || 'network'}）`
     console.error("无法加载用户列表:", e)
   }
 }
 
 const fetchLogs = async (page = 0) => {
   loading.value = true
+  errorMsg.value = ''
   try {
     const token = localStorage.getItem('token')
+    if (!token) {
+      errorMsg.value = '登录状态已失效，请重新登录后再查看会话审计。'
+      logs.value = []
+      return
+    }
     const res = await axios.get('/api/admin/chat-logs', {
       params: {
         skip: page * limit,
@@ -137,6 +150,8 @@ const fetchLogs = async (page = 0) => {
     logs.value = res.data
     currentPage.value = page
   } catch (e) {
+    errorMsg.value = `会话记录加载失败（${e?.response?.status || 'network'}）`
+    logs.value = []
     console.error("查无记录或发生错误:", e)
   } finally {
     loading.value = false
@@ -179,8 +194,23 @@ const formatDateTime = (dateStr) => {
 }
 
 const formatOutput = (text) => {
-  return renderMarkdown(text)
+  try {
+    return renderMarkdown(String(text ?? ''))
+  } catch (e) {
+    console.error('renderMarkdown failed:', e)
+    const escaped = String(text ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+    return escaped.replace(/\n/g, '<br>')
+  }
 }
+
+const hasProcessingTime = (value) => Number.isFinite(Number(value))
+
+const formatProcessingTime = (value) => `${Number(value).toFixed(2)}s`
 
 onMounted(() => {
   fetchUserStats()
@@ -191,6 +221,9 @@ onMounted(() => {
 <style scoped>
 .logs-container {
   height: 100vh;
+  height: 100dvh;
+  min-height: 100vh;
+  min-height: 100dvh;
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -354,6 +387,16 @@ onMounted(() => {
   flex-direction: column;
   gap: 20px;
   padding-right: 8px;
+}
+
+.error-state {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: #b91c1c;
+  font-size: 13px;
 }
 
 .log-card {
