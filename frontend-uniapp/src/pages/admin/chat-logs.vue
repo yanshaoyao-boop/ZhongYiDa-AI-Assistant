@@ -345,15 +345,33 @@ const selectUser = (userId) => {
 	fetchLogs(0)
 }
 
+const parseAuditDate = (dateInput) => {
+	if (!dateInput) return null
+	if (dateInput instanceof Date) {
+		return Number.isNaN(dateInput.getTime()) ? null : dateInput
+	}
+	const raw = String(dateInput).trim()
+	if (!raw) return null
+	const normalized = raw.replace(' ', 'T')
+	const hasTimezone = /([zZ]|[+\-]\d{2}:\d{2})$/.test(normalized)
+	const candidate = hasTimezone ? normalized : `${normalized}Z`
+	const date = new Date(candidate)
+	if (!Number.isNaN(date.getTime())) return date
+	const fallback = new Date(raw)
+	return Number.isNaN(fallback.getTime()) ? null : fallback
+}
+
 const formatDate = (dateStr) => {
 	if (!dateStr) return '--'
-	const date = new Date(dateStr)
+	const date = parseAuditDate(dateStr)
+	if (!date) return '--'
 	return `${date.getMonth() + 1}-${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
 const formatDateTime = (dateStr) => {
 	if (!dateStr) return '--'
-	const date = new Date(dateStr)
+	const date = parseAuditDate(dateStr)
+	if (!date) return '--'
 	const year = date.getFullYear()
 	const month = String(date.getMonth() + 1).padStart(2, '0')
 	const day = String(date.getDate()).padStart(2, '0')

@@ -70,6 +70,30 @@ INTERNAL_ONLY_DOCUMENT_KEYWORDS = [
     "人事",
     "人力",
     "薪酬",
+    "报销",
+    "审批",
+    "处罚",
+    "规定",
+    "标准",
+    "办法",
+    "规范",
+]
+
+POLICY_ONLY_KEYWORDS = [
+    "制度",
+    "报销",
+    "考勤",
+    "请假",
+    "人事",
+    "人力",
+    "薪酬",
+    "绩效",
+    "审批",
+    "处罚",
+    "规定",
+    "标准",
+    "办法",
+    "规范",
 ]
 
 CALCULATION_KEYWORDS = [
@@ -150,9 +174,13 @@ def resolve_runtime_strategy(
     normalized_message = str(message or "")
     has_search_keyword = any(keyword in normalized_message for keyword in SEARCH_KEYWORDS)
     has_red_list_keyword = any(keyword in normalized_message for keyword in RED_LIST_KEYWORDS)
+    has_policy_keyword = any(keyword in normalized_message for keyword in POLICY_ONLY_KEYWORDS)
 
     resolved_realtime = needs_realtime
     use_deepseek = current_use_deepseek
+
+    if intent == "document" and has_policy_keyword:
+        return False, True
 
     if has_search_keyword:
         resolved_realtime = True

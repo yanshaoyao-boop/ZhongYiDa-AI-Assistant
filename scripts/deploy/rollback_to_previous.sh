@@ -27,7 +27,8 @@ LAST_COMMIT=$(cat "$LAST_COMMIT_FILE")
 # 3. 回滚代码
 echo ">>> [3/7] 正在将代码回退到 $LAST_COMMIT..."
 cd "$PROJECT_ROOT"
-git checkout "$LAST_COMMIT"
+git checkout main
+git reset --hard "$LAST_COMMIT"
 
 # 4. 恢复依赖 (如有必要)
 echo ">>> [4/7] 正在检查依赖..."

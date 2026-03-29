@@ -162,6 +162,43 @@ defineEmits(['previewImage'])
 .markdown-body {
 	word-break: break-word;
 	overflow-wrap: break-word;
+	font-size: 15px;
+	line-height: 1.6;
+}
+
+.markdown-body ::v-deep(p) {
+	margin: 0 0 12rpx;
+}
+
+.markdown-body ::v-deep(p:last-child) {
+	margin-bottom: 0;
+}
+
+.markdown-body ::v-deep(.chat-heading),
+.markdown-body ::v-deep(h1),
+.markdown-body ::v-deep(h2),
+.markdown-body ::v-deep(h3),
+.markdown-body ::v-deep(h4),
+.markdown-body ::v-deep(h5),
+.markdown-body ::v-deep(h6) {
+	font-size: 30rpx;
+	line-height: 1.6;
+	font-weight: 700;
+	margin: 12rpx 0;
+}
+
+.markdown-body ::v-deep(ol),
+.markdown-body ::v-deep(ul) {
+	margin: 12rpx 0 12rpx 32rpx;
+	padding: 0;
+}
+
+.markdown-body ::v-deep(li) {
+	margin: 6rpx 0;
+}
+
+.markdown-body ::v-deep(strong) {
+	font-weight: 700;
 }
 
 .markdown-body ::v-deep(.chat-table-wrap) {
@@ -243,7 +280,7 @@ defineEmits(['previewImage'])
 
 .is-heading {
 	font-weight: 700;
-	font-size: 17px;
+	font-size: 15px;
 	margin: 12px 0 8px;
 }
 

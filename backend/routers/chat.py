@@ -85,6 +85,38 @@ COMPANY_INTRO_KEYWORDS = [
 
 # 报价查询关键词
 QUOTE_KEYWORDS = ["报价", "价格", "多少钱", "费", "门点", "计费", "卖价", "舱位", "单价", "运费"]
+POLICY_ONLY_DOCUMENT_KEYWORDS = [
+    "制度",
+    "规定",
+    "标准",
+    "办法",
+    "规范",
+    "流程",
+    "报销",
+    "考勤",
+    "请假",
+    "人事",
+    "人力",
+    "薪酬",
+    "工资",
+    "绩效",
+    "审批",
+    "处罚",
+]
+
+POLICY_SUBDOMAIN_HINTS = [
+    "迟到",
+    "早退",
+    "旷工",
+    "打卡",
+    "考勤",
+    "请假",
+    "报销",
+    "审批",
+    "薪酬",
+    "工资",
+    "绩效",
+]
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -192,6 +224,24 @@ def find_recent_address_targets(history: List[dict], limit: int = 3) -> List[str
 
 def is_address_source_question(message: str) -> bool:
     return any(kw in message for kw in ADDRESS_SOURCE_KEYWORDS)
+
+
+def boost_policy_document_hits(message: str, docs: List[dict]) -> List[dict]:
+    normalized_message = str(message or "")
+    matched_hints = [hint for hint in POLICY_SUBDOMAIN_HINTS if hint in normalized_message]
+    if not matched_hints or not docs:
+        return docs
+
+    def _score(doc: dict) -> tuple[int, float]:
+        metadata = doc.get("metadata") or {}
+        source = str(metadata.get("source", ""))
+        content = str(doc.get("document", ""))
+        text = f"{source}\n{content}"
+        keyword_hits = sum(1 for hint in matched_hints if hint in text)
+        distance = float(doc.get("distance", 1.0))
+        return keyword_hits, -distance
+
+    return sorted(docs, key=_score, reverse=True)
     
 async def classify_intent(message: str, history: List[dict] = None) -> str:
     """Classify user intent to determine routing (simple heuristic or LLM based)"""
@@ -668,19 +718,33 @@ async def chat_stream(
                 except Exception as e:
                     print(f'RAG Search failed: {e}')
                     similar_docs = []
-                
-                if similar_docs:
-                    best_distance = similar_docs[0]["distance"]
-                    source_summary = summarize_document_sources(similar_docs)
-                    print(f">> RAG Hit! Best distance: {best_distance:.4f}, Chunks: {len(similar_docs)}")
-                    for i, doc in enumerate(similar_docs):
-                        context_text += f"---\n[内部资料片段 {i+1} | 来源: {doc['metadata'].get('source', '未知文档')}]\n{doc['document']}\n"
             else:
                 print(">> RAG is disabled by system settings.")
             
-            # 标记 RAG 结果是否较差 (阈值微调为 0.58)
-            if not similar_docs or best_distance > 0.65:
-                 needs_realtime = True
+            is_policy_document_query = any(
+                keyword in request.message for keyword in POLICY_ONLY_DOCUMENT_KEYWORDS
+            )
+            if is_policy_document_query and similar_docs:
+                similar_docs = boost_policy_document_hits(request.message, similar_docs)
+            
+            if similar_docs:
+                best_distance = float(similar_docs[0].get("distance", 1.0))
+                source_summary = summarize_document_sources(similar_docs)
+                print(f">> RAG Hit! Best distance: {best_distance:.4f}, Chunks: {len(similar_docs)}")
+                for i, doc in enumerate(similar_docs):
+                    context_text += f"---\n[内部资料片段 {i+1} | 来源: {doc['metadata'].get('source', '未知文档')}]\n{doc['document']}\n"
+
+            # 标记 RAG 结果是否较差。制度类查询采用更宽松阈值，降低“明明有内部资料却判定无依据”的误杀率。
+            distance_threshold = 0.78 if is_policy_document_query else 0.65
+            if not similar_docs or best_distance > distance_threshold:
+                if is_policy_document_query:
+                    needs_realtime = False
+                    prebuilt_response_text = (
+                        "当前未在公司已上传材料中检索到该制度问题的有效依据，不能给出推测性答案。\n"
+                        "请上传对应制度文件，或联系行政/人事确认后再查询。"
+                    )
+                else:
+                    needs_realtime = True
             
             system_prompt = f"""你是一个名为“小易”的企业级高级助理，现在的身份是【仲易达内部专家顾问】。
 你拥有以下 **6 大核心能力**，能够全方位支持业务同事：
@@ -688,7 +752,7 @@ async def chat_stream(
 2. **【地址详情与偏远排雷】**：智能识别 FBA 仓库、邮编，秒查 UPS/FedEx 偏远等级与极偏远提醒。
 3. **【内部知识库精准检索】**：涵盖公司制度、操作流程、标准话术、岗位职责。
 4. **【物流轨迹黑科技查询】**：直接抓取第三方网站最新路由，翻译成易懂的客服语言。
-5. **【外部实时联网搜索】**：实时补充查询公司资料之外的全球宏观新闻、汇率、天气。
+5. **【对外信息速览（非制度类）】**：仅在非制度类问题且确有需要时补充实时外部信息。
 6. **【模拟实战训练（知识教练）】**：支持场景化对练，帮同事磨练谈单技巧。
 
 ### 核心执行指令：
@@ -696,11 +760,13 @@ async def chat_stream(
 2. **组合能力**：当用户问及“你能做什么”时，请务必全面展示上述 6 项能力，并结合参考材料给出具体的例子。
 3. **区分来源**：告诉同事这些信息是根据“公司内部资料”生成的。
 4. **歧义拦截**：遇到多义词先追问确认。
+5. **制度类问题必须仅基于内部资料**：涉及制度、报销、考勤、人事、审批、处罚、薪酬时，禁止联网检索，禁止使用行业常识补齐。
+6. **缺资料时必须明确无依据**：如未检索到内部材料，必须直接说明“未在公司已上传材料中找到依据”，不得编造。
 
 【北京时间】：{datetime.now().strftime('%Y年%m月%d日')}
 
 【内部知识检索权威材料（必读）】：
-{context_text if context_text else '（内部文档库中暂无匹配内容，请结合联网搜索或引导用户咨询同事）'}
+{context_text if context_text else '（内部文档库中暂无匹配内容）'}
 
 【内部资料来源提示】：
 {source_summary if source_summary else '（本轮暂无明确来源文件）'}
@@ -717,11 +783,18 @@ async def chat_stream(
                 "赚钱", "发展", "搞钱", "晋升", "怎么赚", "分钱"
             ]
             search_keywords = ["汇率", "新闻", "动态", "今天", "现在", "最新的", "最新", "实时", "美元", "天气", "发生", "现状", "大涨", "暴跌"]
+            is_policy_document_query = intent == "document" and any(
+                kw in request.message for kw in POLICY_ONLY_DOCUMENT_KEYWORDS
+            )
             
             if intent == "social":
                 needs_realtime = False
                 request.use_deepseek = False
                 print(">> Social intent detected, using Doubao (Chit-chat).")
+            elif is_policy_document_query:
+                needs_realtime = False
+                request.use_deepseek = True
+                print(">> Policy document query detected, forcing internal-only answer (no web search).")
             elif any(kw in request.message for kw in red_list_keywords):
                 needs_realtime = False
                 request.use_deepseek = True # 红线问题用理性的 DeepSeek

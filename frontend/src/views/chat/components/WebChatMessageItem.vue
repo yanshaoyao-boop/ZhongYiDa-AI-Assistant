@@ -167,6 +167,44 @@ defineEmits(['previewImage'])
 .markdown-body {
 	word-break: break-word;
 	overflow-wrap: break-word;
+	font-size: 15px;
+	line-height: 1.65;
+}
+
+.markdown-body :deep(p) {
+	margin: 0 0 10px;
+}
+
+.markdown-body :deep(p:last-child) {
+	margin-bottom: 0;
+}
+
+/* Headings are rendered as emphasized paragraphs to avoid stream/end font jumps. */
+.markdown-body :deep(.chat-heading),
+.markdown-body :deep(h1),
+.markdown-body :deep(h2),
+.markdown-body :deep(h3),
+.markdown-body :deep(h4),
+.markdown-body :deep(h5),
+.markdown-body :deep(h6) {
+	margin: 8px 0 10px;
+	font-size: 15px;
+	line-height: 1.65;
+	font-weight: 700;
+}
+
+.markdown-body :deep(ol),
+.markdown-body :deep(ul) {
+	margin: 8px 0 10px 22px;
+	padding: 0;
+}
+
+.markdown-body :deep(li) {
+	margin: 4px 0;
+}
+
+.markdown-body :deep(strong) {
+	font-weight: 700;
 }
 
 .markdown-body :deep(.chat-table-wrap) {

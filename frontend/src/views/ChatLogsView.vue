@@ -76,7 +76,7 @@
               <span v-if="log.login_username && log.login_username !== (log.display_name || log.username)" class="login-account">
                 账号: {{ log.login_username }}
               </span>
-              <span class="time">{{ new Date(log.created_at).toLocaleString() }}</span>
+              <span class="time">{{ formatDateTime(log.created_at) }}</span>
               <span class="cost-time" v-if="log.processing_time">耗时: {{ log.processing_time.toFixed(2) }}s</span>
             </div>
             <div class="message-bubble user-msg">
@@ -148,9 +148,34 @@ const selectUser = (auditKey) => {
   fetchLogs(0)
 }
 
+const parseAuditDate = (dateInput) => {
+  if (!dateInput) return null
+  if (dateInput instanceof Date) {
+    return Number.isNaN(dateInput.getTime()) ? null : dateInput
+  }
+  const raw = String(dateInput).trim()
+  if (!raw) return null
+  const normalized = raw.replace(' ', 'T')
+  const hasTimezone = /([zZ]|[+\-]\d{2}:\d{2})$/.test(normalized)
+  const candidate = hasTimezone ? normalized : `${normalized}Z`
+  const date = new Date(candidate)
+  if (!Number.isNaN(date.getTime())) return date
+  const fallback = new Date(raw)
+  return Number.isNaN(fallback.getTime()) ? null : fallback
+}
+
+const pad2 = (value) => String(value).padStart(2, '0')
+
 const formatDate = (dateStr) => {
-  const d = new Date(dateStr)
-  return `${d.getMonth() + 1}-${d.getDate()} ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`
+  const d = parseAuditDate(dateStr)
+  if (!d) return '--'
+  return `${d.getMonth() + 1}-${d.getDate()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`
+}
+
+const formatDateTime = (dateStr) => {
+  const d = parseAuditDate(dateStr)
+  if (!d) return '--'
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`
 }
 
 const formatOutput = (text) => {

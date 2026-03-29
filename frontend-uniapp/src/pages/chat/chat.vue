@@ -1,6 +1,6 @@
 <template>
 	<view :class="['app-layout', `${currentMode}-mode`]">
-		<!-- 侧边栏组件 -->
+		<!-- 娓氀嗙珶閺嶅繒绮嶆禒?-->
 		<ChatSidebar
 			:is-open="isSidebarOpen"
 			:sessions="sessions"
@@ -18,11 +18,11 @@
 		/>
 
 		<view class="chat-container">
-			<!-- 顶部导航与模式切换 -->
+			<!-- 妞ゅ爼鍎寸€佃壈鍩呮稉搴⒛佸蹇撳瀼閹?-->
 			<view class="chat-nav nav-shell glass-panel">
 				<view class="nav-left">
 					<button class="nav-btn-hamburg" @tap="toggleSidebar">
-						<text class="nav-btn-text">{{ isSidebarOpen ? '×' : '≡' }}</text>
+						<text class="nav-btn-text">{{ isSidebarOpen ? '鑴? : '閳? }}</text>
 					</button>
 				</view>
 				<ChatModeTabs v-model="currentMode" @update:model-value="switchMode" />
@@ -37,7 +37,7 @@
 					:scroll-into-view="scrollIntoViewTarget"
 					scroll-with-animation
 				>
-					<!-- 欢迎界面 / 教练菜单 / 答题界面 -->
+					<!-- 濞嗐垼绻嬮悾宀勬桨 / 閺佹瑧绮岄懣婊冨礋 / 缁涙棃顣介悾宀勬桨 -->
 					<ChatWelcomeScreen
 						v-if="messages.length === 0"
 						:mode="currentMode"
@@ -62,7 +62,7 @@
 						@start-duel="startRandomCoachDetailed"
 					/>
 
-					<!-- 消息列表 -->
+					<!-- 濞戝牊浼呴崚妤勩€?-->
 					<view v-else class="message-list">
 						<ChatMessageItem
 							v-for="msg in messages"
@@ -79,7 +79,7 @@
 					</view>
 				</scroll-view>
 
-				<!-- 教练模式实战情报面板 -->
+				<!-- 閺佹瑧绮屽Ο鈥崇础鐎圭偞鍨幆鍛Г闂堛垺婢?-->
 				<CombatIntelPanel
 					v-if="currentMode === 'coach'"
 					:is-open="isIntelOpen"
@@ -92,13 +92,13 @@
 				/>
 			</view>
 
-			<!-- 输入框区域 -->
+			<!-- 鏉堟挸鍙嗗鍡楀隘閸?-->
 			<ChatMessageInput
 				v-if="!isCoachQuizView"
 				v-model:input-msg="inputMsg"
 				:selected-image="selectedImage"
 				:is-generating="isGenerating"
-				:placeholder="currentMode === 'coach' ? '与客户对话中...' : '发送消息、粘贴或拖入图片...'"
+				:placeholder="currentMode === 'coach' ? '娑撳骸顓归幋宄邦嚠鐠囨繀鑵?..' : '閸欐垿鈧焦绉烽幁顖樷偓浣虹煒鐠愬瓨鍨ㄩ幏鏍у弳閸ュ墽澧?..'"
 				@send="sendMessage"
 				@stop="stopGeneration"
 				@trigger-image-upload="triggerImageUpload"
@@ -107,13 +107,13 @@
 			/>
 		</view>
 
-		<!-- 底部菜单导览 -->
+		<!-- 鎼存洟鍎撮懣婊冨礋鐎佃壈顫?-->
 		<view class="zen-bottom-nav">
 			<view class="zen-nav-item" :class="{ active: currentTab === 'chat' }" @tap="switchTab('chat')">
 				<view class="zen-nav-icon">
 					<image class="zen-nav-icon-image" :class="{ active: currentTab === 'chat' }" :src="CHAT_NAV_ICON_SRC" mode="aspectFit" />
 				</view>
-				<text class="zen-nav-label">对话</text>
+				<text class="zen-nav-label">鐎电鐦?/text>
 			</view>
 
 			<view class="zen-nav-item" :class="{ active: currentTab === 'notice' }" @tap="switchTab('notice')">
@@ -121,25 +121,25 @@
 					<image class="zen-nav-icon-image" :class="{ active: currentTab === 'notice' }" :src="NOTICE_NAV_ICON_SRC" mode="aspectFit" />
 					<view v-if="hasUnreadNotices" class="zen-nav-badge"></view>
 				</view>
-				<text class="zen-nav-label">通知</text>
+				<text class="zen-nav-label">闁氨鐓?/text>
 			</view>
 
 			<view class="zen-nav-item" :class="{ active: currentTab === 'tools' }" @tap="switchTab('tools')">
 				<view class="zen-nav-icon">
 					<image class="zen-nav-icon-image" :class="{ active: currentTab === 'tools' }" :src="TOOLS_NAV_ICON_SRC" mode="aspectFit" />
 				</view>
-				<text class="zen-nav-label">工具</text>
+				<text class="zen-nav-label">瀹搞儱鍙?/text>
 			</view>
 
 			<view class="zen-nav-item" :class="{ active: currentTab === 'admin' }" @tap="switchTab('admin')">
 				<view class="zen-nav-icon">
 					<image class="zen-nav-icon-image" :class="{ active: currentTab === 'admin' }" :src="ADMIN_NAV_ICON_SRC" mode="aspectFit" />
 				</view>
-				<text class="zen-nav-label">管理</text>
+				<text class="zen-nav-label">缁狅紕鎮?/text>
 			</view>
 		</view>
 
-		<!-- 弹窗组件 -->
+		<!-- 瀵湱鐛ョ紒鍕 -->
 		<ChatSettingsSheet
 			v-model:show="showSettings"
 			v-model:output-length="outputLength"
@@ -170,8 +170,7 @@ import { captureClientEvent } from '@/utils/error-logger'
 import { createMpStreamChatController } from '@/utils/mp-stream-chat'
 import { createSseEventParser } from '@/utils/sse-parser'
 
-// 组件导入
-import ChatSidebar from './components/ChatSidebar.vue'
+// 缂佸嫪娆㈢€电厧鍙?import ChatSidebar from './components/ChatSidebar.vue'
 import ChatModeTabs from './components/ChatModeTabs.vue'
 import ChatWelcomeScreen from './components/ChatWelcomeScreen.vue'
 import ChatMessageItem from './components/ChatMessageItem.vue'
@@ -188,12 +187,11 @@ const TOOLS_NAV_ICON_SRC = '/static/nav_tools.png'
 const ADMIN_NAV_ICON_SRC = '/static/nav_admin.png'
 const NOTICE_SEEN_STORAGE_KEY = 'zyd_notice_last_seen_id'
 
-// 基础状态
-const messages = ref([])
+// 閸╄櫣顢呴悩鑸碘偓?const messages = ref([])
 const inputMsg = ref('')
 const isGenerating = ref(false)
 const isSidebarOpen = ref(false)
-const welcomeMsg = ref('您的全天候智能助手')
+const welcomeMsg = ref('閹劎娈戦崗銊ャ亯閸婃瑦娅ら懗钘夊И閹?)
 const currentMode = ref('general')
 const sessions = ref([])
 const currentSessionId = ref(null)
@@ -204,8 +202,7 @@ const currentTab = ref('chat')
 const scrollTop = ref(0)
 const scrollIntoViewTarget = ref('')
 
-// 教练模式状态
-const coachCases = ref([])
+// 閺佹瑧绮屽Ο鈥崇础閻樿埖鈧?const coachCases = ref([])
 const currentScenario = ref(null)
 const isIntelOpen = ref(false)
 const isIntelCollapsed = ref(false)
@@ -216,8 +213,7 @@ const coachQuizSession = ref(null)
 const coachQuizLoading = ref(false)
 const coachQuizError = ref('')
 
-// 通知与设置状态
-const showNoticeCenter = ref(false)
+// 闁氨鐓℃稉搴ゎ啎缂冾喚濮搁幀?const showNoticeCenter = ref(false)
 const noticeTab = ref('current')
 const currentNotices = ref([])
 const noticeHistory = ref([])
@@ -228,26 +224,25 @@ const outputLength = ref(uni.getStorageSync('zyd_output_length') || 'medium')
 const pwdForm = ref({ oldPwd: '', newPwd: '', confirmPwd: '' })
 const pwdLoading = ref(false)
 
-// 常量配置
+// 鐢悂鍣洪柊宥囩枂
 const POST_LOGIN_FRESH_CHAT_KEY = 'zyd_post_login_fresh_chat'
 const LAST_CHAT_MODE_KEY = 'zyd_last_chat_mode'
 const coachRegions = [
-	{ name: '美国线', short: 'US', desc: '重视海派、邮编偏远、计费重量规则。' },
-	{ name: '欧洲线', short: 'EU', desc: '重视铁派、VAT 税号、清关和派送规则。' },
+	{ name: '缂囧骸娴楃痪?, short: 'US', desc: '闁插秷顫嬪ù閿嬫烦閵嗕線鍋栫紓鏍т焊鏉╂嚎鈧浇顓哥拹褰掑櫢闁插繗顫夐崚娆嶁偓? },
+	{ name: '濞喲勫簥缁?, short: 'EU', desc: '闁插秷顫嬮柧浣规烦閵嗕箓AT 缁嬪骸褰块妴浣圭閸忓啿鎷板ú楣冣偓浣筋潐閸掓瑣鈧? },
 ]
 const coachPersonas = [
-	{ name: '行业小白', emoji: '🙂', desc: '礼貌但不懂行，需要你用专业和耐心带着走。' },
-	{ name: '江湖老手', emoji: '😏', desc: '话术老练、压价明显，更考验底盘和判断。' },
+	{ name: '鐞涘奔绗熺亸蹇曟', emoji: '棣冩', desc: '缁€鑹扮煀娴ｅ棔绗夐幊鍌濐攽閿涘矂娓剁憰浣风稑閻劋绗撴稉姘嫲閼版劕绺剧敮锔炬絻鐠ц埇鈧? },
+	{ name: '濮圭喐绠归懓浣瑰', emoji: '棣冩', desc: '鐠囨繃婀抽懓浣虹矊閵嗕礁甯囨禒閿嬫閺勬拝绱濋弴纾嬧偓鍐崣鎼存洜娲忛崪灞藉灲閺傤厹鈧? },
 ]
 const coachSubjects = [
-	{ name: '报价拉锯战', emoji: '💵', desc: '面对客户反复压价，如何守住利润空间。' },
-	{ name: '异常纠纷处理', emoji: '🛡', desc: '处理查验、投诉、破损和延误等异常问题。' },
-	{ name: '业务排雷', emoji: '🔎', desc: '识别隐藏风险、敏感货和信息不完整订单。' },
-	{ name: '逼单与维护', emoji: '🤝', desc: '推进成交，同时维持客户信任与节奏。' },
+	{ name: '閹躲儰鐜幏澶愭暜閹?, emoji: '棣冩尲', desc: '闂堛垹顕€广垺鍩涢崣宥咁槻閸樺鐜敍灞筋洤娴ｆ洖鐣ф担蹇撳焺濞戯妇鈹栭梻娣偓? },
+	{ name: '瀵倸鐖剁痪鐘垫倣婢跺嫮鎮?, emoji: '棣冩礉', desc: '婢跺嫮鎮婇弻銉╃崣閵嗕焦濮囩拠澶堚偓浣虹壃閹圭喎鎷板鎯邦嚖缁涘绱撶敮鎼佹６妫版ǜ鈧? },
+	{ name: '娑撴艾濮熼幒鎺楁祫', emoji: '棣冩敺', desc: '鐠囧棗鍩嗛梾鎰妞嬪酣娅撻妴浣规櫛閹扮喕鎻ｉ崪灞间繆閹垯绗夌€瑰本鏆ｇ拋銏犲礋閵? },
+	{ name: '闁厧宕熸稉搴ｆ樊閹?, emoji: '棣冾檪', desc: '閹恒劏绻橀幋鎰唉閿涘苯鎮撻弮鍓佹樊閹镐礁顓归幋铚備繆娴犺绗岄懞鍌氼殧閵? },
 ]
 
-// 计算属性
-const userInitial = computed(() => String(auth.userName || '易').trim().slice(0, 1).toUpperCase() || '易')
+// 鐠侊紕鐣荤仦鐐粹偓?const userInitial = computed(() => String(auth.userName || '閺?).trim().slice(0, 1).toUpperCase() || '閺?)
 const displayNotices = computed(() => (noticeTab.value === 'history' ? noticeHistory.value : currentNotices.value))
 const isCoachQuizView = computed(() => currentMode.value === 'coach' && coachEntryMode.value === 'quiz')
 const currentCoachQuizQuestion = computed(() => {
@@ -255,7 +250,7 @@ const currentCoachQuizQuestion = computed(() => {
 	return coachQuizSession.value.questions[coachQuizSession.value.currentIndex] || null
 })
 
-// 方法 - 基础管理
+// 閺傝纭?- 閸╄櫣顢呯粻锛勬倞
 const toggleSidebar = () => isSidebarOpen.value = !isSidebarOpen.value
 const openSettings = () => { showSettings.value = true; isSidebarOpen.value = false; }
 const closeSettings = () => {
@@ -269,13 +264,13 @@ const goToAdmin = () => { isSidebarOpen.value = false; currentTab.value = 'admin
 
 const switchTab = (tab) => {
 	if (tab === 'notice') { openNoticeCenter(); return; }
-	if (tab === 'tools') { uni.showToast({ title: '工具中心开发中', icon: 'none' }); return; }
+	if (tab === 'tools') { uni.showToast({ title: '瀹搞儱鍙挎稉顓炵妇瀵偓閸欐垳鑵?, icon: 'none' }); return; }
 	currentTab.value = tab
 	showNoticeCenter.value = false
 	if (tab === 'admin') goToAdmin()
 }
 
-// 方法 - 对话管理
+// 閺傝纭?- 鐎电鐦界粻锛勬倞
 const startNewChat = ({ forceCreate = false } = {}) => {
 	if (currentMode.value === 'coach') resetCoachState()
 	if (!forceCreate && currentSessionId.value) {
@@ -285,7 +280,7 @@ const startNewChat = ({ forceCreate = false } = {}) => {
 		}
 	}
 	const newSessionId = `${Date.now()}`
-	sessions.value = [{ id: newSessionId, title: '新对话', messages: [] }, ...sessions.value].slice(0, 20)
+	sessions.value = [{ id: newSessionId, title: '閺傛澘顕拠?, messages: [] }, ...sessions.value].slice(0, 20)
 	currentSessionId.value = newSessionId
 	messages.value = []; inputMsg.value = ''; clearSelectedImage(); saveSessions()
 }
@@ -338,7 +333,7 @@ const switchMode = (mode) => {
 	switchSession(sessions.value[0].id)
 }
 
-// 方法 - 发送与流式
+// 閺傝纭?- 閸欐垿鈧椒绗屽ù浣哥础
 let requestTask = null
 const stopGeneration = () => { if (requestTask) requestTask.abort(); isGenerating.value = false; }
 
@@ -347,17 +342,16 @@ const sendMessage = async () => {
 	if (!content && !selectedImage.value) return
 	if (isGenerating.value) return
 	if (selectedImage.value && isImageUploading.value) {
-		uni.showToast({ title: '图片仍在上传中', icon: 'none' }); return
+		uni.showToast({ title: '閸ュ墽澧栨禒宥呮躬娑撳﹣绱舵稉?, icon: 'none' }); return
 	}
 
 	const currentImageUploadId = selectedImageUploadId.value || null
 	const currentImageBase64 = selectedImage.value && selectedImage.value.startsWith('data:')
 		? selectedImage.value.split(',')[1] : null
 
-    // 构建带偏好的内容
-    let finalContent = content
-    if (outputLength.value === 'short') finalContent = `[输出偏好:极致精简] ${content}`
-    else if (outputLength.value === 'long') finalContent = `[输出偏好:详尽展开] ${content}`
+    // 閺嬪嫬缂撶敮锕€浜告總鐣屾畱閸愬懎顔?    let finalContent = content
+    if (outputLength.value === 'short') finalContent = `[鏉堟挸鍤崑蹇撱偨:閺嬩浇鍤х划鍓х暆] ${content}`
+    else if (outputLength.value === 'long') finalContent = `[鏉堟挸鍤崑蹇撱偨:鐠囷箑鏁栫仦鏇炵磻] ${content}`
 
 	messages.value.push({ id: `user-${Date.now()}`, role: 'user', content, image: selectedImage.value })
 	inputMsg.value = ''; clearSelectedImage(); isGenerating.value = true
@@ -401,7 +395,7 @@ const sendMessage = async () => {
 		})
 	} catch (error) {
 		const aiMsg = messages.value.find((item) => item.id === aiMsgId)
-		if (aiMsg && !aiMsg.content) aiMsg.content = `请求失败：${error?.message || '网络异常'}`
+		if (aiMsg && !aiMsg.content) aiMsg.content = `鐠囬攱鐪版径杈Е閿?{error?.message || '缂冩垹绮跺鍌氱埗'}`
 	} finally {
 		const aiMsg = messages.value.find((item) => item.id === aiMsgId)
 		if (aiMsg) aiMsg.isTyping = false
@@ -409,7 +403,7 @@ const sendMessage = async () => {
 	}
 }
 
-// 方法 - 教练逻辑
+// 閺傝纭?- 閺佹瑧绮岄柅鏄忕帆
 const startCoachQuizSession = async (count) => {
 	coachQuizLoading.value = true; coachQuizError.value = ''; coachQuizSession.value = null
 	try {
@@ -421,14 +415,14 @@ const startCoachQuizSession = async (count) => {
 				success: resolve, fail: reject,
 			})
 		})
-		if (response.statusCode >= 400) throw new Error('获取题目失败')
+		if (response.statusCode >= 400) throw new Error('閼惧嘲褰囨０妯兼窗婢惰精瑙?)
 		const questions = response.data?.questions || []
-		if (questions.length === 0) { coachQuizError.value = '暂无可题目'; return }
+		if (questions.length === 0) { coachQuizError.value = '閺嗗倹妫ら崣顖烆暯閻?; return }
 		coachQuizSession.value = {
 			currentIndex: 0, correctCount: 0, completed: false,
 			questions: questions.map(q => ({ ...q, selectedAnswer: '', isCorrect: false }))
 		}
-	} catch (e) { coachQuizError.value = '抽题失败，请重试' } finally { coachQuizLoading.value = false }
+	} catch (e) { coachQuizError.value = '閹朵粙顣芥径杈Е閿涘矁顕柌宥堢槸' } finally { coachQuizLoading.value = false }
 }
 
 const selectCoachQuizAnswer = (key) => {
@@ -453,20 +447,19 @@ const resetCoachState = () => {
 const startRandomCoachDetailed = (subjectName) => {
 	if (!selectedRegion.value || !selectedPersona.value) return
 	coachEntryMode.value = 'duel'
-	const matches = coachCases.value.filter(c => (c.category || '').includes(selectedRegion.value) && (c.category || '').includes(selectedPersona.value.replace('行业','')))
+	const matches = coachCases.value.filter(c => (c.category || '').includes(selectedRegion.value) && (c.category || '').includes(selectedPersona.value.replace('鐞涘奔绗?,'')))
 	const randomCase = matches[Math.floor(Math.random() * matches.length)]
-	currentScenario.value = randomCase || { name: `${selectedRegion.value} · ${subjectName}`, success_criteria: ['识别客户诉求', '给出专业方案'] }
-	isIntelOpen.value = true; inputMsg.value = `我要挑战【${currentScenario.value.name}】场景`; sendMessage()
+	currentScenario.value = randomCase || { name: `${selectedRegion.value} 璺?${subjectName}`, success_criteria: ['鐠囧棗鍩嗙€广垺鍩涚拠澶嬬湴', '缂佹瑥鍤稉鎾茬瑹閺傝顢?] }
+	isIntelOpen.value = true; inputMsg.value = `閹存垼顩﹂幐鎴炲灛閵?{currentScenario.value.name}閵嗘垵婧€閺呯棎; sendMessage()
 }
 
 const requestCoachEvaluation = () => {
 	if (isGenerating.value || messages.value.length === 0) return
-	inputMsg.value = '【结束对练】请现在切换为“资深销售总监/金牌导师”的人设，基于刚才的全部聊天记录输出结构化点评报告。'
+	inputMsg.value = '閵嗘劗绮ㄩ弶鐔奉嚠缂佸啨鈧垼顕悳鏉挎躬閸掑洦宕叉稉琛♀偓婊嗙カ濞ｉ亶鏀㈤崬顔解偓鑽ゆ磧/闁叉垹澧濈€电厧绗€閳ユ繄娈戞禍楦款啎閿涘苯鐔€娴滃骸鍨伴幍宥囨畱閸忋劑鍎撮懕濠傘亯鐠佹澘缍嶆潏鎾冲毉缂佹挻鐎崠鏍仯鐠囧嫭濮ら崨濞库偓?
 	sendMessage()
 }
 
-// 方法 - 通知与设置
-const openNoticeCenter = async () => {
+// 閺傝纭?- 闁氨鐓℃稉搴ゎ啎缂?const openNoticeCenter = async () => {
 	showNoticeCenter.value = true; noticesLoading.value = true
 	try {
 		const [current, history] = await Promise.all([
@@ -481,19 +474,19 @@ const openNoticeCenter = async () => {
 	} finally { noticesLoading.value = false }
 }
 
-const previewNotice = (n) => uni.showModal({ title: '通知详情', content: n.content, showCancel: false })
+const previewNotice = (n) => uni.showModal({ title: '闁氨鐓＄拠锔藉剰', content: n.content, showCancel: false })
 
 const submitChangePassword = async () => {
 	const { oldPwd, newPwd, confirmPwd } = pwdForm.value
-	if (!oldPwd || !newPwd || !confirmPwd) { uni.showToast({ title: '请填写完整', icon: 'none' }); return }
+	if (!oldPwd || !newPwd || !confirmPwd) { uni.showToast({ title: '鐠囧嘲锝為崘娆忕暚閺?, icon: 'none' }); return }
 	pwdLoading.value = true
 	const res = await auth.changePassword(oldPwd, newPwd)
 	pwdLoading.value = false
-	if (res?.success) { uni.showToast({ title: '修改成功' }); closeSettings() }
-	else uni.showToast({ title: res?.message || '失败', icon: 'none' })
+	if (res?.success) { uni.showToast({ title: '娣囶喗鏁奸幋鎰' }); closeSettings() }
+	else uni.showToast({ title: res?.message || '婢惰精瑙?, icon: 'none' })
 }
 
-// 图片辅助
+// 閸ュ墽澧栨潏鍛И
 const clearSelectedImage = () => { selectedImage.value = null; selectedImageUploadId.value = ''; isImageUploading.value = false }
 const removeImage = () => clearSelectedImage()
 const previewImage = (url) => uni.previewImage({ urls: [url] })
@@ -508,7 +501,7 @@ const triggerImageUpload = () => {
 				const up = await uploadChatImage({ filePath, token: auth.token })
 				selectedImageUploadId.value = up.image_upload_id
 			} catch (e) {
-				// 降级使用 base64
+				// 闂勫秶楠囨担璺ㄦ暏 base64
 				uni.getFileSystemManager().readFile({
 					filePath, encoding: 'base64',
 					success: ({ data }) => { selectedImage.value = buildImageDataUrl(filePath, data) }
@@ -518,8 +511,7 @@ const triggerImageUpload = () => {
 	})
 }
 
-// 自动滚动辅助
-const scrollToBottom = () => {
+// 閼奉亜濮╁姘З鏉堝懎濮?const scrollToBottom = () => {
 	nextTick(() => {
 		scrollIntoViewTarget.value = ''
 		setTimeout(() => { scrollIntoViewTarget.value = 'chat-bottom-anchor' }, 50)
@@ -542,8 +534,24 @@ const sanitizeMpInlineText = (text) => {
 		.trim()
 }
 
+const normalizeInlineListMarkers = (text) => {
+	let normalized = String(text || '').replace(/\r\n?/g, '\n')
+	normalized = normalized.replace(
+		/(^|\n)(\s*(?:\d{1,2}|[A-H])[.)])(?=\S)/g,
+		'$1$2 '
+	)
+	normalized = normalized.replace(
+		/([^\n])\s+((?:\d{1,2}|[A-H])[.)]\s+)/g,
+		(match, prevChar, marker) => {
+			if (/\d/.test(prevChar) && /^\d+\./.test(marker)) return match
+			return `${prevChar}\n${marker}`
+		}
+	)
+	return normalized
+}
+
 const renderMpMessageBlocks = (content) => {
-	const lines = String(content || '').split('\n')
+	const lines = normalizeInlineListMarkers(content).split('\n')
 	const blocks = []
 	for (const rawLine of lines) {
 		const line = rawLine.trim()
@@ -570,12 +578,22 @@ const renderMpMessageBlocks = (content) => {
 			continue
 		}
 
+		const alphaOrderedMatch = line.match(/^([A-H])[.)]\s+(.+)$/)
+		if (alphaOrderedMatch) {
+			blocks.push({
+				type: 'ordered-item',
+				text: sanitizeMpInlineText(alphaOrderedMatch[2]),
+				prefix: `${alphaOrderedMatch[1]}.`,
+			})
+			continue
+		}
+
 		const bulletMatch = line.match(/^[-*+]\s+(.+)$/)
 		if (bulletMatch) {
 			blocks.push({
 				type: 'bullet-item',
 				text: sanitizeMpInlineText(bulletMatch[1]),
-				prefix: '•',
+				prefix: '-',
 			})
 			continue
 		}
@@ -603,7 +621,7 @@ const renderMpMessageBlocks = (content) => {
 	return blocks
 }
 
-// 生命周期
+// 閻㈢喎鎳￠崨銊︽埂
 onMounted(() => {
 	if (!auth.isAuthenticated) { uni.reLaunch({ url: '/pages/login/login' }); return }
 	const shouldFresh = uni.getStorageSync(POST_LOGIN_FRESH_CHAT_KEY) === '1'
@@ -611,8 +629,7 @@ onMounted(() => {
 	const initialMode = shouldFresh ? 'general' : (uni.getStorageSync(LAST_CHAT_MODE_KEY) || 'general')
 	switchMode(initialMode)
 	
-	// 后台静默加载
-	uni.request({ url: resolveApiUrl('/api/upload/coach-cases'), header: { Authorization: `Bearer ${auth.token}` }, success: r => coachCases.value = r.data || [] })
+	// 閸氬骸褰撮棃娆撶帛閸旂姾娴?	uni.request({ url: resolveApiUrl('/api/upload/coach-cases'), header: { Authorization: `Bearer ${auth.token}` }, success: r => coachCases.value = r.data || [] })
 	uni.request({ url: resolveApiUrl('/api/settings/public'), success: r => welcomeMsg.value = r.data?.ai_welcome_message || welcomeMsg.value })
 	uni.request({
 		url: resolveApiUrl('/api/notices/current'), header: { Authorization: `Bearer ${auth.token}` },
@@ -722,8 +739,9 @@ onMounted(() => {
 	margin-top: 2px;
 }
 
-/* 模式主题色 */
+/* 濡€崇础娑撳顣介懝?*/
 .general-mode { --theme-color: #2563eb; }
 .coach-mode { --theme-color: #059669; }
 .expert-mode { --theme-color: #7c3aed; }
 </style>
+

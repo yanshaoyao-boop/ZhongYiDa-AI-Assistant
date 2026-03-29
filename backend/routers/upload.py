@@ -15,6 +15,7 @@ from services.llm_client import analyze_coach_case, get_embedding
 from services.quote_service import DATA_DIR as QUOTE_DIR
 from services.quote_service import load_all_quotes, parse_quote_file
 from services.rag_service import add_documents_to_db, delete_documents_by_source, delete_documents_by_source_key
+from services.rag_service import delete_legacy_untyped_documents_by_source
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 
@@ -160,6 +161,7 @@ async def _process_document_file(file_path: str, safe_filename: str, category: s
 
     source_key = _build_source_key(category, safe_filename)
     await asyncio.to_thread(delete_documents_by_source_key, source_key)
+    await asyncio.to_thread(delete_legacy_untyped_documents_by_source, safe_filename)
 
     batch_size = 5
     processed_chunks = 0

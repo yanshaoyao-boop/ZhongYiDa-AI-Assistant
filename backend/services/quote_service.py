@@ -102,6 +102,9 @@ def parse_quote_file(file_path: str) -> List[Dict]:
             elif "澳鑫" in filename:
                 from services.aoxin_parser import parse_aoxin_excel
                 return parse_aoxin_excel(file_path)
+            elif "天航" in filename:
+                from services.tianhang_parser import parse_tianhang_excel
+                return parse_tianhang_excel(file_path)
             else:
                 from services.excel_parser import parse_complex_excel
                 return parse_complex_excel(file_path)

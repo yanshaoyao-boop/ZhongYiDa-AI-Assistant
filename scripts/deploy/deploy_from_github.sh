@@ -12,6 +12,9 @@ TIMESTAMP="$(date +"%Y%m%d_%H%M%S")"
 # Comma-separated tool directory names to skip during sub-tool builds.
 # Default is empty to build all smart tools.
 SKIP_SUBTOOLS="${SKIP_SUBTOOLS:-}"
+# By default we do NOT auto-build smart sub-tools.
+# Set ENABLE_SUBTOOL_BUILD=1 to enable sub-tool builds explicitly.
+ENABLE_SUBTOOL_BUILD="${ENABLE_SUBTOOL_BUILD:-0}"
 
 echo ">>> [1/11] Starting deploy (${TIMESTAMP})..."
 
@@ -31,6 +34,14 @@ cd "$PROJECT_ROOT"
 CURRENT_COMMIT="$(git rev-parse HEAD)"
 echo "$CURRENT_COMMIT" > "${PROJECT_ROOT}/.last_deployed_commit"
 echo ">>> [4/11] Recorded current commit: $CURRENT_COMMIT"
+
+echo ">>> [4.1/11] Verifying git workspace is clean..."
+if [ -n "$(git status --porcelain)" ]; then
+    echo "ERROR: workspace is not clean, aborting deploy."
+    git status --short
+    echo "Please clean server-side local changes first, then retry."
+    exit 1
+fi
 
 echo ">>> [5/11] Fetching latest code from origin/main..."
 git fetch origin main
@@ -52,48 +63,52 @@ cd "${PROJECT_ROOT}/frontend"
 npm install
 npm run build
 
-echo ">>> [7.1/11] Building sub-tools..."
-if ! command -v find >/dev/null 2>&1; then
-    echo "ERROR: find command is required but not available."
-    exit 1
-fi
-
-should_skip_tool() {
-    local tool_name="$1"
-    local item
-    IFS=',' read -r -a skip_list <<< "$SKIP_SUBTOOLS"
-    for item in "${skip_list[@]}"; do
-        item="$(echo "$item" | xargs)"
-        if [ -n "$item" ] && [ "$item" = "$tool_name" ]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
-while IFS= read -r -d '' pkg; do
-    tool_path="$(dirname "$pkg")"
-    tool_name="$(basename "$tool_path")"
-    if should_skip_tool "$tool_name"; then
-        echo "    Skipping tool: $tool_name"
-        continue
+if [ "$ENABLE_SUBTOOL_BUILD" = "1" ]; then
+    echo ">>> [7.1/11] Building sub-tools..."
+    if ! command -v find >/dev/null 2>&1; then
+        echo "ERROR: find command is required but not available."
+        exit 1
     fi
-    echo "    Building tool: $tool_name"
-    (
-        cd "$tool_path"
-        npm install --no-audit --no-fund
-        npm run build
+
+    should_skip_tool() {
+        local tool_name="$1"
+        local item
+        IFS=',' read -r -a skip_list <<< "$SKIP_SUBTOOLS"
+        for item in "${skip_list[@]}"; do
+            item="$(echo "$item" | xargs)"
+            if [ -n "$item" ] && [ "$item" = "$tool_name" ]; then
+                return 0
+            fi
+        done
+        return 1
+    }
+
+    while IFS= read -r -d '' pkg; do
+        tool_path="$(dirname "$pkg")"
+        tool_name="$(basename "$tool_path")"
+        if should_skip_tool "$tool_name"; then
+            echo "    Skipping tool: $tool_name"
+            continue
+        fi
+        echo "    Building tool: $tool_name"
+        (
+            cd "$tool_path"
+            npm install --no-audit --no-fund
+            npm run build
+        )
+    done < <(
+        find "$PROJECT_ROOT" \
+            \( \
+                -path "$PROJECT_ROOT/backend" -o \
+                -path "$PROJECT_ROOT/frontend" -o \
+                -path "$PROJECT_ROOT/frontend-uniapp" -o \
+                -path "$PROJECT_ROOT/frontend-uniapp-old-webpack" \
+            \) -prune -o \
+            -name "package.json" -not -path "*/node_modules/*" -print0
     )
-done < <(
-    find "$PROJECT_ROOT" \
-        \( \
-            -path "$PROJECT_ROOT/backend" -o \
-            -path "$PROJECT_ROOT/frontend" -o \
-            -path "$PROJECT_ROOT/frontend-uniapp" -o \
-            -path "$PROJECT_ROOT/frontend-uniapp-old-webpack" \
-        \) -prune -o \
-        -name "package.json" -not -path "*/node_modules/*" -print0
-)
+else
+    echo ">>> [7.1/11] Skipping sub-tool builds (ENABLE_SUBTOOL_BUILD=${ENABLE_SUBTOOL_BUILD})"
+fi
 
 cd "$PROJECT_ROOT"
 
