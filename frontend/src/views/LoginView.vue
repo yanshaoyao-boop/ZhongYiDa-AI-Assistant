@@ -71,7 +71,7 @@ const rememberMe = ref(true)
 const APP_VERSION = __APP_VERSION__
 const APP_BUILD_TIME = __APP_BUILD_TIME__
 
-const buildInfoText = computed(() => `版本 v${APP_VERSION}`)
+const buildInfoText = computed(() => `版本 v.${APP_VERSION}`)
 const buildInfoTooltip = computed(() => {
   const date = new Date(APP_BUILD_TIME)
   const buildTimeText = Number.isNaN(date.getTime())
@@ -272,3 +272,4 @@ input:focus {
   to { transform: rotate(360deg); }
 }
 </style>
+

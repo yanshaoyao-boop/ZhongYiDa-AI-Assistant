@@ -115,7 +115,18 @@ const deleteNotice = async (id) => {
 
 const formatDate = (dateStr) => {
   const d = new Date(dateStr)
-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  if (Number.isNaN(d.getTime())) return String(dateStr || '')
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  })
+    .format(d)
+    .replace(/\//g, '-')
 }
 
 onMounted(fetchHistoryNotices)
@@ -284,3 +295,4 @@ onMounted(fetchHistoryNotices)
   color: white;
 }
 </style>
+

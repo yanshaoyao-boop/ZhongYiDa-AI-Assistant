@@ -71,6 +71,8 @@ ADDRESS_SOURCE_KEYWORDS = [
     "\u6570\u636e\u6e90",
 ]
 TABLE_SEPARATOR_PATTERN = re.compile(r"^\s*\|(?:\s*:?-{3,}:?\s*\|)+\s*$")
+TABLE_ROW_PATTERN = re.compile(r"^\s*\|.*\|\s*$")
+HTML_BR_PATTERN = re.compile(r"<br\s*/?>", re.IGNORECASE)
 MARKDOWN_HEADING_PATTERN = re.compile(r"^\s{0,3}#{1,6}\s*")
 MARKDOWN_LINK_PATTERN = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 
@@ -153,29 +155,36 @@ def sanitize_markdown_text(text: str) -> str:
     if not text:
         return ""
 
-    normalized = text.replace("\r\n", "\n").replace("\r", "\n").replace("<br>", "\n")
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
     output_lines: List[str] = []
+    has_markdown_table = False
 
     for raw_line in normalized.split("\n"):
         line = raw_line
-        if TABLE_SEPARATOR_PATTERN.match(line):
-            continue
 
         stripped = line.strip()
-        if stripped.startswith("|") and stripped.endswith("|") and "|" in stripped[1:-1]:
-            cells = [cell.strip() for cell in stripped.strip("|").split("|")]
-            cells = [cell for cell in cells if cell]
-            if cells:
-                line = "  ".join(cells)
-            else:
-                continue
+        is_table_separator = bool(TABLE_SEPARATOR_PATTERN.match(line))
+        is_table_row = (
+            bool(TABLE_ROW_PATTERN.match(stripped))
+            and stripped.startswith("|")
+            and stripped.endswith("|")
+            and "|" in stripped[1:-1]
+        )
+        if is_table_separator or is_table_row:
+            has_markdown_table = True
+            output_lines.append(stripped if stripped else line)
+            continue
 
+        line = HTML_BR_PATTERN.sub("\n", line)
         line = MARKDOWN_HEADING_PATTERN.sub("", line)
         line = line.replace("**", "").replace("__", "").replace("`", "")
         line = MARKDOWN_LINK_PATTERN.sub(r"\1 (\2)", line)
         output_lines.append(line)
 
     sanitized = "\n".join(output_lines)
+    if has_markdown_table:
+        return re.sub(r"\n{3,}", "\n\n", sanitized).strip()
+
     # Force inline list items into independent lines
     sanitized = re.sub(r"(?<=\S)\s+-\s+", "\n- ", sanitized)
     sanitized = re.sub(r"(?<=\S)\s+([A-Za-z]\.)\s+", r"\n\1 ", sanitized)

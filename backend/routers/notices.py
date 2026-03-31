@@ -11,6 +11,7 @@ from models.notice import Notice
 from models.user import User
 
 router = APIRouter(prefix="/notices", tags=["notices"])
+CHINA_TZ = timezone(timedelta(hours=8))
 
 
 class NoticeCreate(BaseModel):
@@ -28,11 +29,18 @@ class NoticeResponse(BaseModel):
 
 
 def _serialize_notice(notice: Notice) -> dict:
+    created_at = notice.created_at
+    if created_at and created_at.tzinfo is None:
+        # SQLite can return naive datetime; treat it as UTC for consistency.
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    if created_at:
+        created_at = created_at.astimezone(CHINA_TZ)
+
     return {
         "id": notice.id,
         "content": notice.content,
         "created_by_name": notice.created_by_name or "系统发布",
-        "created_at": notice.created_at,
+        "created_at": created_at,
     }
 
 
@@ -55,13 +63,18 @@ def create_notice(
 
 @router.get("/current", response_model=List[NoticeResponse])
 def get_current_notices(db: Session = Depends(get_db)):
-    now = datetime.now(timezone.utc)
-    monday = now - timedelta(days=now.weekday())
-    monday_start = monday.replace(hour=0, minute=0, second=0, microsecond=0)
+    now_cn = datetime.now(CHINA_TZ)
+    monday_start_cn = (now_cn - timedelta(days=now_cn.weekday())).replace(
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+    monday_start_utc = monday_start_cn.astimezone(timezone.utc)
 
     notices = (
         db.query(Notice)
-        .filter(Notice.created_at >= monday_start, Notice.is_active == 1)
+        .filter(Notice.created_at >= monday_start_utc, Notice.is_active == 1)
         .order_by(Notice.created_at.desc())
         .all()
     )

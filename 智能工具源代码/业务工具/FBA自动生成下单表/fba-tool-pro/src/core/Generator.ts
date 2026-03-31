@@ -105,16 +105,13 @@ export class Generator {
 
                 columns.forEach(col => {
                     const sourceKey = mapping[col.name];
-                    const dimLengthKey = mapping[col.name + '_L'];
-                    const dimWidthKey = mapping[col.name + '_W'];
-                    const dimHeightKey = mapping[col.name + '_H'];
 
                     // A. Text Fill
                     const isDim = col.name.includes('材积') || (col.name.includes('长') && col.name.includes('宽') && col.name.includes('高'));
-                    if (isDim && dimLengthKey && dimWidthKey && dimHeightKey) {
-                        const l = rowData[dimLengthKey] || '';
-                        const w = rowData[dimWidthKey] || '';
-                        const h = rowData[dimHeightKey] || '';
+                    if (isDim && mapping[col.name + '_L']) {
+                        const l = rowData[mapping[col.name + '_L']] || '';
+                        const w = rowData[mapping[col.name + '_W']] || '';
+                        const h = rowData[mapping[col.name + '_H']] || '';
                         if (l || w || h) {
                             row.getCell(col.index + 1).value = `${l}*${w}*${h}`;
                         }

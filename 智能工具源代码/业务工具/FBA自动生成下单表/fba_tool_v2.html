@@ -358,7 +358,8 @@
                         
                         const wb = new ExcelJS.Workbook();
                         await wb.xlsx.load(this.templateBuffer);
-                        const ws = wb.getWorksheet(1);
+                        // 修复：某些Excel文件的工作表索引不是从1开始，用 worksheets[0] 更可靠
+                        const ws = wb.worksheets[0];
                         
                         const headerRow = ws.getRow(this.CONST.HEADER_Row);
                         this.templateColumns = [];
@@ -402,9 +403,10 @@
                             this.log(`📄 正在读取: ${file.name}`);
                             
                             const buffer = await this.fileToBuffer(file);
-                            const wb = new ExcelJS.Workbook();
-                            await wb.xlsx.load(buffer);
-                            const ws = wb.getWorksheet(1);
+                        const wb = new ExcelJS.Workbook();
+                        await wb.xlsx.load(buffer);
+                        // 修复：某些Excel文件的工作表索引不是从1开始，用 worksheets[0] 更可靠
+                        const ws = wb.worksheets[0];
 
                             // --- 核心：图片抓取算法 ---
                             const imgs = ws.getImages();
@@ -538,7 +540,7 @@
                             // 读取模板
                             const wb = new ExcelJS.Workbook();
                             await wb.xlsx.load(this.templateBuffer);
-                            const ws = wb.getWorksheet(1);
+                            const ws = wb.worksheets[0];
                             
                             // 1. 填写表头固定信息
                             // M8: 仓库

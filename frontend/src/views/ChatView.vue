@@ -180,6 +180,7 @@ const XIAOYI_AVATAR_IMG = '/xiaoyi-avatar.png'
 const OUTPUT_LENGTH_KEY = 'zyd_output_length'
 const LAST_CHAT_MODE_KEY = 'zyd_last_chat_mode'
 const NOTICE_SEEN_STORAGE_KEY = 'last_read_notice_id'
+const NOTICE_CHECK_INTERVAL_MS = 60 * 1000
 const APP_VERSION = __APP_VERSION__
 const APP_BUILD_TIME = __APP_BUILD_TIME__
 
@@ -242,6 +243,7 @@ const outputLength = ref(localStorage.getItem(OUTPUT_LENGTH_KEY) || 'medium')
 const pwdForm = ref({ oldPwd: '', newPwd: '', confirmPwd: '' })
 const pwdMsg = ref(null)
 const pwdLoading = ref(false)
+let noticePollTimer = null
 
 // DOM 引用
 const chatMain = ref(null)
@@ -252,7 +254,7 @@ const messageInputRef = ref(null)
 // 计算属性
 const inputPlaceholder = computed(() => currentMode.value === 'coach' ? '与客户对话中...' : '发送消息、粘贴或拖入图片...')
 const formatDisplayNotices = computed(() => noticeTab.value === 'history' ? allNotices.value.history : allNotices.value.current)
-const versionBadge = computed(() => `v${APP_VERSION}`)
+const versionBadge = computed(() => `v.${APP_VERSION}`)
 const versionTooltip = computed(() => {
 	const date = new Date(APP_BUILD_TIME)
 	const buildTimeText = Number.isNaN(date.getTime())
@@ -497,6 +499,23 @@ const handleDrop = (e) => {
 }
 
 // 系统逻辑
+const refreshNoticeBadge = async () => {
+	try {
+		const response = await axios.get('/api/notices/current')
+		const currentNotices = Array.isArray(response.data) ? response.data : []
+		allNotices.value.current = currentNotices
+		const latestNoticeId = currentNotices[0]?.id
+		if (!latestNoticeId) {
+			hasNewNotice.value = false
+			return
+		}
+		const seenNoticeId = localStorage.getItem(NOTICE_SEEN_STORAGE_KEY)
+		hasNewNotice.value = String(latestNoticeId) !== String(seenNoticeId || '')
+	} catch (error) {
+		console.error('Failed to refresh notice badge:', error)
+	}
+}
+
 const openNotices = async () => {
 	showNotices.value = true; loadingNotices.value = true
 	try {
@@ -506,7 +525,7 @@ const openNotices = async () => {
 		])
 		allNotices.value = { current: cur.data, history: hist.data }
 		if (cur.data?.[0]) {
-			localStorage.setItem(NOTICE_SEEN_STORAGE_KEY, cur.data[0].id)
+			localStorage.setItem(NOTICE_SEEN_STORAGE_KEY, String(cur.data[0].id))
 			hasNewNotice.value = false
 		}
 	} finally { loadingNotices.value = false }
@@ -548,8 +567,17 @@ onMounted(() => {
 	loadSessionsByMode(currentMode.value)
 	if (sessions.value.length === 0) startNewChat()
 	else switchSession(sessions.value[0].id)
+	refreshNoticeBadge()
+	noticePollTimer = window.setInterval(refreshNoticeBadge, NOTICE_CHECK_INTERVAL_MS)
 
 	axios.get('/api/upload/coach-cases').then(r => coachCases.value = r.data || [])
+})
+
+onUnmounted(() => {
+	if (noticePollTimer) {
+		window.clearInterval(noticePollTimer)
+		noticePollTimer = null
+	}
 })
 </script>
 

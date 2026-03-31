@@ -23,6 +23,17 @@ def _resolve_tools_asset(*parts: str) -> Path:
         return source_path
     return TOOLS_RUNTIME_ROOT.joinpath(*parts)
 
+def _resolve_self_order_form_dist() -> Path:
+    for base_dir in (TOOLS_SOURCE_ROOT, TOOLS_RUNTIME_ROOT):
+        for candidate in base_dir.rglob("fba-tool-pro"):
+            dist_dir = candidate / "dist"
+            if (dist_dir / "index.html").exists():
+                return dist_dir
+    return TOOLS_RUNTIME_ROOT / "missing-self-order-form-dist"
+
+
+SELF_ORDER_FORM_DIST_DIR = _resolve_self_order_form_dist()
+
 
 FIST_TOOL_DIR = _resolve_tools_asset("行政工具", "客服转单工具（Fist专用）")
 FIST_TEMPLATE_PATH = FIST_TOOL_DIR / "templates" / "index.html"
@@ -69,7 +80,7 @@ TOOL_GROUPS = [
                 "summary": "保留原始 UI 的自助下单表工具。",
                 "runtime_path": "/api/tools/runtime/business/self-order-form/",
                 "kind": "directory",
-                "source": _resolve_tools_asset("业务工具", "自助下单表工具", "fba-tool-pro", "dist"),
+                "source": SELF_ORDER_FORM_DIST_DIR,
             },
             {
                 "slug": "reconciliation",
@@ -280,3 +291,4 @@ def generate_fist_files(payload: dict):
             {"error": f"生成失败: {exc}"},
             status_code=HTTPStatus.BAD_REQUEST,
         )
+
