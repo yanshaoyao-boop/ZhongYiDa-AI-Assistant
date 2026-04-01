@@ -20,7 +20,11 @@ from services.chat_intelligence import (
     summarize_document_sources,
 )
 from services.rag_service import search_similar_documents
-from services.quote_service import get_quote_data_as_string
+from services.quote_service import (
+    build_deterministic_quote_response,
+    get_quote_data_as_string,
+    search_best_quotes,
+)
 from services.tracking_service import fetch_tracking_info
 from database import SessionLocal
 from models.user import SystemSetting
@@ -214,6 +218,9 @@ def extract_address_targets_from_text(text: str) -> List[str]:
     return list(dict.fromkeys(wh_codes + zips))
 
 
+extract_address_targets = extract_address_targets_from_text
+
+
 def find_recent_address_targets(history: List[dict], limit: int = 3) -> List[str]:
     if not history:
         return []
@@ -272,8 +279,9 @@ async def classify_intent(message: str, history: List[dict] = None) -> str:
     has_zip = ZIP_PATTERN.search(message)
     has_wh = WH_PATTERN.search(msg_upper)
     asks_source = is_address_source_question(message)
+    quote_signal = bool(weight_match or volume_match or any(kw in message for kw in QUOTE_KEYWORDS))
     
-    if has_remote_kw and (has_zip or has_wh or len(message) > 8):
+    if has_remote_kw and (has_zip or has_wh or len(message) > 8) and not quote_signal:
         return "address", message
     
     # 1.5 Tracking check (单号查询拦截)
@@ -287,7 +295,7 @@ async def classify_intent(message: str, history: List[dict] = None) -> str:
         return "address", message
 
     # 2. Quote / Address disambiguation for warehouse code
-    if has_wh and any(kw in message for kw in QUOTE_KEYWORDS):
+    if has_wh and quote_signal:
         return "quote", message
     if has_wh:
         return "address", message
@@ -582,6 +590,17 @@ async def chat_stream(
                         address_probe_context += f"- 📍 目标地址【{t}】识别为**偏远地址**！偏远级别：**{res['level']}**\n"
                     elif res["zip"] or res["address"]:
                         address_probe_context += f"- ✅ 目标地址【{t}】识别为非偏远区（正常区域）。\n"
+
+            quote_records = await asyncio.to_thread(search_best_quotes, search_query, 10)
+            deterministic_quote = await asyncio.to_thread(
+                build_deterministic_quote_response,
+                request.message,
+                quote_records,
+                address_probe_context,
+                3,
+            )
+            if deterministic_quote:
+                prebuilt_response_text = deterministic_quote
             
             system_prompt = f"""你是一个名为“小易”的【金牌物流合伙人】。
 **你的使用者是公司的业务同事（也是你最铁的战友）。**

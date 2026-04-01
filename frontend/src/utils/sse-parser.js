@@ -30,7 +30,7 @@ export const createSseEventParser = () => {
 
 				if (!line.startsWith('data:')) {
 					if (!sawSseFrame) {
-						events.push(buildContentEvent(line))
+						events.push(buildContentEvent(`${line}\n`))
 					}
 					continue
 				}

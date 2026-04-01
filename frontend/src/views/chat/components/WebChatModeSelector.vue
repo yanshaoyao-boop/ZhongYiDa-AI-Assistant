@@ -124,13 +124,14 @@ defineEmits(['update:modelValue', 'openNotices', 'openTools'])
 
 .notice-dot {
 	position: absolute;
-	top: -2px;
-	right: -2px;
-	width: 8px;
-	height: 8px;
+	top: -4px;
+	right: -4px;
+	width: 12px;
+	height: 12px;
 	background: #ef4444;
 	border-radius: 50%;
 	border: 2px solid #ffffff;
+	box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.18);
 }
 
 .btn-text {

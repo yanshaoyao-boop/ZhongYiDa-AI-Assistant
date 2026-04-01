@@ -310,6 +310,30 @@ def _format_weight_tiers(
     return separator.join(rendered)
 
 
+def _collect_volume_tiers(price_system: Dict[str, Any]) -> list[tuple[float, str, float]]:
+    tiers: list[tuple[float, str, float]] = []
+    if not isinstance(price_system, dict):
+        return tiers
+
+    for raw_label, raw_price in price_system.items():
+        label = str(raw_label or "")
+        match = CBM_TIER_PATTERN.search(label)
+        price = _safe_float(raw_price)
+        if not match or price is None:
+            continue
+        tiers.append((float(match.group(1)), label, price))
+    return sorted(tiers, key=lambda item: item[0])
+
+
+def _format_full_tier_rows(price_system: Dict[str, Any]) -> list[tuple[str, str]]:
+    rows: list[tuple[str, str]] = []
+    for _, label, price in _collect_weight_tiers(price_system):
+        rows.append((label, f"{_format_price(price)}/KG"))
+    for _, label, price in _collect_volume_tiers(price_system):
+        rows.append((label, f"{_format_price(price)}/方"))
+    return rows
+
+
 def _has_origin_hint(message: str) -> bool:
     return any(
         keyword in message
@@ -410,6 +434,63 @@ def _pick_recommended_candidate(
 
     best = _pick_best_candidate(display_candidates)
     return (best or display_candidates[0]), False
+
+
+def _select_full_tier_display_candidates(
+    candidates: List[Dict[str, Any]],
+    *,
+    message: str,
+    has_origin_hint: bool,
+    origin_city: str | None,
+    limit: int,
+) -> List[Dict[str, Any]]:
+    if not candidates:
+        return []
+
+    target_bucket_preference = None
+    if origin_city:
+        target_bucket_preference = _detect_origin_bucket(origin_city, "")
+    elif has_origin_hint:
+        inferred_bucket = _detect_origin_bucket(message, "")
+        if inferred_bucket != "其他":
+            target_bucket_preference = inferred_bucket
+
+    def candidate_priority(item: Dict[str, Any]) -> tuple:
+        origin_match = 0
+        if origin_city and item.get("nearest_origin_hub") == origin_city:
+            origin_match = 2
+        elif target_bucket_preference and item.get("origin_bucket") == target_bucket_preference:
+            origin_match = 1
+        return (
+            -origin_match,
+            0 if _is_mingrizhixing_candidate(item) else 1,
+            item.get("origin_distance_km") if item.get("origin_distance_km") is not None else float("inf"),
+            item.get("channel", ""),
+        )
+
+    sorted_candidates = sorted(candidates, key=candidate_priority)
+
+    if target_bucket_preference:
+        matching_candidates = [item for item in sorted_candidates if item.get("origin_bucket") == target_bucket_preference]
+        if matching_candidates:
+            return matching_candidates[: max(limit, 1)]
+
+    if has_origin_hint or origin_city:
+        return sorted_candidates[: max(limit, 1)]
+
+    selected: list[Dict[str, Any]] = []
+    for bucket in ("华东", "华南"):
+        bucket_candidates = [item for item in sorted_candidates if item.get("origin_bucket") == bucket]
+        if not bucket_candidates:
+            continue
+        mingrizhixing_candidates = [item for item in bucket_candidates if _is_mingrizhixing_candidate(item)]
+        chosen = (mingrizhixing_candidates or bucket_candidates)[0]
+        selected.append(chosen)
+
+    if selected:
+        return selected
+
+    return sorted_candidates[: max(limit, 1)]
 
 
 def _build_quote_table_rows(
@@ -582,6 +663,92 @@ def _build_reference_only_quote_response(
     return "\n".join(lines).strip()
 
 
+def _build_full_tier_quote_response(
+    message: str,
+    warehouse_codes: list[str],
+    origin_city: str | None,
+    quote_records: List[Dict] | None,
+    *,
+    address_probe_context: str,
+    limit: int,
+) -> str:
+    candidates: list[dict[str, Any]] = []
+    for record in quote_records or []:
+        price_system = record.get("价格体系") or {}
+        full_tier_rows = _format_full_tier_rows(price_system)
+        if not full_tier_rows:
+            continue
+
+        channel = str(record.get("渠道", "未知渠道")).strip()
+        source = str(record.get("_source", "")).strip()
+        origin_bucket = _detect_origin_bucket(channel, source)
+        origin_hub_cities = _detect_origin_hub_cities(channel, source)
+        nearest_origin_hub, origin_distance_km = _resolve_nearest_origin_hub(origin_city, origin_hub_cities)
+
+        candidates.append(
+            {
+                "channel": channel,
+                "warehouse_code": str(record.get("仓库代码", "")).strip(),
+                "transit_time": str(record.get("宣称时效", "")).strip(),
+                "note": str(record.get("附加备注", "")).strip(),
+                "source": source,
+                "origin_bucket": origin_bucket,
+                "origin_hub_cities": origin_hub_cities,
+                "nearest_origin_hub": nearest_origin_hub,
+                "origin_distance_km": origin_distance_km,
+                "origin_label": _format_origin_hub_label(origin_hub_cities, origin_bucket),
+                "warehouse_exact_match": _record_matches_requested_warehouses(record, warehouse_codes),
+                "all_tier_rows": full_tier_rows,
+            }
+        )
+
+    if not candidates:
+        return ""
+
+    exact_candidates = [item for item in candidates if item.get("warehouse_exact_match")]
+    display_pool = exact_candidates or candidates
+    has_origin_hint = _has_origin_hint(message) or bool(origin_city)
+    display_candidates = _select_full_tier_display_candidates(
+        display_pool,
+        message=message,
+        has_origin_hint=has_origin_hint,
+        origin_city=origin_city,
+        limit=limit,
+    )
+    if not display_candidates:
+        return ""
+
+    warehouse_label = "/".join(warehouse_codes)
+    lines = [
+        f"结论：**{warehouse_label}** 的完整报价阶梯我先给你展开了，方便你直接对比重量档和方数档。",
+        "",
+        f"{warehouse_label} 报价明细：",
+        "",
+        "| 渠道 | 出发仓 | 重量/方数阶梯 | 价格 (RMB) | 宣称时效 | 备注 |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+
+    for item in display_candidates:
+        for tier_label, price_text in item["all_tier_rows"]:
+            lines.append(
+                f"| {item['channel']} | {item['origin_label']} | {tier_label} | {price_text} | "
+                f"{item['transit_time'] or '待确认'} | {item['note'] or '-'} |"
+            )
+
+    if address_probe_context:
+        lines.extend(["", "地址提醒：", address_probe_context])
+
+    sources: list[str] = []
+    for item in display_candidates:
+        source = item["source"]
+        if source and source not in sources:
+            sources.append(source)
+    if sources:
+        lines.extend(["", f"报价来源：{'、'.join(sources)}"])
+
+    return "\n".join(lines).strip()
+
+
 def build_deterministic_quote_response(
     message: str,
     quote_records: List[Dict] | None,
@@ -594,8 +761,18 @@ def build_deterministic_quote_response(
     volume_cbm = details["volume_cbm"]
     origin_city = details["origin_city"]
 
-    if not warehouse_codes or weight_kg is None:
+    if not warehouse_codes:
         return ""
+
+    if weight_kg is None:
+        return _build_full_tier_quote_response(
+            message,
+            warehouse_codes,
+            origin_city,
+            quote_records,
+            address_probe_context=address_probe_context,
+            limit=limit,
+        )
 
     candidates: list[dict[str, Any]] = []
     for record in quote_records or []:

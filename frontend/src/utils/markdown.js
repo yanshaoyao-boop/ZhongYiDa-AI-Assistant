@@ -1,25 +1,66 @@
 import { marked } from 'marked'
-import DOMPurify from 'dompurify'
+import createDOMPurify from 'dompurify'
+
+function escapeAttribute(value) {
+    return String(value ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+}
+
+function resolvePurifier() {
+    if (createDOMPurify && typeof createDOMPurify.sanitize === 'function') {
+        return createDOMPurify
+    }
+
+    if (typeof window !== 'undefined' && typeof createDOMPurify === 'function') {
+        try {
+            return createDOMPurify(window)
+        } catch (error) {
+            console.warn('Failed to initialize DOMPurify with window, falling back to passthrough sanitizer.', error)
+        }
+    }
+
+    return {
+        sanitize(dirty) {
+            return String(dirty ?? '')
+        },
+    }
+}
+
+function renderInlineTokens(context, token) {
+    if (context?.parser && Array.isArray(token?.tokens)) {
+        return context.parser.parseInline(token.tokens)
+    }
+    return token?.text || ''
+}
+
+function renderTableCell(tagName, context, cell) {
+    const align = cell?.align ? ` style="text-align:${escapeAttribute(cell.align)}"` : ''
+    return `<${tagName}${align}>${renderInlineTokens(context, cell)}</${tagName}>`
+}
+
+const DOMPurify = resolvePurifier()
 
 const renderer = new marked.Renderer()
-const defaultRenderer = new marked.Renderer()
+renderer.table = function (token) {
+    const headerHtml = (token.header || [])
+        .map((cell) => renderTableCell('th', this, cell))
+        .join('')
+    const rowsHtml = (token.rows || [])
+        .map((row) => `<tr>${row.map((cell) => renderTableCell('td', this, cell)).join('')}</tr>`)
+        .join('')
 
-renderer.table = (token) => {
-    const html = defaultRenderer.table(token)
     return `
     <div class="chat-table-wrap">
-        ${html.replace('<table>', '<table class="chat-markdown-table">')}
+        <table class="chat-markdown-table">
+            <thead><tr>${headerHtml}</tr></thead>
+            <tbody>${rowsHtml}</tbody>
+        </table>
     </div>
     `
 }
 
 // Render markdown headings as bold paragraphs to avoid font-size jumps.
-renderer.heading = (token) => {
-    const html = defaultRenderer.heading(token)
-    return html.replace(
-        /^<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>\n?$/,
-        '<p class="chat-heading"><strong>$1</strong></p>\n'
-    )
+renderer.heading = function (token) {
+    return `<p class="chat-heading"><strong>${renderInlineTokens(this, token)}</strong></p>\n`
 }
 
 marked.setOptions({
@@ -32,6 +73,13 @@ function normalizeInlineListMarkers(text) {
     if (!text) return ''
 
     let normalized = String(text).replace(/\r\n?/g, '\n')
+
+    // Collapse duplicated ordered-list markers at the start of a line:
+    // "1. 1. Item" -> "1. Item"
+    normalized = normalized.replace(
+        /(^|\n)(\s*)((?:\d{1,2}|[A-H])[.)])(?:\s+\3)+(?=\s+)/g,
+        '$1$2$3'
+    )
 
     // Ensure one space after list markers: "1.xxx" -> "1. xxx"
     normalized = normalized.replace(

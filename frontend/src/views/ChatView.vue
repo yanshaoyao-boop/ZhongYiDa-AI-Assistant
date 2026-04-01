@@ -159,6 +159,7 @@ import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '../store/auth'
 import { createSseEventParser } from '@/utils/sse-parser'
+import { getLatestNoticeId, hasUnreadNotices } from '@/utils/notice-badge'
 import { 
 	Menu as IconMenu, X as IconX, Zap as IconZap
 } from 'lucide-vue-next'
@@ -244,6 +245,21 @@ const pwdForm = ref({ oldPwd: '', newPwd: '', confirmPwd: '' })
 const pwdMsg = ref(null)
 const pwdLoading = ref(false)
 let noticePollTimer = null
+
+const markCurrentNoticesSeen = (currentNotices) => {
+	const latestNoticeId = getLatestNoticeId(currentNotices)
+	if (latestNoticeId === null) {
+		return
+	}
+	localStorage.setItem(NOTICE_SEEN_STORAGE_KEY, String(latestNoticeId))
+	hasNewNotice.value = false
+}
+
+const refreshNoticeBadgeOnVisibility = () => {
+	if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+		refreshNoticeBadge()
+	}
+}
 
 // DOM 引用
 const chatMain = ref(null)
@@ -504,13 +520,8 @@ const refreshNoticeBadge = async () => {
 		const response = await axios.get('/api/notices/current')
 		const currentNotices = Array.isArray(response.data) ? response.data : []
 		allNotices.value.current = currentNotices
-		const latestNoticeId = currentNotices[0]?.id
-		if (!latestNoticeId) {
-			hasNewNotice.value = false
-			return
-		}
 		const seenNoticeId = localStorage.getItem(NOTICE_SEEN_STORAGE_KEY)
-		hasNewNotice.value = String(latestNoticeId) !== String(seenNoticeId || '')
+		hasNewNotice.value = hasUnreadNotices(currentNotices, seenNoticeId)
 	} catch (error) {
 		console.error('Failed to refresh notice badge:', error)
 	}
@@ -524,10 +535,7 @@ const openNotices = async () => {
 			axios.get('/api/notices/history')
 		])
 		allNotices.value = { current: cur.data, history: hist.data }
-		if (cur.data?.[0]) {
-			localStorage.setItem(NOTICE_SEEN_STORAGE_KEY, String(cur.data[0].id))
-			hasNewNotice.value = false
-		}
+		markCurrentNoticesSeen(cur.data)
 	} finally { loadingNotices.value = false }
 }
 const openToolsCenter = () => { router.push('/tools') }
@@ -569,6 +577,8 @@ onMounted(() => {
 	else switchSession(sessions.value[0].id)
 	refreshNoticeBadge()
 	noticePollTimer = window.setInterval(refreshNoticeBadge, NOTICE_CHECK_INTERVAL_MS)
+	window.addEventListener('focus', refreshNoticeBadgeOnVisibility)
+	document.addEventListener('visibilitychange', refreshNoticeBadgeOnVisibility)
 
 	axios.get('/api/upload/coach-cases').then(r => coachCases.value = r.data || [])
 })
@@ -578,6 +588,8 @@ onUnmounted(() => {
 		window.clearInterval(noticePollTimer)
 		noticePollTimer = null
 	}
+	window.removeEventListener('focus', refreshNoticeBadgeOnVisibility)
+	document.removeEventListener('visibilitychange', refreshNoticeBadgeOnVisibility)
 })
 </script>
 
