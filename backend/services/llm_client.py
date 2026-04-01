@@ -26,15 +26,29 @@ if not DOUBAO_API_KEY:
 if not DOUBAO_MODEL_ENDPOINT:
     print("⚠️  [警告] 系统未发现 DOUBAO_MODEL_ENDPOINT，请确认环境变量。")
 
-# 全局复用 HTTP 客户端平衡连接池 (Task 2)
-_http_client = httpx.AsyncClient(timeout=httpx.Timeout(90.0, connect=10.0))
+# 按事件循环复用 HTTP 客户端，避免跨 loop 复用导致 "Event loop is closed"
+_http_clients: dict[int, httpx.AsyncClient] = {}
 
 def get_client():
-    return _http_client
+    loop = asyncio.get_running_loop()
+    loop_key = id(loop)
+    client = _http_clients.get(loop_key)
+    if client is None or client.is_closed:
+        client = httpx.AsyncClient(timeout=httpx.Timeout(90.0, connect=10.0))
+        _http_clients[loop_key] = client
+    return client
 
 async def close_client():
-    """优雅关闭全局 AsyncClient 连接池"""
-    await _http_client.aclose()
+    """优雅关闭当前进程持有的 AsyncClient 连接池"""
+    for loop_key, client in list(_http_clients.items()):
+        try:
+            if not client.is_closed:
+                await client.aclose()
+        except RuntimeError as exc:
+            if "Event loop is closed" not in str(exc):
+                raise
+        finally:
+            _http_clients.pop(loop_key, None)
 
 class ChatMessage(BaseModel):
     role: str
