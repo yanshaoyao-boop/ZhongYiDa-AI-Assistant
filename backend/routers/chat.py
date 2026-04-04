@@ -1064,13 +1064,6 @@ async def chat_stream(
         ]
         messages.extend(safe_history)
 
-    # 针对专家模式，在历史消息之后、用户消息之前追加排版增强指令
-    if request.mode == "expert":
-        messages.append({
-            "role": "system", 
-            "content": "⚠️ 禁止废话，每个选项必须物理换行且中间留空行。"
-        })
-        
     messages.append({"role": "user", "content": request.message})
 
     async def stream_generator():
