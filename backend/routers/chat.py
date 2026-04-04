@@ -142,6 +142,17 @@ POLICY_SUBDOMAIN_HINTS = [
     "绩效",
 ]
 
+CAPABILITY_OVERVIEW_KEYWORDS = [
+    "你能做什么",
+    "你会做什么",
+    "你能帮我做什么",
+    "能做哪些事",
+    "都有哪些功能",
+    "小易能做什么",
+    "介绍下你自己",
+    "自我介绍",
+]
+
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 class ChatRequest(BaseModel):
@@ -223,6 +234,9 @@ def sanitize_markdown_text(text: str) -> str:
     sanitized = re.sub(r"(?<=[。！？；：])\s*([一二三四五六七八九十]{1,3}、)\s*", r"\n\1 ", sanitized)
     sanitized = re.sub(r"(?<=[。！？；：])\s*([（(]\d+[)）])\s*", r"\n\1 ", sanitized)
     sanitized = re.sub(r"(?<=[。！？；：])\s*([①②③④⑤⑥⑦⑧⑨⑩])\s*", r"\n\1 ", sanitized)
+    # Deduplicate repeated ordered-list markers (e.g. "2. 2. xxx" -> "2. xxx")
+    sanitized = re.sub(r"(^|\n)(\s*)(\d+\.)\s*\3\s+", r"\1\2\3 ", sanitized)
+    sanitized = re.sub(r"(^|\n)(\s*)([A-Za-z]\.)\s*\3\s+", r"\1\2\3 ", sanitized)
     sanitized = re.sub(r"\n{3,}", "\n\n", sanitized).strip()
     return sanitized
 
@@ -294,6 +308,26 @@ def is_address_source_question(message: str) -> bool:
 def is_document_source_question(message: str) -> bool:
     normalized = str(message or "")
     return any(kw in normalized for kw in DOCUMENT_SOURCE_KEYWORDS)
+
+
+def is_capability_overview_query(message: str) -> bool:
+    normalized = str(message or "")
+    return any(keyword in normalized for keyword in CAPABILITY_OVERVIEW_KEYWORDS)
+
+
+def build_safe_capability_overview_response() -> str:
+    return """我能帮你做这 6 类事：
+
+- 📊 **底价/卖价智能查询**：基于已上传并解析成功的内部报价表，按重量、体积、仓库/邮编给出可执行报价建议。
+- 📍 **地址详情与偏远排雷**：识别 FBA 仓库/邮编，判断 UPS/FedEx 偏远等级并提醒附加费风险。
+- 📚 **内部知识检索**：查询制度、流程、岗位职责、操作规范等内部文档。
+- 🚚 **物流轨迹查询**：读取轨迹结果并翻译成清晰的业务结论与下一步建议。
+- 🌐 **外部信息补充（非制度类）**：在需要时补充汇率/行业动态等实时信息。
+- 🥊 **知识教练对练**：按场景进行询价/纠纷实战训练并给出复盘建议。
+
+说明：
+- 我只基于系统内“已上传且可检索”的资料回答，不会凭空编造渠道、制度或联系人。
+- 如果你愿意，我可以马上按你的真实场景演示一轮：比如“改下单表找谁”或“100kg 去美西怎么报”。"""
 
 
 def build_document_source_trace_response(similar_docs: List[dict], limit: int = 3) -> str:
@@ -811,6 +845,9 @@ async def chat_stream(
                 request.history,
                 COMPANY_INTRO_KEYWORDS,
             )
+            if not prebuilt_response_text and is_capability_overview_query(request.message):
+                needs_realtime = False
+                prebuilt_response_text = build_safe_capability_overview_response()
             
             # 执行检索：由后台设置决定是否开启 RAG
             context_text = ""
