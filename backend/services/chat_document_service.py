@@ -467,20 +467,44 @@ async def retrieve_document_context(
             search_failed = True
             similar_docs = []
 
-    should_try_fallback = (
-        fallback_search_documents is not None
-        and (
-            not similar_docs
-            or search_failed
-        )
+    best_semantic_distance = (
+        float(similar_docs[0].get("distance", 1.0))
+        if similar_docs
+        else 1.0
     )
+    primary_top_hits = max(
+        (
+            _query_term_hit_count(
+                search_query,
+                str((doc.get("metadata") or {}).get("source", "")),
+                str(doc.get("document", "")),
+            )
+            for doc in similar_docs
+        ),
+        default=0,
+    )
+    should_try_fallback = fallback_search_documents is not None
     fallback_docs: list[dict] = []
     if should_try_fallback:
         fallback_docs = await fallback_search_documents(search_query, search_category, top_k)
         result["used_fallback"] = bool(fallback_docs)
 
     if fallback_docs:
-        similar_docs = _merge_document_candidates(search_query, similar_docs, fallback_docs)
+        fallback_top_hits = max(
+            (
+                _query_term_hit_count(
+                    search_query,
+                    str((doc.get("metadata") or {}).get("source", "")),
+                    str(doc.get("document", "")),
+                )
+                for doc in fallback_docs
+            ),
+            default=0,
+        )
+        if best_semantic_distance > 0.70 and fallback_top_hits >= max(primary_top_hits, 1):
+            similar_docs = fallback_docs
+        else:
+            similar_docs = _merge_document_candidates(search_query, similar_docs, fallback_docs)
 
     similar_docs = _filter_supporting_documents(search_query, similar_docs)
     similar_docs = _sanitize_documents_for_query(search_query, similar_docs)

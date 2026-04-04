@@ -8,26 +8,41 @@ import asyncio
 
 load_dotenv()
 
-# We expect the user to have these in their environment or .env file
-# DOUBAO_API_KEY=""
-# DOUBAO_MODEL_ENDPOINT=""
-# DOUBAO_EMBEDDING_ENDPOINT=""
-
+# --- 豆包配置 (由于 RAG 和 Vision 继续使用豆包，保留原配置) ---
 DOUBAO_API_KEY = os.getenv("DOUBAO_API_KEY", "")
 DOUBAO_MODEL_ENDPOINT = os.getenv("DOUBAO_MODEL_ENDPOINT", "")
 DOUBAO_BOT_ID = os.getenv("DOUBAO_BOT_ID", "")
 DOUBAO_VISION_ENDPOINT = os.getenv("DOUBAO_VISION_ENDPOINT", DOUBAO_MODEL_ENDPOINT)
 DOUBAO_EMBEDDING_ENDPOINT = os.getenv("DOUBAO_EMBEDDING_ENDPOINT", "")
-BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
+DOUBAO_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 
-# --- 【新增】配置自检提示 ---
+# --- MiniMax 配置 (用于主大脑，解决幻觉和指令执行差的问题) ---
+MINIMAX_API_KEY = os.getenv("MINIMAX_API_KEY", "")
+MINIMAX_BASE_URL = "https://api.minimaxi.com/v1"
+MINIMAX_MODEL = os.getenv("MINIMAX_MODEL", "MiniMax-M2.7")
+
+# --- 配置自检提示 ---
 if not DOUBAO_API_KEY:
-    print("⚠️  [警告] 系统未发现 DOUBAO_API_KEY，AI 对话功能将失效！请检查 .env 文件。")
-if not DOUBAO_MODEL_ENDPOINT:
-    print("⚠️  [警告] 系统未发现 DOUBAO_MODEL_ENDPOINT，请确认环境变量。")
+    print("⚠️  [警告] 系统未发现 DOUBAO_API_KEY，Embedding 和 Vision 功能将失效！")
+if not MINIMAX_API_KEY:
+    print("⚠️  [警告] 系统未发现 MINIMAX_API_KEY，主对话功能将失效！请检查 .env 文件。")
 
 # 按事件循环复用 HTTP 客户端，避免跨 loop 复用导致 "Event loop is closed"
 _http_clients: dict[int, httpx.AsyncClient] = {}
+
+
+def resolve_llm_provider(
+    *,
+    use_bot: bool,
+    use_search: bool,
+    minimax_api_key: Optional[str] = None,
+) -> str:
+    """Resolve provider for current request."""
+    key = MINIMAX_API_KEY if minimax_api_key is None else str(minimax_api_key)
+    has_minimax_key = bool(key.strip())
+    if use_bot or use_search or not has_minimax_key:
+        return "doubao"
+    return "minimax"
 
 def get_client():
     loop = asyncio.get_running_loop()
@@ -74,31 +89,23 @@ async def get_web_search(query: str) -> str:
         return ""
 
 async def get_embedding(text: str) -> List[float]:
-    """Get embedding from Doubao Multimodal API"""
+    """Get embedding from Doubao API (RAG 保持原样以维持索引兼容)"""
     headers = {
         "Authorization": f"Bearer {DOUBAO_API_KEY}",
         "Content-Type": "application/json"
     }
-    # Using multimodal_embeddings endpoint as vision models require it
-    url = f"{BASE_URL}/embeddings/multimodal"
+    url = f"{DOUBAO_BASE_URL}/embeddings/multimodal"
     payload = {
         "model": DOUBAO_EMBEDDING_ENDPOINT,
-        "input": [
-            {
-                "type": "text",
-                "text": text
-            }
-        ]
+        "input": [{"type": "text", "text": text}]
     }
     
-    # Improved: Just use the global client directly for better performance
     client = get_client()
     response = await client.post(url, headers=headers, json=payload, timeout=30.0)
     if response.status_code != 200:
         print(f"Embedding API Error: {response.status_code} - {response.text}")
     response.raise_for_status()
     data = response.json()
-    # Multimodal response structure returns {"data": {"embedding": [...]}, ...} instead of a list inside "data"
     if isinstance(data.get("data"), list):
         return data["data"][0]["embedding"]
     else:
@@ -112,45 +119,59 @@ async def chat_completion_stream(
     model_endpoint: str = None,
     temperature: float = 0.7
 ):
-    """Generator for streaming Chat Completions (Using standard OpenAI compatible format or Responses API)"""
-    headers = {
-        "Authorization": f"Bearer {DOUBAO_API_KEY}",
-        "Content-Type": "application/json"
-    }
+    """主脑流式对话处理：根据需求选择 MiniMax 或 豆包"""
+    # 如果指定了 bot、搜索或者没有 MiniMax Key，则降级使用豆包
+    provider = resolve_llm_provider(use_bot=use_bot, use_search=use_search)
+    use_doubao = provider == "doubao"
     
-    current_model = model_endpoint or DOUBAO_MODEL_ENDPOINT
-    
-    if use_search:
-        # Use Responses API with full conversation history
-        url = f"{BASE_URL}/responses"
-        # Ark-Responses API typically doesn't use the 'parameters' wrapping field
-        payload = {
-            "model": current_model,
-            "input": messages, 
-            "tools": [{"type": "web_search"}],
-            "stream": True,
-            "temperature": temperature
+    if use_doubao:
+        headers = {
+            "Authorization": f"Bearer {DOUBAO_API_KEY}",
+            "Content-Type": "application/json"
         }
-    elif use_bot and DOUBAO_BOT_ID:
-        url = f"{BASE_URL}/bots/chat/completions"
-        model = DOUBAO_BOT_ID
-        payload = {
-            "model": model,
-            "messages": messages,
-            "stream": True,
-            "stream_options": {"include_usage": True},
-            "temperature": temperature
-        }
+        current_model = model_endpoint or DOUBAO_MODEL_ENDPOINT
+        
+        if use_search:
+            url = f"{DOUBAO_BASE_URL}/responses"
+            payload = {
+                "model": current_model,
+                "input": messages, 
+                "tools": [{"type": "web_search"}],
+                "stream": True,
+                "temperature": temperature
+            }
+        elif use_bot and DOUBAO_BOT_ID:
+            url = f"{DOUBAO_BASE_URL}/bots/chat/completions"
+            model = DOUBAO_BOT_ID
+            payload = {
+                "model": model,
+                "messages": messages,
+                "stream": True,
+                "stream_options": {"include_usage": True},
+                "temperature": temperature
+            }
+        else:
+            url = f"{DOUBAO_BASE_URL}/chat/completions"
+            payload = {
+                "model": current_model,
+                "messages": messages,
+                "stream": True,
+                "temperature": temperature
+            }
     else:
-        url = f"{BASE_URL}/chat/completions"
+        # 使用 MiniMax 进行通用对话，解决豆包的幻觉和指令执行弱的问题
+        headers = {
+            "Authorization": f"Bearer {MINIMAX_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        url = f"{MINIMAX_BASE_URL}/chat/completions"
         payload = {
-            "model": current_model,
+            "model": MINIMAX_MODEL,
             "messages": messages,
             "stream": True,
             "temperature": temperature
         }
 
-    # Clean None values in payload
     payload = {k: v for k, v in payload.items() if v is not None}
 
     client = get_client()
@@ -160,7 +181,6 @@ async def chat_completion_stream(
             error_text = body.decode()
             print(f"API Stream Error ({url}): {response.status_code} - {error_text}")
             
-            # Try to parse as JSON to get a cleaner message
             try:
                 err_json = json.loads(error_text)
                 detail = err_json.get("error", {}).get("message", error_text)
@@ -175,7 +195,7 @@ async def chat_completion_stream(
                 yield line + "\n"
 
 async def describe_image(image_base64: str) -> str:
-    """Use Doubao Vision model to describe an image for better OCR/understanding"""
+    """视觉识别目前仍保留使用豆包模型（集成度高）"""
     headers = {
         "Authorization": f"Bearer {DOUBAO_API_KEY}",
         "Content-Type": "application/json"
@@ -203,7 +223,7 @@ async def describe_image(image_base64: str) -> str:
         "max_tokens": 1024
     }
     
-    url = f"{BASE_URL}/chat/completions"
+    url = f"{DOUBAO_BASE_URL}/chat/completions"
     
     client = get_client()
     try:
@@ -220,15 +240,14 @@ async def describe_image(image_base64: str) -> str:
         return f"[解析图片时发生系统错误: {str(e)}]"
 
 async def analyze_coach_case(raw_text: str, hint: str = "") -> dict:
-    """Analyze raw chat logs to generate a structured coach case."""
-    headers = {
-        "Authorization": f"Bearer {DOUBAO_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    
+    """生成对练剧本（对逻辑和指令执行要求极高，默认优先切换 MiniMax）"""
     hint_prompt = ""
     if hint:
-        hint_prompt = f"【归类建议】：这段内容来自文本文件 '{hint}'，请在生成 'category' 字段时，严格优先从 [报价拉锯战, 异常纠纷处理, 业务挖坑排雷, 逼单客情维护] 中选择最符合文件名意图的标签。\n"
+        hint_prompt = (
+            f"【归类建议】：这段内容来自文本文件 '{hint}'，请在生成 'category' 字段时，"
+            "严格优先输出“航线 · 情景”格式，其中航线从 [美国, 欧洲, 一件代发] 选择，"
+            "情景从 [询价, 纠纷] 选择。\n"
+        )
 
     prompt = f"""你是一个名为“仲易达首席剧本架构师”的资深分析模型。
 你需要把下面这段聊天记录，将其“参数化”并“深度重塑”为一个具有高度博弈价值的【实战对练剧本】。
@@ -252,32 +271,32 @@ async def analyze_coach_case(raw_text: str, hint: str = "") -> dict:
 JSON 字段定义：
 - "name": 剧本标题
 - "difficulty": 难度等级 [Easy, Medium, Hard]
-- "category": 航线 · 人设 · 科目。
-  - **航线**：必须从 [美国线, 欧洲线] 中选一。
-  - **人设**：必须从 [行业小白, 江湖老手] 中选一。
-  - **科目**：必须从 [报价拉锯战, 异常纠纷处理, 业务挖坑排雷, 逼单客情维护] 中选一。
-  - **示例**：美国线 · 行业小白 · 报价拉锯战
+- "category": 航线 · 情景。
+  - **航线**：必须从 [美国, 欧洲, 一件代发] 中选一。
+  - **情景**：必须从 [询价, 纠纷] 中选一。
+  - **示例**：美国 · 询价
 - "emoji": 代表该场景的 Emoji
-- "persona": 详细人设描绘（性格、沟通雷点）。
-  ⚠️ **语气差异指令**：
-  - **行业小白**：礼貌、犹豫、爱问为什么、对缩写词（如CBM, DDP）感到困惑、容易被专业话术唬住但也容易因为听不懂而流失。
-  - **江湖老手**：语气简练、强势、满嘴专业黑话、随时拿别家低价压你、非常计较查验费/偏远费等细节、会钓鱼执法。
+- "persona": 详细客户画像（性格、沟通雷点），可自由发挥，不再限制为固定人设标签。
 - "background": 对话背景（禁止出现人称错乱，描述当前场景）
 - "cargo_details": {{"item": "品名", "qty": "件数", "gw_kg": "单件重量", "size_cm": "L*W*H", "destination": "目的仓库/邮编", "hidden_issue": "预测陷阱"}}
 - "success_criteria": 业务员必须做到的 3 件事。
-- "prompt": 【开场白】小易（买家）的第一句台词。要求：严格符合上述【语气差异指令】。江湖老手直接甩货盘问价格，小白先问能不能发货。
+- "prompt": 【开场白】小易（买家）的第一句台词。若是“询价”情景，直接围绕价格/时效/附加费发问；若是“纠纷”情景，直接围绕异常/投诉/赔付切入。
 """
 
+    headers = {
+        "Authorization": f"Bearer {MINIMAX_API_KEY if MINIMAX_API_KEY else DOUBAO_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    url = f"{MINIMAX_BASE_URL}/chat/completions" if MINIMAX_API_KEY else f"{DOUBAO_BASE_URL}/chat/completions"
+    
     payload = {
-        "model": DOUBAO_MODEL_ENDPOINT,
+        "model": MINIMAX_MODEL if MINIMAX_API_KEY else DOUBAO_MODEL_ENDPOINT,
         "messages": [
             {"role": "system", "content": "你是一个只输出 JSON 数据、深谙货代江湖的分析师。请确保输出是一个合法的 JSON 对象。"},
             {"role": "user", "content": prompt}
         ],
         "temperature": 0.8
     }
-    
-    url = f"{BASE_URL}/chat/completions"
     
     client = get_client()
     try:
@@ -291,7 +310,6 @@ JSON 字段定义：
         if json_match:
             content = json_match.group(0)
         else:
-            # 如果没找到 {}，尝试清理 markdown 标记
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0].strip()
             elif "```" in content:

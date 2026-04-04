@@ -15,17 +15,23 @@ from services.llm_client import chat_completion_stream, get_embedding, DOUBAO_MO
 from services.chat_intelligence import (
     build_document_search_query,
     build_intent_clarification_message,
+    build_document_source_footer,
     infer_knowledge_category,
     rerank_similar_documents,
     summarize_document_sources,
 )
 from services.rag_service import search_similar_documents
+from services.chat_document_service import (
+    retrieve_document_context,
+    search_documents_from_disk,
+)
 from services.quote_service import (
     build_deterministic_quote_response,
     get_quote_data_as_string,
     search_best_quotes,
 )
 from services.tracking_service import fetch_tracking_info
+from services.chat_runtime_service import resolve_temperature
 from database import SessionLocal
 from models.user import SystemSetting
 
@@ -73,6 +79,18 @@ ADDRESS_SOURCE_KEYWORDS = [
     "\u4ece\u54ea\u67e5",
     "\u67e5\u7684\u4ec0\u4e48",
     "\u6570\u636e\u6e90",
+]
+DOCUMENT_SOURCE_KEYWORDS = [
+    "来源",
+    "材料",
+    "依据",
+    "出自",
+    "出处",
+    "哪个文件",
+    "哪份文件",
+    "哪个材料",
+    "哪份材料",
+    "哪条规定",
 ]
 TABLE_SEPARATOR_PATTERN = re.compile(r"^\s*\|(?:\s*:?-{3,}:?\s*\|)+\s*$")
 TABLE_ROW_PATTERN = re.compile(r"^\s*\|.*\|\s*$")
@@ -209,6 +227,37 @@ def sanitize_markdown_text(text: str) -> str:
     return sanitized
 
 
+def strip_think_blocks(text: str, *, in_think_block: bool) -> tuple[str, bool]:
+    """Remove model thinking blocks wrapped by <think>...</think>."""
+    source = str(text or "")
+    if not source:
+        return "", in_think_block
+
+    out_parts: List[str] = []
+    cursor = 0
+
+    while cursor < len(source):
+        if in_think_block:
+            end_idx = source.find("</think>", cursor)
+            if end_idx == -1:
+                return "".join(out_parts), True
+            cursor = end_idx + len("</think>")
+            in_think_block = False
+            continue
+
+        start_idx = source.find("<think>", cursor)
+        if start_idx == -1:
+            out_parts.append(source[cursor:])
+            cursor = len(source)
+            continue
+
+        out_parts.append(source[cursor:start_idx])
+        cursor = start_idx + len("<think>")
+        in_think_block = True
+
+    return "".join(out_parts), in_think_block
+
+
 def extract_address_targets_from_text(text: str) -> List[str]:
     if not text:
         return []
@@ -240,6 +289,44 @@ def find_recent_address_targets(history: List[dict], limit: int = 3) -> List[str
 
 def is_address_source_question(message: str) -> bool:
     return any(kw in message for kw in ADDRESS_SOURCE_KEYWORDS)
+
+
+def is_document_source_question(message: str) -> bool:
+    normalized = str(message or "")
+    return any(kw in normalized for kw in DOCUMENT_SOURCE_KEYWORDS)
+
+
+def build_document_source_trace_response(similar_docs: List[dict], limit: int = 3) -> str:
+    if not similar_docs:
+        return (
+            "这条信息目前没有检索到可核验的内部来源，我不能给你编造出处。\n"
+            "请提供更具体的问题关键词，或补充对应制度文件名称后我再精准回溯。"
+        )
+
+    unique_sources: List[str] = []
+    snippet_lines: List[str] = []
+    for doc in similar_docs:
+        metadata = doc.get("metadata") or {}
+        source = str(metadata.get("source", "")).strip() or "未知文档"
+        if source not in unique_sources:
+            unique_sources.append(source)
+        if len(snippet_lines) < limit:
+            excerpt = re.sub(r"\s+", " ", str(doc.get("document", "")).strip())
+            if len(excerpt) > 110:
+                excerpt = excerpt[:110].rstrip() + "…"
+            snippet_lines.append(f"- 《{source}》：{excerpt or '（该片段为空）'}")
+        if len(unique_sources) >= limit and len(snippet_lines) >= limit:
+            break
+
+    lines = ["这条回答可核验的内部来源如下："]
+    lines.extend([f"{idx}. 《{name}》" for idx, name in enumerate(unique_sources[:limit], start=1)])
+    if snippet_lines:
+        lines.append("")
+        lines.append("命中片段（节选）：")
+        lines.extend(snippet_lines)
+    lines.append("")
+    lines.append("如果你要，我可以继续给你定位到更细的原文段落。")
+    return "\n".join(lines)
 
 
 def boost_policy_document_hits(message: str, docs: List[dict]) -> List[dict]:
@@ -383,6 +470,7 @@ async def chat_stream(
 
     system_prompt = ""
     prebuilt_response_text = ""
+    document_source_footer = ""
     intent = "document" # 预设默认意图
     needs_realtime = False
     
@@ -732,48 +820,81 @@ async def chat_stream(
             search_category = infer_knowledge_category(search_query)
             
             enable_rag = get_config("ai_enable_rag", "true").lower() == "true"
-            if enable_rag:
-                try:
-                    query_embedding = await get_embedding(search_query)
-                    top_k = int(get_config('ai_search_top_k', '5'))
-                    similar_docs = await asyncio.to_thread(
-                        search_similar_documents,
-                        query_embedding,
-                        top_k,
-                        search_category,
-                    )
-                    similar_docs = rerank_similar_documents(search_query, similar_docs)
-                except Exception as e:
-                    print(f'RAG Search failed: {e}')
-                    similar_docs = []
-            else:
-                print(">> RAG is disabled by system settings.")
-            
+            try:
+                raw_top_k = int(get_config("ai_search_top_k", "6"))
+            except ValueError:
+                raw_top_k = 6
+            top_k = max(3, min(raw_top_k, 20))
+            if len(request.message.strip()) <= 12:
+                top_k = min(top_k + 2, 20)
+
             is_policy_document_query = any(
                 keyword in request.message for keyword in POLICY_ONLY_DOCUMENT_KEYWORDS
             )
+            if is_policy_document_query:
+                top_k = min(top_k + 3, 20)
+
+            retrieval_result = await retrieve_document_context(
+                search_query=search_query,
+                search_category=search_category or "",
+                enable_rag=enable_rag,
+                top_k=top_k,
+                get_embedding=get_embedding if enable_rag else None,
+                search_documents=search_similar_documents if enable_rag else None,
+                rerank_documents=rerank_similar_documents if enable_rag else None,
+                summarize_sources=summarize_document_sources,
+                build_source_footer=build_document_source_footer,
+                fallback_search_documents=search_documents_from_disk,
+            )
+
+            context_text = retrieval_result["context_text"]
+            best_distance = retrieval_result["best_distance"]
+            similar_docs = retrieval_result["similar_docs"]
+            source_summary = retrieval_result["source_summary"]
+            document_source_footer = retrieval_result["document_source_footer"]
+            needs_realtime = retrieval_result["needs_realtime"]
+            
             if is_policy_document_query and similar_docs:
                 similar_docs = boost_policy_document_hits(request.message, similar_docs)
-            
-            if similar_docs:
                 best_distance = float(similar_docs[0].get("distance", 1.0))
                 source_summary = summarize_document_sources(similar_docs)
+                document_source_footer = build_document_source_footer(similar_docs)
+                context_text = "".join(
+                    f"---\n[内部资料片段 {i+1} | 来源: {doc['metadata'].get('source', '未知文档')}]\n{doc['document']}\n"
+                    for i, doc in enumerate(similar_docs)
+                )
+            
+            if similar_docs:
                 print(f">> RAG Hit! Best distance: {best_distance:.4f}, Chunks: {len(similar_docs)}")
-                for i, doc in enumerate(similar_docs):
-                    context_text += f"---\n[内部资料片段 {i+1} | 来源: {doc['metadata'].get('source', '未知文档')}]\n{doc['document']}\n"
 
-            # 标记 RAG 结果是否较差。制度类查询采用更宽松阈值，降低“明明有内部资料却判定无依据”的误杀率。
-            distance_threshold = 0.78 if is_policy_document_query else 0.65
+            # 标记 RAG 结果是否较差。制度类阈值更宽松，降低“命中但误判为无依据”的情况。
+            distance_threshold = 0.88 if is_policy_document_query else 0.75
             if not similar_docs or best_distance > distance_threshold:
                 if is_policy_document_query:
                     needs_realtime = False
                     prebuilt_response_text = (
-                        "当前未在公司已上传材料中检索到该制度问题的有效依据，不能给出推测性答案。\n"
-                        "请上传对应制度文件，或联系行政/人事确认后再查询。"
+                        "我先不乱猜：当前未在公司已上传材料中检索到该制度问题的有效依据。\n"
+                        "请上传对应制度文件，或告诉我更具体的关键词（如文件名、条款名、部门场景），我继续帮你定位。"
                     )
                 else:
                     needs_realtime = True
-            
+                if best_distance > distance_threshold:
+                    # 弱命中不允许作为“内部依据”，避免模型拿低相关片段强行输出确定结论。
+                    similar_docs = []
+                    context_text = ""
+                    source_summary = ""
+                    document_source_footer = ""
+
+            if not prebuilt_response_text and is_document_source_question(request.message):
+                needs_realtime = False
+                prebuilt_response_text = build_document_source_trace_response(similar_docs)
+
+            source_instruction = (
+                "3. **区分来源**：仅可引用【内部资料来源提示】中列出的文件作为依据，不得凭空新增文件名。"
+                if source_summary
+                else "3. **区分来源**：本轮未命中内部资料来源，严禁使用“根据公司内部资料”口吻，必须明确说明“未检索到可核验依据”。"
+            )
+             
             system_prompt = f"""你是一个名为“小易”的企业级高级助理，现在的身份是【仲易达内部专家顾问】。
 你拥有以下 **6 大核心能力**，能够全方位支持业务同事：
 1. **【全自动底价/卖价查询】**：实时同步公司最新 Excel 报价表，支持阶梯价查询、双仓对比报价。
@@ -784,12 +905,13 @@ async def chat_stream(
 6. **【模拟实战训练（知识教练）】**：支持场景化对练，帮同事磨练谈单技巧。
 
 ### 核心执行指令：
-1. **绝对优先权**：下方的【内部知识检索参考材料】中包含的是公司最新的、最权威的信息。
-2. **组合能力**：当用户问及“你能做什么”时，请务必全面展示上述 6 项能力，并结合参考材料给出具体的例子。
-3. **区分来源**：告诉同事这些信息是根据“公司内部资料”生成的。
+1. **内部资料优先**：下方【内部知识检索参考材料】是当前最可信依据，优先基于它回答。
+2. **组合能力**：当用户问及“你能做什么”时，完整展示上述 6 项能力，并结合参考材料给出具体例子。
+{source_instruction}
 4. **歧义拦截**：遇到多义词先追问确认。
-5. **制度类问题必须仅基于内部资料**：涉及制度、报销、考勤、人事、审批、处罚、薪酬时，禁止联网检索，禁止使用行业常识补齐。
-6. **缺资料时必须明确无依据**：如未检索到内部材料，必须直接说明“未在公司已上传材料中找到依据”，不得编造。
+5. **制度类问题仅基于内部资料**：涉及制度、报销、考勤、人事、审批、处罚、薪酬时，不联网、不用外部常识补齐。
+6. **缺资料就明确说明**：如未检索到内部材料，直接说明“未在公司已上传材料中找到依据”，不要编造。
+7. **适度情绪价值**：在不影响准确性的前提下，可先用 1 句自然共情开场（如“我来帮你快速定位这个问题”），语气像靠谱同事，不要生硬说教。
 
 【北京时间】：{datetime.now().strftime('%Y年%m月%d日')}
 
@@ -799,7 +921,7 @@ async def chat_stream(
 【内部资料来源提示】：
 {source_summary if source_summary else '（本轮暂无明确来源文件）'}
 
-【回复风格】：干练、专业、有理有据。
+【回复风格】：干练、专业、有理有据，同时自然、有同理心。
 """
         if request.mode != "coach":
             red_list_keywords = [
@@ -838,7 +960,7 @@ async def chat_stream(
 
     # 注入全局输出格式规范
     if request.mode == "expert":
-        system_prompt += "\n\n⚠️【排版最终通牒】：为了确保移动端可读性，你提供的所有选项必须使用 Markdown 无序列表（- A. ..., - B. ...）书写，且每个选项之间必须有换行。绝对禁止在同一行输出多个选项！"
+        system_prompt += "\n\n【排版提示】：为了移动端可读性，选项请使用 Markdown 无序列表（- A. ..., - B. ...），并保持每个选项独立成行。"
 
     # 注入全局输出格式规范
     detail_keywords = ["详细", "具体", "完整", "展开", "多说点", "细说", "列表", "全部"]
@@ -850,20 +972,22 @@ async def chat_stream(
     if wants_detail:
         global_style_prompt = """
 
-⚠️【全局输出表达规范】（最高级别的核心指令）：
+【全局输出表达规范】：
 1. **详尽解答**：用户要求详细说明，请提供完整、详尽的内容，可以分点细致展开，确保逻辑连贯、完整。不可遗漏重要细节。
 2. **关键标粗**：务必使用 Markdown 语法对【价格/金额】、【重量/尺寸/体积】、【关键地址/邮编】、【单号/最新状态】、【行动建议】等核心信息进行加粗（如：**核心结论**）。
-3. **结构清晰**：请使用 Markdown 的大纲结构和列表（-），确保排版专业、易读，重点突出。
+3. **结构清晰**：请使用 Markdown 的分段和列表（-），确保排版专业、易读，重点突出。
 4. **专有名词理解**：当资料或用户对话中提到“明日”时，极大概率指的是公司的特色物流渠道“明日之星”。请结合语境优先将其理解为该渠道。
+5. **语气自然**：先给结论，再补细节；可用 1 句简短共情或支持性表达，避免机械客服腔。
 """
     else:
         global_style_prompt = """
 
-⚠️【全局输出表达规范】（最高级别的核心指令）：
+【全局输出表达规范】：
 1. **极致精简**：拒绝长篇大论、无意义的寒暄与废话，用最精准、直白、易读的短句迅速作答。
-2. **结构清晰**：必须使用**换行和分段**来保证结构清晰。第一行直给结论。大量使用短句和项目列表（-），确保业务员只需看一眼就能提炼出全部价值。
+2. **结构清晰**：使用换行和分段保证结构清晰。第一行直给结论，后续用短句和项目列表（-）呈现重点。
 3. **关键标粗**：务必使用 Markdown 语法对【价格/金额】、【重量/尺寸/体积】、【关键地址/邮编】、【单号/最新状态】、【行动建议】等核心信息进行加粗（如：**核心结论**）。
 4. **专有名词理解**：优先将“明日”理解为公司渠道“明日之星”。
+5. **语气自然**：像专业同事沟通，允许简短情绪价值表达，但不要影响事实准确性。
 """
     # 专家模式和对练阶段排除通用风格注入，避免指令冲突，保持其独立的高强度追问/对练逻辑
     if request.mode not in ["coach", "expert"] or (request.mode == "coach" and request.message.startswith("【结束对练】")):
@@ -871,6 +995,15 @@ async def chat_stream(
 
     # Build messages array
     messages = [{"role": "system", "content": system_prompt}]
+    if request.mode not in {"coach", "expert"}:
+        messages[0]["content"] += """
+
+【事实约束（必须遵守）】
+1. 没有证据就不要下结论，不允许编造价格、政策、地址、轨迹、时间点。
+2. 若内部资料未命中或证据不足，明确写“未检索到可核验依据”，并给出需要补充的信息。
+3. 涉及数字（金额、重量、时效、汇率）时，只能使用本轮可验证数据；无法确认时先澄清再回答。
+4. 禁止把“推测”写成“事实”；若是经验判断，必须显式标注“经验判断”。
+"""
     if resolved_image_base64 and "[系统提示" in request.message:
         messages[0]["content"] += "\n\n**重要指令**：用户上传了图片，请根据解析内容理解。"
 
@@ -907,15 +1040,26 @@ async def chat_stream(
         """
         流式输出：根据任务属性选择最优模型发动机。
         """
+        async def emit_text_stream(text: str, chunk_size: int = 24):
+            content = str(text or "")
+            if not content:
+                return
+            for idx in range(0, len(content), chunk_size):
+                yield content[idx : idx + chunk_size]
+                # 主动让出事件循环，提升前端感知的“流式刷新”连续性
+                await asyncio.sleep(0)
+
         line_buffer = ""
         full_response = ""
         raw_full_response = ""
         plain_emitted = ""
         stream_had_error = False
+        in_think_block = False
         start_time = time.time()
         if prebuilt_response_text:
             full_response = sanitize_markdown_text(prebuilt_response_text)
-            yield full_response
+            async for piece in emit_text_stream(full_response):
+                yield piece
             return
         
         def append_and_diff(raw_delta: str) -> str:
@@ -936,9 +1080,12 @@ async def chat_stream(
         final_endpoint = DEEPSEEK_ENDPOINT if request.use_deepseek else DOUBAO_MODEL_ENDPOINT
         
         # 专家模式使用低采样温度（0.1）保证排版稳定性
-        temp = float(get_config("ai_temperature", "0.3"))
-        if request.mode == "expert":
-            temp = 0.1
+        temp = resolve_temperature(
+            base_temperature=float(get_config("ai_temperature", "0.3")),
+            mode=request.mode or "general",
+            intent=intent or "document",
+            needs_realtime=bool(needs_realtime),
+        )
             
         try:
             async for raw_chunk in chat_completion_stream(
@@ -971,7 +1118,8 @@ async def chat_stream(
                             delta_text = append_and_diff(error_res)
                             stream_had_error = True
                             if delta_text:
-                                yield delta_text
+                                async for piece in emit_text_stream(delta_text):
+                                    yield piece
                             break
                         
                         # Standard OpenAI compatible
@@ -979,16 +1127,30 @@ async def chat_stream(
                             delta = data["choices"][0].get("delta", {})
                             content = delta.get("content", "")
                             if content:
-                                delta_text = append_and_diff(content)
+                                filtered_content, in_think_block = strip_think_blocks(
+                                    content,
+                                    in_think_block=in_think_block,
+                                )
+                                if not filtered_content:
+                                    continue
+                                delta_text = append_and_diff(filtered_content)
                                 if delta_text:
-                                    yield delta_text
+                                    async for piece in emit_text_stream(delta_text):
+                                        yield piece
                         # Volcengine Responses API Streaming
                         elif "type" in data and data["type"] == "response.output_text.delta":
                             content = data.get("delta", "")
                             if content:
-                                delta_text = append_and_diff(content)
+                                filtered_content, in_think_block = strip_think_blocks(
+                                    content,
+                                    in_think_block=in_think_block,
+                                )
+                                if not filtered_content:
+                                    continue
+                                delta_text = append_and_diff(filtered_content)
                                 if delta_text:
-                                    yield delta_text
+                                    async for piece in emit_text_stream(delta_text):
+                                        yield piece
                         # Volcengine Responses API Error or Other types
                         elif "type" in data and data["type"] == "error":
                             err_info = data.get("error", {})
@@ -997,7 +1159,8 @@ async def chat_stream(
                             delta_text = append_and_diff(error_res)
                             stream_had_error = True
                             if delta_text:
-                                yield delta_text
+                                async for piece in emit_text_stream(delta_text):
+                                    yield piece
                             break
                     except json.JSONDecodeError:
                         continue
@@ -1007,8 +1170,11 @@ async def chat_stream(
             error_res = f"\n[系统提示：后端处理发生异常 {str(e)}]"
             delta_text = append_and_diff(error_res)
             if delta_text:
-                yield delta_text
+                async for piece in emit_text_stream(delta_text):
+                    yield piece
         finally:
+            # 默认不自动追加“参考来源”尾注，避免影响阅读体验。
+            # 若用户明确追问来源，会走 is_document_source_question 分支单独返回出处信息。
             # Save history to DB
             processing_time = time.time() - start_time
             db = SessionLocal()
@@ -1034,4 +1200,12 @@ async def chat_stream(
             finally:
                 db.close()
 
-    return StreamingResponse(stream_generator(), media_type="text/plain; charset=utf-8")
+    return StreamingResponse(
+        stream_generator(),
+        media_type="text/event-stream; charset=utf-8",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

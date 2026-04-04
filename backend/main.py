@@ -81,4 +81,15 @@ def read_root():
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+    host = str(os.getenv("HOST", "127.0.0.1")).strip() or "127.0.0.1"
+    # Windows 上部分环境会拦截 0.0.0.0 绑定，导致 WinError 10013。
+    # 本地运行默认回退到 127.0.0.1，如需对外网卡监听可显式设置 HOST_ANY=1。
+    if os.name == "nt" and host == "0.0.0.0":
+        host_any_env = str(os.getenv("HOST_ANY", "0")).strip().lower()
+        host_any = host_any_env in {"1", "true", "yes", "on"}
+        if not host_any:
+            print("INFO: Windows local mode fallback: HOST 0.0.0.0 -> 127.0.0.1 (set HOST_ANY=1 to disable).")
+            host = "127.0.0.1"
+    reload_env = str(os.getenv("UVICORN_RELOAD", "0")).strip().lower()
+    reload_enabled = reload_env in {"1", "true", "yes", "on"}
+    uvicorn.run("main:app", host=host, port=port, reload=reload_enabled)

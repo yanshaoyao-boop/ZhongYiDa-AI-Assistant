@@ -46,7 +46,7 @@
 			<!-- 教练对练流程 -->
 			<template v-if="coachSubMode === 'practice'">
 				<div class="category-step-header fadeIn">
-					<button class="back-link" @click="$emit('update:coachSubMode', 'entrance'); $emit('update:selectedRegion', null); $emit('update:selectedPersona', null)">← 返回主入口</button>
+					<button class="back-link" @click="$emit('update:coachSubMode', 'entrance'); $emit('update:selectedRegion', null); $emit('update:selectedScenario', null)">← 返回主入口</button>
 					<div class="category-step-label" v-if="!selectedRegion">第一步：选择实战航线</div>
 				</div>
 				
@@ -62,36 +62,19 @@
 					</div>
 				</div>
 
-				<!-- 第二层：选择客户身份 -->
-				<div class="category-step-header fadeIn" v-if="selectedRegion && !selectedPersona">
+				<!-- 第二层：选择练习情景 -->
+				<div class="category-step-header fadeIn" v-if="selectedRegion">
 					<button class="back-link" @click="$emit('update:selectedRegion', null)">← 返回重选航线</button>
-					<div class="category-step-label">第二步：选择【{{ selectedRegion }}】客户背景</div>
+					<div class="category-step-label">第二步：选择【{{ selectedRegion }}】练习情景</div>
 				</div>
-				<div class="category-grid fadeIn" v-if="selectedRegion && !selectedPersona">
-					<div v-for="per in coachPersonas" :key="per.name" 
-						class="category-main-card persona-card" 
-						@click="$emit('update:selectedPersona', per.name)">
-						<span class="cat-emoji">{{ per.emoji }}</span>
-						<div class="cat-info">
-							<h3>{{ per.name }}</h3>
-							<p>{{ per.desc }}</p>
-						</div>
-					</div>
-				</div>
-
-				<!-- 第三层：选择练习科目 -->
-				<div class="category-step-header fadeIn" v-if="selectedPersona">
-					<button class="back-link" @click="$emit('update:selectedPersona', null)">← 返回重选身份</button>
-					<div class="category-step-label">第三步：选择【{{ selectedPersona }}】练习科目</div>
-				</div>
-				<div class="category-grid subjects fadeIn" v-if="selectedPersona">
-					<div v-for="sub in coachSubjects" :key="sub.name" 
+				<div class="category-grid subjects fadeIn" v-if="selectedRegion">
+					<div v-for="scene in coachScenarios" :key="scene.name" 
 						class="category-main-card subject-card" 
-						@click="$emit('startDuel', sub.name)">
-						<span class="cat-emoji">{{ sub.emoji }}</span>
+						@click="$emit('startDuel', scene.name)">
+						<span class="cat-emoji">{{ scene.emoji }}</span>
 						<div class="cat-info">
-							<h3>{{ sub.name }}</h3>
-							<p>{{ sub.desc }}</p>
+							<h3>{{ scene.name }}</h3>
+							<p>{{ scene.desc }}</p>
 						</div>
 					</div>
 				</div>
@@ -207,7 +190,7 @@ defineProps({
 		type: String,
 		default: null
 	},
-	selectedPersona: {
+	selectedScenario: {
 		type: String,
 		default: null
 	},
@@ -215,11 +198,7 @@ defineProps({
 		type: Array,
 		default: () => []
 	},
-	coachPersonas: {
-		type: Array,
-		default: () => []
-	},
-	coachSubjects: {
+	coachScenarios: {
 		type: Array,
 		default: () => []
 	},
@@ -252,7 +231,7 @@ defineProps({
 
 defineEmits([
 	'presetMsg', 'update:coachSubMode', 'startQuiz', 'restartQuiz', 
-	'update:selectedRegion', 'update:selectedPersona', 'startDuel',
+	'update:selectedRegion', 'update:selectedScenario', 'startDuel',
 	'fetchQuestions', 'selectOption', 'nextQuestion'
 ])
 </script>

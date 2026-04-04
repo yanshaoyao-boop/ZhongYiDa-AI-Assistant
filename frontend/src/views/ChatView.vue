@@ -58,10 +58,9 @@
 						:welcome-msg="personalizedWelcomeMsg"
 						v-model:coach-sub-mode="coachSubMode"
 						v-model:selected-region="selectedRegion"
-						v-model:selected-persona="selectedPersona"
+						v-model:selected-scenario="selectedScenario"
 						:coach-regions="coachRegions"
-						:coach-personas="coachPersonas"
-						:coach-subjects="coachSubjects"
+						:coach-scenarios="coachScenarios"
 						:quiz-step="quizStep"
 						:quiz-questions="quizQuestions"
 						:current-quiz-idx="currentQuizIdx"
@@ -187,18 +186,13 @@ const APP_BUILD_TIME = __APP_BUILD_TIME__
 
 // 配置信息
 const coachRegions = [
-	{ name: '美国线', emoji: '🇺🇸', desc: '重视海派、邮编偏远、计费规则。' },
-	{ name: '欧洲线', emoji: '🇪🇺', desc: '重视铁派、VAT 税号、清关和派送。' }
+	{ name: '美国', emoji: '🇺🇸', desc: '偏远、计费重、FBA时效与附加费。' },
+	{ name: '欧洲', emoji: '🇪🇺', desc: 'VAT、清关、派送签收与异常协同。' },
+	{ name: '一件代发', emoji: '📦', desc: '单件履约、仓配联动、售后纠纷处理。' }
 ]
-const coachPersonas = [
-	{ name: '行业小白', emoji: '🙂', desc: '礼貌但不懂行，需要你用耐心引导。' },
-	{ name: '江湖老手', emoji: '😏', desc: '话术老练、压价明显，考验底盘。' }
-]
-const coachSubjects = [
-	{ name: '报价拉锯战', emoji: '💵', desc: '面对客户反复压价，守住利润。' },
-	{ name: '异常纠纷处理', emoji: '🛡', desc: '处理查验、投诉及各种异常。' },
-	{ name: '业务排雷', emoji: '🔎', desc: '识别隐藏风险和信息不全。' },
-	{ name: '逼单与维护', emoji: '🤝', desc: '推进成交，维持客户信任。' }
+const coachScenarios = [
+	{ name: '询价', emoji: '💵', desc: '围绕价格、时效、规则解释和成交推进。' },
+	{ name: '纠纷', emoji: '🛡', desc: '围绕异常、理赔、投诉和补救方案协商。' }
 ]
 
 // 响应式状态 - 基础
@@ -220,7 +214,7 @@ const zoomedImage = ref(null)
 // 响应式状态 - 教练模式
 const coachSubMode = ref('entrance')
 const selectedRegion = ref(null)
-const selectedPersona = ref(null)
+const selectedScenario = ref(null)
 const currentScenario = ref(null)
 const isIntelOpen = ref(false)
 const coachCases = ref([])
@@ -467,16 +461,63 @@ const nextQuizQuestion = () => {
 
 const restartQuiz = () => { quizStep.value = 'count_selection'; }
 
-const startCoachDetailedSubject = (subName) => {
-    if (!selectedRegion.value || !selectedPersona.value) return
-    const regionKey = selectedRegion.value.replace('线', '')
-    const personaKey = selectedPersona.value.replace('行业', '')
-    const matched = coachCases.value.filter(c => (c.category || '').includes(regionKey) && (c.category || '').includes(personaKey))
-    const randomCase = matched[Math.floor(Math.random() * matched.length)]
-    currentScenario.value = randomCase || { name: `${selectedRegion.value} · ${subName}`, persona: selectedPersona.value }
-    inputMsg.value = `我要挑战【${currentScenario.value.name}】场景`
-    handleSendMessage()
-    isIntelOpen.value = true
+const getCaseRoute = (item) => {
+	const text = `${item?.category || ''} ${item?.name || ''} ${item?.source || ''} ${item?.background || ''}`.toLowerCase()
+	if (text.includes('一件代发') || text.includes('代发') || text.includes('dropship')) return '一件代发'
+	if (text.includes('欧洲') || text.includes('欧线')) return '欧洲'
+	if (text.includes('美国') || text.includes('美线')) return '美国'
+	return '未知'
+}
+
+const getCaseScenario = (item) => {
+	const text = `${item?.category || ''} ${item?.name || ''} ${item?.source || ''} ${item?.background || ''}`.toLowerCase()
+	if (text.includes('异常纠纷处理') || text.includes('纠纷') || text.includes('投诉') || text.includes('理赔') || text.includes('索赔') || text.includes('赔偿') || text.includes('破损')) {
+		return '纠纷'
+	}
+	if (text.includes('报价拉锯战') || text.includes('业务挖坑排雷') || text.includes('逼单客情维护') || text.includes('询价') || text.includes('报价') || text.includes('价格')) {
+		return '询价'
+	}
+	return '询价'
+}
+
+const pickRandom = (items) => {
+	if (!Array.isArray(items) || items.length === 0) return null
+	return items[Math.floor(Math.random() * items.length)]
+}
+
+const startCoachDetailedSubject = (sceneName) => {
+	if (!selectedRegion.value || !sceneName) return
+	selectedScenario.value = sceneName
+
+	const matchedByRouteAndScene = coachCases.value.filter(
+		(item) => getCaseRoute(item) === selectedRegion.value && getCaseScenario(item) === sceneName
+	)
+	const matchedBySceneOnly = coachCases.value.filter(
+		(item) => getCaseScenario(item) === sceneName
+	)
+
+	const randomCase = pickRandom(matchedByRouteAndScene) || pickRandom(matchedBySceneOnly)
+	if (randomCase) {
+		currentScenario.value = {
+			...randomCase,
+			persona: randomCase.persona || `${selectedRegion.value} · ${sceneName} 对练客户`,
+		}
+	} else {
+		currentScenario.value = {
+			name: `${selectedRegion.value} · ${sceneName} 通用实战`,
+			persona: `${selectedRegion.value} · ${sceneName} 对练客户`,
+			background: '当前案例库暂无完全匹配剧本，先进入通用对练，你可以继续上传该线路案例增强命中。',
+			success_criteria: [
+				'先问全关键信息，再给结论。',
+				'不要硬刚，先稳住情绪再推进方案。',
+				'所有关键数字、费用、时效都给到可执行口径。',
+			],
+		}
+	}
+
+	inputMsg.value = `我要挑战【${currentScenario.value.name}】场景`
+	handleSendMessage()
+	isIntelOpen.value = true
 }
 
 const requestCoachEvaluation = () => {
@@ -488,7 +529,7 @@ const requestCoachEvaluation = () => {
 }
 
 const resetCoachState = () => {
-	coachSubMode.value = 'entrance'; selectedRegion.value = null; selectedPersona.value = null
+	coachSubMode.value = 'entrance'; selectedRegion.value = null; selectedScenario.value = null
 	currentScenario.value = null; quizStep.value = 'count_selection'
 }
 

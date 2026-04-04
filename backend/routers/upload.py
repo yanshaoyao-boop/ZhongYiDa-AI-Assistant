@@ -2,6 +2,7 @@
 import base64
 import json
 import os
+import re
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -33,6 +34,61 @@ _UPLOAD_TASKS_LOCK = threading.Lock()
 _CHAT_IMAGE_UPLOADS = {}
 _CHAT_IMAGE_UPLOADS_LOCK = threading.Lock()
 DOCUMENT_CATEGORIES = {"admin", "biz"}
+
+CASE_HEADER_PATTERN = re.compile(
+    r"^\s*(?:#{1,6}\s*)?(?:案例|case)\s*(?:第\s*)?(?:\d+|[一二三四五六七八九十百千万两零〇]+|[A-Za-z]+)?(?:\s*[：:、.\-）)])?\s*$",
+    re.IGNORECASE,
+)
+CASE_HEADER_RELAXED_PATTERN = re.compile(
+    r"^\s*(?:#{1,6}\s*)?(?:案例|case)\s*(?:第\s*)?(?:\d+|[一二三四五六七八九十百千万两零〇]+|[A-Za-z]+)\b",
+    re.IGNORECASE,
+)
+CASE_SEPARATOR_PATTERN = re.compile(r"^\s*(?:={5,}|-{5,}|\*{5,})\s*$")
+MIN_CASE_BLOCK_CHARS = 10
+
+
+def _split_coach_case_blocks(content: str) -> list[str]:
+    text = (content or "").replace("\r\n", "\n")
+    if not text.strip():
+        return []
+
+    blocks: list[str] = []
+    current_lines: list[str] = []
+
+    for raw_line in text.split("\n"):
+        line = raw_line.strip()
+        is_separator = bool(CASE_SEPARATOR_PATTERN.match(line))
+        is_header = bool(CASE_HEADER_PATTERN.match(line) or CASE_HEADER_RELAXED_PATTERN.match(line))
+
+        if is_separator:
+            if current_lines:
+                block = "\n".join(current_lines).strip()
+                if block:
+                    blocks.append(block)
+                current_lines = []
+            continue
+
+        if is_header and current_lines:
+            block = "\n".join(current_lines).strip()
+            if block:
+                blocks.append(block)
+            current_lines = [raw_line]
+            continue
+
+        current_lines.append(raw_line)
+
+    if current_lines:
+        block = "\n".join(current_lines).strip()
+        if block:
+            blocks.append(block)
+
+    cleaned_blocks = []
+    for block in blocks:
+        cleaned = CASE_SEPARATOR_PATTERN.sub("", block).strip()
+        if len(cleaned) >= MIN_CASE_BLOCK_CHARS:
+            cleaned_blocks.append(cleaned)
+
+    return cleaned_blocks
 
 
 def _normalize_document_category(category: str | None) -> str:
@@ -421,16 +477,7 @@ async def create_coach_case(
     try:
         content = await parse_document_content(file)
         print(f">> Received file: {file.filename}, length: {len(content)}")
-
-        import re
-
-        case_blocks = re.split(r"(?=案例\s*\d+\s*[:：]?|\={5,})", content)
-
-        case_texts = []
-        for block in case_blocks:
-            cleaned = re.sub(r"\={5,}", "", block.strip()).strip()
-            if len(cleaned) > 20:
-                case_texts.append(cleaned)
+        case_texts = _split_coach_case_blocks(content)
 
         print(f">> Found {len(case_texts)} potential cases in file.")
 
@@ -464,6 +511,11 @@ async def create_coach_case(
             note = (
                 f"为了保证分析质量，系统单次批量处理前 {batch_limit} 条。"
                 "如有更多，请分批上传或联系管理员。"
+            )
+        elif len(case_texts) <= 1 and len(content) >= 1200:
+            note = (
+                "检测到可分段案例较少。建议在每个案例前使用“案例1：/案例一：/Case 1:”"
+                "或 Markdown 标题（如“## 案例一”），也可用“=====”作为案例分隔线。"
             )
 
         return {

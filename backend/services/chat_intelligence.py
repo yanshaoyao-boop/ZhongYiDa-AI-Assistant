@@ -63,12 +63,18 @@ ADMIN_ROLE_LOOKUP_KEYWORDS = (
 ADMIN_ROLE_DIRECTORY_EXPANSION = "行政部门 岗位职责 对接人 负责人 职位 职务 联系方式"
 ADMIN_ATTENDANCE_EXPANSION = "考勤制度 迟到 早退 漏打卡 未打卡 扣款 满勤 旷工 请假 薪酬 管理制度"
 ADMIN_REIMBURSEMENT_EXPANSION = "费用报销 报销制度 报销标准 报销流程 发票 审批 时效"
+ORDER_SHEET_ROUTING_EXPANSION = "下单表 修改 下单表内容变更 对接人 客服主管 行政部门 岗位职责 联系方式"
+EXECUTIVE_PROFILE_EXPANSION = "集团简介 组织架构 高管 董事长 法人 核心管理层"
 QUOTE_HINT_KEYWORDS = ("报价", "价格", "多少钱", "费用", "卖价", "单价", "运费")
 ADDRESS_HINT_KEYWORDS = ("偏远", "地址", "邮编", "仓库", "送吗", "哪里")
 REGION_KEYWORDS = ("美东", "美中", "美西", "欧洲", "英国", "加拿大", "澳洲", "华东", "华南")
 WH_CODE_PATTERN = re.compile(r"[A-Z]{3,4}\d+[A-Z]?", re.IGNORECASE)
 ZIP_CODE_PATTERN = re.compile(r"(?<!\d)\d{5}(?!\d)")
 WEIGHT_VOLUME_PATTERN = re.compile(r"\d+(?:\.\d+)?\s*(?:kg|公斤|cbm|方|立方)", re.IGNORECASE)
+TYPO_CANONICAL_MAP = {
+    "婚嫁": "婚假",
+    "婚价": "婚假",
+}
 ADMIN_KNOWLEDGE_KEYWORDS = (
     "考勤",
     "迟到",
@@ -110,6 +116,7 @@ ADMIN_ATTENDANCE_KEYWORDS = (
     "满勤",
     "旷工",
     "请假",
+    "婚假",
     "调休",
 )
 ADMIN_REIMBURSEMENT_KEYWORDS = (
@@ -118,10 +125,97 @@ ADMIN_REIMBURSEMENT_KEYWORDS = (
     "发票",
     "审批",
 )
+ORDER_SHEET_ROUTING_KEYWORDS = (
+    "下单表",
+    "改下单表",
+    "改单",
+    "改单表",
+    "账单",
+    "改账单",
+    "修改账单",
+    "修改下单",
+    "改单找谁",
+    "改下单找谁",
+)
+EXECUTIVE_PROFILE_KEYWORDS = (
+    "董事长",
+    "法人",
+    "高管",
+    "老板是谁",
+    "公司谁负责",
+    "集团负责人",
+)
 
 
 def _normalize_text(text: str) -> str:
-    return re.sub(r"\s+", " ", (text or "").strip())
+    normalized = re.sub(r"\s+", " ", (text or "").strip())
+    for typo, canonical in TYPO_CANONICAL_MAP.items():
+        normalized = normalized.replace(typo, canonical)
+    return normalized
+
+
+def _is_chinese_fragment(text: str) -> bool:
+    return any("\u4e00" <= ch <= "\u9fff" for ch in text)
+
+
+def _distance_lte_one(a: str, b: str) -> bool:
+    """Fast check for edit distance <= 1 (substitute/insert/delete)."""
+    if a == b:
+        return True
+    la = len(a)
+    lb = len(b)
+    if abs(la - lb) > 1:
+        return False
+    if la == lb:
+        mismatches = 0
+        for ca, cb in zip(a, b):
+            if ca != cb:
+                mismatches += 1
+                if mismatches > 1:
+                    return False
+        return mismatches == 1
+
+    if la > lb:
+        a, b = b, a
+        la, lb = lb, la
+
+    i = 0
+    j = 0
+    mismatch_used = False
+    while i < la and j < lb:
+        if a[i] == b[j]:
+            i += 1
+            j += 1
+            continue
+        if mismatch_used:
+            return False
+        mismatch_used = True
+        j += 1
+    return True
+
+
+def _fuzzy_term_keyword_match(term: str, keyword: str) -> bool:
+    if term == keyword:
+        return True
+    if len(term) < 2 or len(keyword) < 2:
+        return False
+    if max(len(term), len(keyword)) > 4:
+        return False
+    # Fuzzy mode is only for short Chinese fragments (e.g. ?? -> ??).
+    if not _is_chinese_fragment(term) or not _is_chinese_fragment(keyword):
+        return False
+    return _distance_lte_one(term, keyword)
+
+
+def _keyword_in_text(text: str, keyword: str, query_terms: list[str]) -> bool:
+    if keyword in text:
+        return True
+    return any(_fuzzy_term_keyword_match(term, keyword) for term in query_terms)
+
+
+def _count_keyword_matches(text: str, keywords: tuple[str, ...]) -> int:
+    query_terms = _extract_query_terms(text)
+    return sum(1 for keyword in keywords if _keyword_in_text(text, keyword, query_terms))
 
 
 def _dedupe_keep_order(items: Iterable[str]) -> list[str]:
@@ -169,11 +263,11 @@ def _has_address_target(text: str) -> bool:
 
 def infer_knowledge_category(message: str) -> str | None:
     normalized = _normalize_text(message)
-    if any(keyword in normalized for keyword in ADMIN_ROLE_LOOKUP_KEYWORDS):
+    if _count_keyword_matches(normalized, ADMIN_ROLE_LOOKUP_KEYWORDS) > 0:
         return "admin"
 
-    admin_score = sum(1 for keyword in ADMIN_KNOWLEDGE_KEYWORDS if keyword in normalized)
-    biz_score = sum(1 for keyword in BUSINESS_KNOWLEDGE_KEYWORDS if keyword.lower() in normalized.lower())
+    admin_score = _count_keyword_matches(normalized, ADMIN_KNOWLEDGE_KEYWORDS)
+    biz_score = _count_keyword_matches(normalized, BUSINESS_KNOWLEDGE_KEYWORDS)
 
     if admin_score == 0 and biz_score == 0:
         return None
@@ -213,13 +307,19 @@ def build_document_search_query(
     if any(keyword in current_message for keyword in ASSISTANT_CAPABILITY_QUERY_MARKERS):
         search_query = f"{search_query} {ASSISTANT_CAPABILITY_EXPANSION}".strip()
 
-    if any(keyword in current_message for keyword in ADMIN_ROLE_LOOKUP_KEYWORDS):
+    if _count_keyword_matches(current_message, ADMIN_ROLE_LOOKUP_KEYWORDS) > 0:
         search_query = f"{search_query} {ADMIN_ROLE_DIRECTORY_EXPANSION}".strip()
 
-    if any(keyword in current_message for keyword in ADMIN_REIMBURSEMENT_KEYWORDS):
+    if _count_keyword_matches(current_message, ADMIN_REIMBURSEMENT_KEYWORDS) > 0:
         search_query = f"{search_query} {ADMIN_REIMBURSEMENT_EXPANSION}".strip()
-    elif any(keyword in current_message for keyword in ADMIN_ATTENDANCE_KEYWORDS):
+    elif _count_keyword_matches(current_message, ADMIN_ATTENDANCE_KEYWORDS) > 0:
         search_query = f"{search_query} {ADMIN_ATTENDANCE_EXPANSION}".strip()
+
+    if _count_keyword_matches(current_message, ORDER_SHEET_ROUTING_KEYWORDS) > 0:
+        search_query = f"{search_query} {ORDER_SHEET_ROUTING_EXPANSION}".strip()
+
+    if _count_keyword_matches(current_message, EXECUTIVE_PROFILE_KEYWORDS) > 0:
+        search_query = f"{search_query} {EXECUTIVE_PROFILE_EXPANSION}".strip()
 
     return search_query
 

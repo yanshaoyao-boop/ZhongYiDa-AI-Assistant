@@ -47,7 +47,7 @@
               <span class="file-sel">{{ file.name }}</span>
             </div>
           </div>
-          <input type="file" ref="adminInput" style="display:none" @change="onAdminSelected" accept=".pdf,.doc,.docx,.txt" multiple />
+          <input type="file" ref="adminInput" style="display:none" @change="onAdminSelected" accept=".pdf,.doc,.docx,.txt,.md" multiple />
         </div>
         
         <button class="btn-primary" :disabled="adminFiles.length === 0 || adminUploading" @click="uploadAdmin">
@@ -88,7 +88,7 @@
               <span class="file-sel">{{ file.name }}</span>
             </div>
           </div>
-          <input type="file" ref="bizInput" style="display:none" @change="onBizSelected" accept=".pdf,.doc,.docx,.txt" multiple />
+          <input type="file" ref="bizInput" style="display:none" @change="onBizSelected" accept=".pdf,.doc,.docx,.txt,.md" multiple />
         </div>
         
         <button class="btn-primary biz-btn" :disabled="bizFiles.length === 0 || bizUploading" @click="uploadBiz">
@@ -171,7 +171,7 @@
               <span class="file-sel">{{ file.name }}</span>
             </div>
           </div>
-          <input type="file" ref="caseInput" style="display:none" @change="onCaseSelected" accept=".pdf,.doc,.docx,.txt" multiple />
+          <input type="file" ref="caseInput" style="display:none" @change="onCaseSelected" accept=".pdf,.doc,.docx,.txt,.md" multiple />
         </div>
         
         <button class="btn-primary coach-btn" :disabled="caseFiles.length === 0 || caseUploading" @click="uploadCases">
@@ -460,14 +460,22 @@ const {
 } = useUploader({
   url: `${BASE_URL}/coach-case`,
   onSuccess: (n, _errs, dataList) => {
-    const total = dataList.reduce((sum, d) => sum + (d.processed_count || 0), 0)
+    const processed = dataList.reduce((sum, d) => sum + (d.processed_count || 0), 0)
+    const found = dataList.reduce((sum, d) => sum + (d.total_found || d.processed_count || 0), 0)
+    const note = dataList.map((d) => d.note).find(Boolean)
     fetchCoachCases()
-    return `成功处理 ${n} 份文件，共生成 ${total} 个实战剧本！`
+    return note
+      ? `成功处理 ${n} 份文件，识别到 ${found} 段案例，生成 ${processed} 个实战剧本。提示：${note}`
+      : `成功处理 ${n} 份文件，识别到 ${found} 段案例，生成 ${processed} 个实战剧本。`
   },
   onError: (n, errs, dataList) => {
-    const total = (dataList || []).reduce((sum, d) => sum + (d.processed_count || 0), 0)
+    const processed = (dataList || []).reduce((sum, d) => sum + (d.processed_count || 0), 0)
+    const found = (dataList || []).reduce((sum, d) => sum + (d.total_found || d.processed_count || 0), 0)
+    const note = (dataList || []).map((d) => d.note).find(Boolean)
     fetchCoachCases()
-    return `处理完成。成功: ${n} 份，失败: ${errs.length} 份。共生成 ${total} 个剧本。`
+    return note
+      ? `处理完成。成功 ${n} 份，失败 ${errs.length} 份；识别到 ${found} 段案例，生成 ${processed} 个剧本。提示：${note}`
+      : `处理完成。成功 ${n} 份，失败 ${errs.length} 份；识别到 ${found} 段案例，生成 ${processed} 个剧本。`
   }
 })
 

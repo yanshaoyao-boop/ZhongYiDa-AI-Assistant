@@ -209,3 +209,25 @@ def resolve_runtime_strategy(
         return resolved_realtime, True
 
     return resolved_realtime, use_deepseek
+
+
+def resolve_temperature(
+    *,
+    base_temperature: float,
+    mode: str,
+    intent: str,
+    needs_realtime: bool,
+) -> float:
+    """Return a conservative temperature based on runtime risk profile."""
+    temp = max(0.0, float(base_temperature))
+
+    if mode == "expert":
+        return min(temp, 0.1)
+
+    if intent in {"quote", "address", "tracking"}:
+        return min(temp, 0.1)
+
+    if intent == "document" and not needs_realtime:
+        return min(temp, 0.2)
+
+    return temp
