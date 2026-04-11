@@ -261,6 +261,10 @@ def serve_tool_root(group: str, slug: str):
 def serve_tool_asset(group: str, slug: str, asset_path: str):
     tool = _resolve_tool(group, slug)
 
+    if tool["kind"] == "html_file":
+        target_path = _safe_join(tool["source"].parent, asset_path)
+        return _file_response(target_path)
+
     if tool["kind"] == "directory":
         target_path = _safe_join(tool["source"], asset_path)
         return _file_response(target_path)
