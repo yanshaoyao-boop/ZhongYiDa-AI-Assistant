@@ -19,6 +19,41 @@ VOLUME_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*(?:CBM|立方)", re.IGNORECASE)
 KG_TIER_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*KG\+", re.IGNORECASE)
 CBM_TIER_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*CBM\+", re.IGNORECASE)
 
+AGENT_ALIASES: dict[str, tuple[str, ...]] = {
+    "锦联": ("锦联", "金联"),
+    "亿阳": ("亿阳", "易阳"),
+    "星夜": ("星夜", "星野", "兴业"),
+    "腾信": ("腾信",),
+    "明日之星": ("明日之星", "明星达", "MRZX"),
+    "商壹": ("商壹", "商翊"),
+    "澳鑫": ("澳鑫", "澳新"),
+    "荣达": ("荣达",),
+}
+
+
+def _contains_any_keyword(text: str, keywords: tuple[str, ...] | list[str]) -> bool:
+    normalized = str(text or "").lower()
+    return any(str(keyword or "").lower() in normalized for keyword in keywords)
+
+
+def _extract_explicit_agents(query: str) -> list[str]:
+    explicit_agents: list[str] = []
+    for canonical_name, aliases in AGENT_ALIASES.items():
+        if _contains_any_keyword(query, aliases):
+            explicit_agents.append(canonical_name)
+    return explicit_agents
+
+
+def _build_agent_aliases(canonical_agents: list[str]) -> list[str]:
+    aliases: list[str] = []
+    for canonical_name in canonical_agents:
+        alias_list = AGENT_ALIASES.get(canonical_name, (canonical_name,))
+        for alias in alias_list:
+            if alias not in aliases:
+                aliases.append(alias)
+    return aliases
+
+
 CITY_COORDINATES: dict[str, tuple[float, float]] = {
     "义乌": (29.3069, 120.0750),
     "金华": (29.0781, 119.6474),
@@ -80,31 +115,34 @@ def parse_quote_file(file_path: str) -> List[Dict]:
     try:
         if ext in [".xlsx", ".xls"]:
             # 文件名路由：锦联系列用专属解析器，其他用通用解析器
-            if "锦联" in filename:
+            if _contains_any_keyword(filename, AGENT_ALIASES["锦联"]):
                 if any(x in filename for x in ["欧", "加", "英", "墨"]):
                     from services.jinlian_global_parser import parse_jinlian_global_excel
                     return parse_jinlian_global_excel(file_path)
                 else:
                     from services.jinlian_parser import parse_jinlian_excel
                     return parse_jinlian_excel(file_path)
-            elif "亿阳" in filename:
+            elif _contains_any_keyword(filename, AGENT_ALIASES["亿阳"]):
                 from services.yiyang_parser import parse_yiyang_excel
                 return parse_yiyang_excel(file_path)
-            elif "星夜" in filename:
+            elif _contains_any_keyword(filename, AGENT_ALIASES["星夜"]):
                 from services.xingye_parser import parse_xingye_excel
                 return parse_xingye_excel(file_path)
-            elif "腾信" in filename:
+            elif _contains_any_keyword(filename, AGENT_ALIASES["腾信"]):
                 from services.tengxin_parser import parse_tengxin_excel
                 return parse_tengxin_excel(file_path)
-            elif "商壹" in filename:
+            elif _contains_any_keyword(filename, AGENT_ALIASES["商壹"]):
                 from services.shangyi_parser import parse_shangyi_excel
                 return parse_shangyi_excel(file_path)
-            elif "澳鑫" in filename:
+            elif _contains_any_keyword(filename, AGENT_ALIASES["澳鑫"]):
                 from services.aoxin_parser import parse_aoxin_excel
                 return parse_aoxin_excel(file_path)
             elif "天航" in filename:
                 from services.tianhang_parser import parse_tianhang_excel
                 return parse_tianhang_excel(file_path)
+            elif _contains_any_keyword(filename, AGENT_ALIASES["荣达"]):
+                from services.rongda_parser import parse_rongda_excel
+                return parse_rongda_excel(file_path)
             else:
                 from services.excel_parser import parse_complex_excel
                 return parse_complex_excel(file_path)
@@ -610,6 +648,98 @@ def _record_matches_requested_warehouses(record: Dict[str, Any], warehouse_codes
     return any(code in requested_codes for code in _extract_record_warehouse_codes(record))
 
 
+def _record_matches_agent(record: Dict[str, Any], aliases: list[str]) -> bool:
+    if not aliases:
+        return False
+    source_text = str(record.get("_source", "")).lower()
+    channel_text = str(record.get("渠道", "")).lower()
+    return any(alias.lower() in source_text or alias.lower() in channel_text for alias in aliases)
+
+
+def _extract_destination_mentions(message: str, quote_records: List[Dict] | None) -> list[str]:
+    normalized_message = str(message or "")
+    destinations: list[str] = []
+    for record in quote_records or []:
+        destination = str(record.get("目的地区", "")).strip()
+        if len(destination) < 2:
+            continue
+        if destination in normalized_message and destination not in destinations:
+            destinations.append(destination)
+    return destinations
+
+
+def _build_destination_quote_availability_response(
+    message: str,
+    quote_records: List[Dict] | None,
+    *,
+    limit: int,
+) -> str:
+    destination_mentions = _extract_destination_mentions(message, quote_records)
+    if not destination_mentions:
+        return ""
+
+    primary_destination = destination_mentions[0]
+    explicit_agents = _extract_explicit_agents(message)
+    explicit_aliases = _build_agent_aliases(explicit_agents)
+
+    candidates = []
+    seen = set()
+    for record in quote_records or []:
+        destination = str(record.get("目的地区", "")).strip()
+        if destination != primary_destination:
+            continue
+        if explicit_aliases and not _record_matches_agent(record, explicit_aliases):
+            continue
+
+        key = (
+            str(record.get("渠道", "")).strip(),
+            str(record.get("_source", "")).strip(),
+            destination,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        candidates.append(record)
+
+    if not candidates:
+        return ""
+
+    sources: list[str] = []
+    for record in candidates:
+        source = str(record.get("_source", "")).strip()
+        if source and source not in sources:
+            sources.append(source)
+
+    agent_label = "、".join(explicit_agents) if explicit_agents else "当前系统已接入渠道"
+    lines = [
+        f"结论：有。当前报价表里已经命中 **{primary_destination}** 的报价记录（渠道范围：{agent_label}）。",
+        "",
+        "命中明细预览：",
+        "| 目的地 | 渠道 | 阶梯数 | 来源 |",
+        "| --- | --- | --- | --- |",
+    ]
+
+    for record in candidates[: max(limit, 1)]:
+        price_system = record.get("价格体系") or {}
+        tier_count = len([k for k, v in price_system.items() if _safe_float(v) is not None])
+        lines.append(
+            f"| {primary_destination} | {str(record.get('渠道', '')).strip() or '未知渠道'} | "
+            f"{tier_count} | {str(record.get('_source', '')).strip() or '-'} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "补充提醒：",
+            "- 你这次只问了“有没有报价”，所以先确认了可用性；如果要给客户出具体价格，请再补重量/体积和起运仓。",
+        ]
+    )
+
+    if sources:
+        lines.extend(["", f"报价来源：{'、'.join(sources)}"])
+    return "\n".join(lines).strip()
+
+
 def _build_reference_only_quote_response(
     warehouse_codes: list[str],
     weight_kg: float,
@@ -762,6 +892,13 @@ def build_deterministic_quote_response(
     origin_city = details["origin_city"]
 
     if not warehouse_codes:
+        destination_only_response = _build_destination_quote_availability_response(
+            message,
+            quote_records,
+            limit=limit,
+        )
+        if destination_only_response:
+            return destination_only_response
         return ""
 
     if weight_kg is None:
@@ -978,11 +1115,9 @@ def search_best_quotes(query: str, limit: int = 40) -> List[Dict]:
     found_regions_from_query = [v for k, v in region_map.items() if k in query]
     all_found_regions = list(set(found_regions_from_query + extra_regions))
     
-    # 显式代理商倾向
-    explicit_agents = []
-    for agent in ["锦联", "亿阳", "星夜", "腾信", "明日之星", "商壹", "澳鑫"]:
-        if agent in query:
-            explicit_agents.append(agent)
+    # 显式代理商倾向（包含别名归一化，如“兴业/星野”=>“星夜”）
+    explicit_agents = _extract_explicit_agents(query)
+    explicit_agent_aliases = _build_agent_aliases(explicit_agents)
 
     # 地理/起运倾向打分器
     origin_city = _extract_origin_city(query)
@@ -999,18 +1134,33 @@ def search_best_quotes(query: str, limit: int = 40) -> List[Dict]:
     found_keywords = [k for k in search_keywords if k in query]
 
     for filename, records in QUOTES_CACHE.items():
-        is_prio_file = "明日之星" in filename or any(a in filename for a in explicit_agents)
+        is_prio_file = _contains_any_keyword(filename, AGENT_ALIASES["明日之星"]) or any(
+            alias.lower() in filename.lower() for alias in explicit_agent_aliases
+        )
         for r in records:
             # 基础关键词过滤 (初筛)
             wh_code = r.get("仓库代码", "").upper()
             region = r.get("目的地区", "")
+            destination = str(r.get("目的地区", "")).strip()
+            channel_text = str(r.get("渠道", "")).lower()
             
             matches_wh = any(wh in wh_code for wh in found_whs) if found_whs else False
             matches_rg = any(rg in region for rg in all_found_regions) if all_found_regions else False
-            matches_agent = any(a.lower() in filename.lower() or a.lower() in r.get("渠道", "").lower() for a in explicit_agents)
-            matches_keyword = any(k.lower() in r.get("渠道", "").lower() for k in found_keywords)
+            matches_agent = any(
+                alias.lower() in filename.lower() or alias.lower() in channel_text
+                for alias in explicit_agent_aliases
+            )
+            matches_keyword = any(k.lower() in channel_text for k in found_keywords)
+            matches_destination = bool(destination) and destination.lower() in query.lower()
 
-            if not (matches_wh or matches_rg or matches_agent or matches_keyword or not (found_whs or all_found_regions or explicit_agents or found_keywords)):
+            if not (
+                matches_wh
+                or matches_rg
+                or matches_agent
+                or matches_keyword
+                or matches_destination
+                or not (found_whs or all_found_regions or explicit_agents or found_keywords)
+            ):
                 continue
 
             unique_key = (r.get("渠道", ""), r.get("仓库代码", ""), r.get("目的地区", ""), filename)
@@ -1024,6 +1174,7 @@ def search_best_quotes(query: str, limit: int = 40) -> List[Dict]:
             if matches_agent: score += 50
             if matches_rg: score += 30
             if matches_keyword: score += 20
+            if matches_destination: score += 90
             if is_prio_file: score += 10
             
             # --- 【关键】起运地匹配度额外加分 ---
