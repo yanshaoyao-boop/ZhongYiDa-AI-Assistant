@@ -109,6 +109,29 @@ COMPANY_INTRO_KEYWORDS = [
 
 # 报价查询关键词
 QUOTE_KEYWORDS = ["报价", "价格", "多少钱", "费", "门点", "计费", "卖价", "舱位", "单价", "运费"]
+QUOTE_ROUTE_KEYWORDS = [
+    "线路",
+    "航线",
+    "国家",
+    "地区",
+    "覆盖",
+    "覆盖范围",
+    "走哪些",
+    "能走哪",
+    "主要做哪些",
+]
+QUOTE_TABLE_KEYWORDS = ["报价表", "价格表", "价表"]
+QUOTE_VENDOR_HINTS = [
+    "荣达",
+    "星夜",
+    "兴业",
+    "星野",
+    "RONGDA",
+    "XINGYE",
+    "XINGYEWULIU",
+]
+QUOTE_FOLLOWUP_HINTS = ["呢", "那", "还有", "怎么样", "啥情况", "可以吗", "有吗"]
+QUOTE_ASSISTANT_HINTS = ["报价", "价格", "报价表", "价格表", "仓库代码", "重量", "体积", "计费重", "KG", "CBM"]
 POLICY_ONLY_DOCUMENT_KEYWORDS = [
     "制度",
     "规定",
@@ -162,6 +185,28 @@ class ChatRequest(BaseModel):
     image_base64: Optional[str] = None
     image_upload_id: Optional[str] = None
     use_deepseek: Optional[bool] = False
+
+
+def is_quote_route_query(text: str) -> bool:
+    content = str(text or "")
+    if not content:
+        return False
+    has_route = any(kw in content for kw in QUOTE_ROUTE_KEYWORDS)
+    has_vendor = any(kw in content.upper() for kw in QUOTE_VENDOR_HINTS)
+    has_table = any(kw in content for kw in QUOTE_TABLE_KEYWORDS)
+    return (has_route and (has_vendor or has_table)) or (has_vendor and has_table)
+
+
+def has_quote_context_hint(text: str) -> bool:
+    content = str(text or "")
+    if not content:
+        return False
+    return (
+        bool(WH_PATTERN.search(content.upper()))
+        or any(kw in content for kw in QUOTE_KEYWORDS)
+        or is_quote_route_query(content)
+        or any(kw in content for kw in QUOTE_ASSISTANT_HINTS)
+    )
 
 
 def is_image_analysis_failure(image_desc: str) -> bool:
@@ -400,7 +445,12 @@ async def classify_intent(message: str, history: List[dict] = None) -> str:
     has_zip = ZIP_PATTERN.search(message)
     has_wh = WH_PATTERN.search(msg_upper)
     asks_source = is_address_source_question(message)
-    quote_signal = bool(weight_match or volume_match or any(kw in message for kw in QUOTE_KEYWORDS))
+    quote_signal = bool(
+        weight_match
+        or volume_match
+        or any(kw in message for kw in QUOTE_KEYWORDS)
+        or is_quote_route_query(message)
+    )
     
     if has_remote_kw and (has_zip or has_wh or len(message) > 8) and not quote_signal:
         return "address", message
@@ -424,6 +474,8 @@ async def classify_intent(message: str, history: List[dict] = None) -> str:
     for kw in QUOTE_KEYWORDS:
         if kw in message:
             return "quote", message
+    if is_quote_route_query(message):
+        return "quote", message
             
     # 3. Knowledge Base / Capabilities check (High Priority for self-intro)
     kb_keywords = ["介绍", "你是谁", "你能做什么", "做哪些事", "你会干啥", "怎么用", "操作说明", "技巧", "什么事"]
@@ -447,7 +499,19 @@ async def classify_intent(message: str, history: List[dict] = None) -> str:
             # 如果 AI 上一句话看起来像是在讲笑话或闲聊（简单启发式判断）
             if any(kw in last_ai_msg for kw in ["笑话", "哈", "有趣", "嘿嘿", "故事"]):
                 return "social", message
-            if any(kw in last_ai_msg for kw in QUOTE_KEYWORDS) or WH_PATTERN.search(last_ai_msg.upper()):
+            if has_quote_context_hint(last_ai_msg):
+                return "quote", message
+
+    # 4.5 Vendor short follow-up should inherit quote context (e.g. "星夜呢")
+    short_message = message.strip()
+    vendor_followup = (
+        len(short_message) <= 8
+        and any(kw in short_message.upper() for kw in QUOTE_VENDOR_HINTS)
+        and any(kw in short_message for kw in QUOTE_FOLLOWUP_HINTS)
+    )
+    if vendor_followup and history:
+        for old in reversed(history[-8:]):
+            if has_quote_context_hint(old.get("content", "")):
                 return "quote", message
 
     # 5. Internal specific keywords (Bonus for document search)
@@ -465,7 +529,7 @@ async def classify_intent(message: str, history: List[dict] = None) -> str:
     if history and len(history) > 0:
         recent_msgs = [m.get("content", "") for m in history[-4:] if m.get("role") == "user"]
         for old_msg in recent_msgs:
-            if WH_PATTERN.search(old_msg.upper()) or any(kw in old_msg for kw in QUOTE_KEYWORDS):
+            if has_quote_context_hint(old_msg):
                 return "quote", message
     return "document", message
 
