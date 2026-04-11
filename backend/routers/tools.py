@@ -1,6 +1,7 @@
 import base64
 import importlib.util
 import json
+import mimetypes
 import sys
 import tempfile
 from datetime import datetime
@@ -171,6 +172,18 @@ def _safe_join(base_dir: Path, relative_path: str) -> Path:
 def _file_response(path: Path, media_type: str | None = None):
     if not path.exists() or not path.is_file():
         raise HTTPException(status_code=404, detail="工具或静态资源文件未找到，请检查上传路径。")
+    if media_type is None:
+        guessed_type, _ = mimetypes.guess_type(str(path))
+        if path.suffix.lower() == ".js":
+            media_type = "application/javascript"
+        elif path.suffix.lower() == ".css":
+            media_type = "text/css"
+        elif path.suffix.lower() == ".html":
+            media_type = "text/html"
+        elif guessed_type:
+            media_type = guessed_type
+        else:
+            media_type = "application/octet-stream"
     return FileResponse(path, media_type=media_type)
 
 
