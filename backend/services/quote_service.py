@@ -554,6 +554,7 @@ def _build_quote_table_rows(
             rows.append(
                 {
                     "bucket_label": item["origin_label"],
+                    "agent_name": item.get("agent_name", "未标注"),
                     "channel": item["channel"],
                     "transit_time": item["transit_time"] or "待确认",
                     "tier_label": f"**{item['tier_label']}**",
@@ -574,6 +575,7 @@ def _build_quote_table_rows(
             rows.append(
                 {
                     "bucket_label": f"{bucket}仓",
+                    "agent_name": item.get("agent_name", "未标注"),
                     "channel": item["channel"],
                     "transit_time": item["transit_time"] or "待确认",
                     "tier_label": f"**{item['tier_label']}**",
@@ -588,6 +590,7 @@ def _build_quote_table_rows(
                 rows.append(
                     {
                         "bucket_label": "当前命中",
+                        "agent_name": item.get("agent_name", "未标注"),
                         "channel": item["channel"],
                         "transit_time": item["transit_time"] or "待确认",
                         "tier_label": f"**{item['tier_label']}**",
@@ -603,6 +606,7 @@ def _build_quote_table_rows(
         rows.append(
             {
                 "bucket_label": item["origin_bucket"] if item["origin_bucket"] != "其他" else "当前命中",
+                "agent_name": item.get("agent_name", "未标注"),
                 "channel": item["channel"],
                 "transit_time": item["transit_time"] or "待确认",
                 "tier_label": f"**{item['tier_label']}**",
@@ -682,6 +686,14 @@ def _record_matches_agent(record: Dict[str, Any], aliases: list[str]) -> bool:
     return any(alias.lower() in source_text or alias.lower() in channel_text for alias in aliases)
 
 
+def _infer_agent_name(channel: str, source: str) -> str:
+    reference_text = f"{channel} {source}"
+    for canonical_name, aliases in AGENT_ALIASES.items():
+        if _contains_any_keyword(reference_text, aliases):
+            return canonical_name
+    return "未标注"
+
+
 def _extract_destination_mentions(message: str, quote_records: List[Dict] | None) -> list[str]:
     normalized_message = str(message or "")
     destinations: list[str] = []
@@ -743,16 +755,19 @@ def _build_destination_quote_availability_response(
         f"结论：有。当前报价表里已经命中 **{primary_destination}** 的报价记录（渠道范围：{agent_label}）。",
         "",
         "命中明细预览：",
-        "| 目的地 | 渠道 | 阶梯数 | 来源 |",
-        "| --- | --- | --- | --- |",
+        "| 目的地 | 代理商 | 渠道 | 阶梯数 | 来源 |",
+        "| --- | --- | --- | --- | --- |",
     ]
 
     for record in candidates[: max(limit, 1)]:
         price_system = record.get("价格体系") or {}
         tier_count = len([k for k, v in price_system.items() if _safe_float(v) is not None])
+        channel_text = str(record.get('渠道', '')).strip()
+        source_text = str(record.get('_source', '')).strip()
+        agent_name = _infer_agent_name(channel_text, source_text)
         lines.append(
-            f"| {primary_destination} | {str(record.get('渠道', '')).strip() or '未知渠道'} | "
-            f"{tier_count} | {str(record.get('_source', '')).strip() or '-'} |"
+            f"| {primary_destination} | {agent_name} | {channel_text or '未知渠道'} | "
+            f"{tier_count} | {source_text or '-'} |"
         )
 
     lines.extend(
@@ -776,7 +791,7 @@ def _build_reference_only_quote_response(
     address_probe_context: str,
     limit: int,
 ) -> str:
-    warehouse_label = "、".join(warehouse_codes) if warehouse_codes else ("、".join(destination_mentions) if destination_mentions else "目标目的地")
+    warehouse_label = "、".join(warehouse_codes) if warehouse_codes else "目标目的地"
     reference_candidates = sorted(
         candidates,
         key=lambda item: (item["total_price"], item["unit_price"], item["channel"]),
@@ -786,13 +801,13 @@ def _build_reference_only_quote_response(
         f"结论：当前报价表未收录 **{warehouse_label}** 的精确仓库报价，不能直接按仓库价秒报。",
         "",
         "同区域参考：",
-        "| 参考类型 | 渠道 | 时效 | 对应阶梯 | 单价 | 预估总价 | 备注 |",
-        "| --- | --- | --- | --- | --- | --- | --- |",
+        "| 参考类型 | 代理商 | 渠道 | 时效 | 对应阶梯 | 单价 | 预估总价 | 备注 |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for item in reference_candidates:
         region_label = str(item.get("destination_region") or "同区域参考").strip() or "同区域参考"
         lines.append(
-            f"| {region_label} | {item['channel']} | {item['transit_time'] or '待确认'} | "
+            f"| {region_label} | {item.get('agent_name', '未标注')} | {item['channel']} | {item['transit_time'] or '待确认'} | "
             f"**{item['tier_label']}** | **¥{_format_price(item['unit_price'])}/KG** | "
             f"**¥{_format_price(item['total_price'])}** | {item['note'] or '-'} |"
         )
@@ -846,6 +861,7 @@ def _build_full_tier_quote_response(
         candidates.append(
             {
                 "channel": channel,
+                "agent_name": _infer_agent_name(channel, source),
                 "warehouse_code": str(record.get("仓库代码", "")).strip(),
                 "transit_time": str(record.get("宣称时效", "")).strip(),
                 "note": str(record.get("附加备注", "")).strip(),
@@ -882,14 +898,14 @@ def _build_full_tier_quote_response(
         "",
         f"{warehouse_label} 报价明细：",
         "",
-        "| 渠道 | 出发仓 | 重量/方数阶梯 | 价格 (RMB) | 宣称时效 | 备注 |",
-        "| --- | --- | --- | --- | --- | --- |",
+        "| 代理商 | 渠道 | 出发仓 | 重量/方数阶梯 | 价格 (RMB) | 宣称时效 | 备注 |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
     ]
 
     for item in display_candidates:
         for tier_label, price_text in item["all_tier_rows"]:
             lines.append(
-                f"| {item['channel']} | {item['origin_label']} | {tier_label} | {price_text} | "
+                f"| {item.get('agent_name', '未标注')} | {item['channel']} | {item['origin_label']} | {tier_label} | {price_text} | "
                 f"{item['transit_time'] or '待确认'} | {item['note'] or '-'} |"
             )
 
@@ -994,6 +1010,10 @@ def build_deterministic_quote_response(
         candidates.append(
             {
                 "channel": str(record.get("渠道", "未知渠道")).strip(),
+                "agent_name": _infer_agent_name(
+                    str(record.get("渠道", "未知渠道")).strip(),
+                    str(record.get("_source", "")).strip(),
+                ),
                 "warehouse_code": str(record.get("仓库代码", "")).strip(),
                 "price_system": price_system,
                 "tier_label": tier_label,
@@ -1013,6 +1033,10 @@ def build_deterministic_quote_response(
 
         candidate = candidates[-1]
         candidate["channel"] = str(record.get("渠道", candidate["channel"])).strip()
+        candidate["agent_name"] = _infer_agent_name(
+            candidate["channel"],
+            str(record.get("_source", candidate["source"])).strip(),
+        )
         candidate["warehouse_code"] = str(record.get("仓库代码", candidate["warehouse_code"])).strip()
         candidate["destination_region"] = str(record.get("目的地区", "")).strip()
         candidate["transit_time"] = str(record.get("宣称时效", candidate["transit_time"])).strip()
@@ -1091,17 +1115,17 @@ def build_deterministic_quote_response(
     lines = [
         (
             f"结论：{_format_price(weight_kg)}KG 发往 {warehouse_label}，{conclusion_scope}，"
-            f"{best['channel']} 最优，按 {best['tier_label']} **¥{_format_price(best['unit_price'])}/KG**，"
+            f"{best.get('agent_name', '未标注')} · {best['channel']} 最优，按 {best['tier_label']} **¥{_format_price(best['unit_price'])}/KG**，"
             f"预估总价 **¥{_format_price(best['total_price'])}**。"
         ),
         "",
         "报价明细：",
-        "| 仓别 | 渠道 | 时效 | 对应阶梯 | 单价 | 预估总价 | 全阶梯 | 备注 |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| 仓别 | 代理商 | 渠道 | 时效 | 对应阶梯 | 单价 | 预估总价 | 全阶梯 | 备注 |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for row in table_rows:
         lines.append(
-            f"| {row['bucket_label']} | {row['channel']} | {row['transit_time']} | {row['tier_label']} | "
+            f"| {row['bucket_label']} | {row.get('agent_name', '未标注')} | {row['channel']} | {row['transit_time']} | {row['tier_label']} | "
             f"{row['unit_price']} | {row['total_price']} | {row['weight_tiers']} | {row['note']} |"
         )
 
