@@ -230,13 +230,22 @@ onMounted(() => {
 
 <style scoped>
 .notice-container {
+  height: 100vh;
   padding: 40px;
   max-width: 1200px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 32px;
-  min-height: 100vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+@supports (height: 100dvh) {
+  .notice-container {
+    height: 100dvh;
+  }
 }
 
 .notice-header {
@@ -321,6 +330,7 @@ onMounted(() => {
 
 .notice-table-container {
   margin-top: 8px;
+  overflow-x: auto;
 }
 
 .notice-table {
@@ -398,5 +408,29 @@ onMounted(() => {
 .btn-delete:hover {
   background: var(--danger-color);
   color: white;
+}
+
+@media (max-width: 768px) {
+  .notice-container {
+    padding: 20px;
+    gap: 20px;
+  }
+
+  .notice-header {
+    padding: 18px 20px;
+  }
+
+  .header-left h1 {
+    font-size: 22px;
+  }
+
+  .notice-input-section,
+  .notice-history-section {
+    padding: 20px;
+  }
+
+  .notice-table {
+    min-width: 760px;
+  }
 }
 </style>
