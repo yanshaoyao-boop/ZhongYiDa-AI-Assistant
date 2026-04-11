@@ -16,6 +16,7 @@ router = APIRouter(prefix="/tools", tags=["tools"])
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TOOLS_SOURCE_ROOT = REPO_ROOT / "智能工具源代码"
 TOOLS_RUNTIME_ROOT = REPO_ROOT / "backend" / "data" / "tools"
+TOOLS_CONFIG_PATH = REPO_ROOT / "backend" / "config" / "tools_catalog.json"
 
 def _resolve_tools_asset(*parts: str) -> Path:
     source_path = TOOLS_SOURCE_ROOT.joinpath(*parts)
@@ -61,60 +62,89 @@ def _get_fist_mapper():
     return _load_module("xiaoyi_fist_excel_mapper", mapper_path)
 
 
-TOOL_GROUPS = [
-    {
-        "key": "business",
-        "title": "业务工具",
-        "tools": [
-            {
-                "slug": "hepiao",
-                "title": "合票工具",
-                "summary": "保留原始 UI 的 FBA 合票工具。",
-                "runtime_path": "/api/tools/runtime/business/hepiao/",
-                "kind": "html_file",
-                "source": _resolve_tools_asset("业务工具", "合票工具", "dist", "index.html"),
-            },
-            {
-                "slug": "self-order-form",
-                "title": "自助下单表工具",
-                "summary": "保留原始 UI 的自助下单表工具。",
-                "runtime_path": "/api/tools/runtime/business/self-order-form/",
-                "kind": "directory",
-                "source": SELF_ORDER_FORM_DIST_DIR,
-            },
-            {
-                "slug": "reconciliation",
-                "title": "自助对账工具（应收）",
-                "summary": "保留原始 UI 的自助对账工具。",
-                "runtime_path": "/api/tools/runtime/business/reconciliation/",
-                "kind": "directory",
-                "source": _resolve_tools_asset("业务工具", "自助对账工具（应收）", "ReconciliationPro", "dist"),
-            },
-        ],
-    },
-    {
-        "key": "admin",
-        "title": "行政工具",
-        "tools": [
-            {
-                "slug": "order-sheet-transform",
-                "title": "下单表转换工具（客服专用）",
-                "summary": "保留原始 UI 的客服下单表转换工具。",
-                "runtime_path": "/api/tools/runtime/admin/order-sheet-transform/",
-                "kind": "directory",
-                "source": _resolve_tools_asset("行政工具", "下单表转换工具（客服专用）", "excel-transformer", "dist"),
-            },
-            {
-                "slug": "fist-transfer",
-                "title": "客服转单工具（Fist专用）",
-                "summary": "保留原始 UI 的客服转单工具。",
-                "runtime_path": "/api/tools/runtime/admin/fist-transfer/",
-                "kind": "html_file",
-                "source": _resolve_tools_asset("行政工具", "客服转单工具（Fist专用）", "客服转单工具_Fist专用.html"),
-            },
-        ],
-    },
-]
+def _load_tools_config() -> dict:
+    if not TOOLS_CONFIG_PATH.exists():
+        raise RuntimeError(f"Tools config file not found: {TOOLS_CONFIG_PATH}")
+    try:
+        return json.loads(TOOLS_CONFIG_PATH.read_text(encoding="utf-8-sig"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Invalid tools config JSON: {exc}") from exc
+
+
+def _resolve_configured_source(source_config: dict | None) -> Path:
+    if not isinstance(source_config, dict):
+        raise RuntimeError("Each tool source must be an object")
+
+    resolver = source_config.get("resolver")
+    if resolver == "asset":
+        parts = source_config.get("parts")
+        if not isinstance(parts, list) or not all(isinstance(part, str) and part for part in parts):
+            raise RuntimeError("asset resolver requires non-empty string array field `parts`")
+        return _resolve_tools_asset(*parts)
+
+    if resolver == "self_order_form_dist":
+        return SELF_ORDER_FORM_DIST_DIR
+
+    raise RuntimeError(f"Unsupported tool source resolver: {resolver}")
+
+
+def _build_tool_groups() -> list[dict]:
+    raw_config = _load_tools_config()
+    raw_groups = raw_config.get("groups")
+    if not isinstance(raw_groups, list):
+        raise RuntimeError("tools config must include an array field `groups`")
+
+    groups: list[dict] = []
+    for group in raw_groups:
+        if not isinstance(group, dict):
+            raise RuntimeError("Each group must be an object")
+        key = group.get("key")
+        title = group.get("title")
+        raw_tools = group.get("tools")
+        if not isinstance(key, str) or not key:
+            raise RuntimeError("Group `key` must be a non-empty string")
+        if not isinstance(title, str) or not title:
+            raise RuntimeError("Group `title` must be a non-empty string")
+        if not isinstance(raw_tools, list):
+            raise RuntimeError(f"Group `{key}` must include an array field `tools`")
+
+        tools: list[dict] = []
+        for tool in raw_tools:
+            if not isinstance(tool, dict):
+                raise RuntimeError("Each tool must be an object")
+
+            kind = tool.get("kind")
+            built_tool = {
+                "slug": tool.get("slug"),
+                "title": tool.get("title"),
+                "summary": tool.get("summary"),
+                "runtime_path": tool.get("runtime_path"),
+                "kind": kind,
+                "version": tool.get("version"),
+                "updated_at": tool.get("updated_at"),
+                "changelog": tool.get("changelog"),
+                "is_new": bool(tool.get("is_new", False)),
+            }
+
+            required_fields = ("slug", "title", "summary", "runtime_path", "kind")
+            for field in required_fields:
+                value = built_tool[field]
+                if not isinstance(value, str) or not value:
+                    raise RuntimeError(f"Tool field `{field}` must be a non-empty string")
+
+            if kind in {"html_file", "directory"}:
+                built_tool["source"] = _resolve_configured_source(tool.get("source"))
+            elif kind != "fist_tool":
+                raise RuntimeError(f"Unsupported tool kind: {kind}")
+
+            tools.append(built_tool)
+
+        groups.append({"key": key, "title": title, "tools": tools})
+
+    return groups
+
+
+TOOL_GROUPS = _build_tool_groups()
 
 TOOL_INDEX = {
     (group["key"], tool["slug"]): tool
@@ -185,6 +215,10 @@ def list_tools():
                         "title": tool["title"],
                         "summary": tool["summary"],
                         "runtime_path": tool["runtime_path"],
+                        "version": tool.get("version"),
+                        "updated_at": tool.get("updated_at"),
+                        "changelog": tool.get("changelog"),
+                        "is_new": tool.get("is_new", False),
                     }
                     for tool in group["tools"]
                 ],

@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from sqlalchemy import text
 import uvicorn
 import os
-from routers import upload, chat, auth, staff, settings, chat_logs, client_logs, notices, tools, coach_quiz
+from routers import upload, chat, auth, staff, settings, chat_logs, client_logs, notices, tools, coach_quiz, industry_news
 
 load_dotenv()
 
@@ -27,7 +27,7 @@ def ensure_legacy_schema(engine):
 async def lifespan(app: FastAPI):
     # 启动时确保数据库表结构同步
     from database import engine, Base
-    import models.user, models.notice, models.chat_history # 显式引入以确保 Base 识别所有模型
+    import models.user, models.notice, models.chat_history, models.industry_news # 显式引入以确保 Base 识别所有模型
     Base.metadata.create_all(bind=engine)
     ensure_legacy_schema(engine)
     print("Database tables synchronized.")
@@ -71,6 +71,7 @@ app.include_router(chat_logs.router, prefix=API_PREFIX)
 app.include_router(notices.router, prefix=API_PREFIX)
 app.include_router(tools.router, prefix=API_PREFIX)
 app.include_router(coach_quiz.router, prefix=API_PREFIX)
+app.include_router(industry_news.router, prefix=API_PREFIX)
 
 
 @app.get("/")

@@ -1,0 +1,1546 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>一件代发报价工具</title>
+    <style>
+      :root {
+        --bg: #F8F9FA;
+        --paper: #FFFFFF;
+        --ink: #1A1B1E;
+        --muted: #6B7280;
+        --line: #E5E7EB;
+        --accent: #D05000;
+        --accent-hover: #A03D00;
+        --accent-soft: rgba(208, 80, 0, 0.1);
+        --shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+        --radius: 12px;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: 'Inter', system-ui, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+        -webkit-font-smoothing: antialiased;
+      }
+      .page { max-width: 1480px; margin: 0 auto; padding: 32px; }
+      .hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 32px; align-items: end; margin-bottom: 32px; }
+      .hero-text { max-width: 720px; }
+      .eyebrow, .meta-label, .field label, .section-title, th { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+      .eyebrow { color: var(--accent); margin-bottom: 8px; display: inline-block; }
+      h1 { margin: 0; font-size: 42px; font-weight: 800; line-height: 1.1; letter-spacing: -0.02em; color: #111827; }
+      .hero-text p { margin: 12px 0 0; color: var(--muted); line-height: 1.6; font-size: 16px; }
+      
+      .hero-stat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; padding: 24px 32px; background: #FFFFFF; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+      .hero-stat > div { display: flex; flex-direction: column; gap: 8px; }
+      .hero-stat strong { font-size: 28px; font-weight: 700; color: #111827; }
+      #heroGrandTotal { color: var(--accent); }
+
+      .workspace { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(420px, 0.45fr); gap: 32px; align-items: start; }
+      
+      .panel { background: var(--paper); border-radius: var(--radius); border: 1px solid var(--line); box-shadow: var(--shadow); }
+      .panel.form { padding: 40px; }
+      .panel.result { padding: 40px; position: sticky; top: 32px; background: #FFF; border: 1px solid var(--line); box-shadow: var(--shadow); }
+      
+      .section-header { margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+      .section-header .section-title { font-size: 15px; color: #111827; }
+      .section-header p { margin: 8px 0 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+      
+      .quote-meta-block { margin-top: 32px; padding: 24px; background: #F9FAFB; border-radius: 8px; border: 1px dashed #D1D5DB; }
+      .box-group-block,
+      .service-block { margin-top: 36px; }
+      
+      .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; padding-top: 16px; }
+      .field { display: grid; gap: 8px; }
+      .field input, .field select, .field textarea { 
+        width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #FFFFFF; 
+        padding: 12px 14px; font-family: inherit; font-size: 15px; transition: all 0.2s;
+      }
+      .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+      
+      .box-group-row {
+        display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)) auto;
+        gap: 12px; align-items: end; padding: 16px; margin-bottom: 12px;
+        background: #FFFFFF; border: 1px solid var(--line); border-radius: 8px;
+      }
+      .service-row { display: grid; grid-template-columns: minmax(0, 1.8fr) 120px auto auto; gap: 16px; align-items: end; margin-top: 16px; }
+      
+      .button, .button-secondary { 
+        display: inline-flex; align-items: center; justify-content: center;
+        border: 1px solid transparent; border-radius: 6px; padding: 10px 18px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; 
+      }
+      .button { background: var(--accent); color: #fff; }
+      .button:hover { background: var(--accent-hover); }
+      .button-secondary { background: #FFFFFF; color: #374151; border-color: #D1D5DB; }
+      .button-secondary:hover { background: #F9FAFB; }
+      .button-secondary.remove-box-group, .button-secondary.remove-service { color: #EF4444; border: none; background: transparent; }
+      
+      .button-dashed-full { width: 100%; padding: 16px; background: transparent; border: 2px dashed #D1D5DB; color: #6B7280; font-weight: 600; font-size: 15px; border-radius: 8px; cursor: pointer; transition: all 0.2s; margin-top: 16px; display: inline-flex; align-items: center; justify-content: center; }
+      .button-dashed-full:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+      .section-toolbar { display: flex; justify-content: space-between; gap: 16px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+      .section-toolbar .import-hint { color: var(--muted); font-size: 13px; }
+      .box-group-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+      .helper { margin-top: 24px; color: var(--muted); font-size: 13px; line-height: 1.7; }
+      .tag { display: inline-flex; align-items: center; padding: 2px 8px; margin-left: 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600; }
+      .settings-modal { position: fixed; inset: 0; background: rgba(17, 24, 39, 0.52); display: flex; align-items: center; justify-content: center; padding: 32px; z-index: 40; }
+      .settings-panel { width: min(1100px, 100%); max-height: min(88vh, 920px); overflow: auto; background: #FFF; border-radius: 16px; box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18); padding: 28px; }
+      .settings-header { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+      .settings-header p { margin: 8px 0 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
+      .settings-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+      .settings-section + .settings-section { margin-top: 24px; }
+      .settings-grid, .settings-service-grid { display: grid; gap: 16px; margin-top: 16px; }
+      .settings-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .settings-service-grid { grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr)); }
+      .import-panel { width: min(1180px, 100%); }
+      .import-config-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+      .import-status { margin: 0 0 20px; padding: 14px 16px; border-radius: 10px; background: #F9FAFB; color: #374151; font-size: 14px; line-height: 1.6; border: 1px solid var(--line); }
+      .import-mapping-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+      .mapping-card { padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: #FCFCFD; }
+      .mapping-card strong { display: block; font-size: 15px; color: #111827; }
+      .mapping-card p { margin: 6px 0 12px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+      .import-preview-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 24px; }
+      .import-preview-card { padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: #FFF; }
+      .import-preview-card strong { display: block; margin-top: 8px; font-size: 28px; color: #111827; }
+      .import-preview-card.valid strong { color: #0F766E; }
+      .import-preview-card.incomplete strong { color: #B45309; }
+      .import-preview-card.skipped strong { color: #6B7280; }
+      .import-preview-list { margin-top: 24px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: #FFF; }
+      .import-preview-list ul { margin: 12px 0 0; padding-left: 18px; color: #374151; }
+      .import-preview-list li + li { margin-top: 8px; }
+      .import-empty { color: var(--muted); font-size: 14px; }
+
+      .metric-card { padding: 8px 0; }
+      .metric-card strong { display: block; margin-top: 8px; font-size: 24px; font-weight: 700; color: #111827; }
+      
+      .weight-grid, .summary-grid, .totals-grid { display: grid; gap: 24px; margin-top: 24px; }
+      .weight-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+      .totals-grid { gap: 16px; margin-top: 24px; }
+      .totals-grid .metric-card { padding: 8px 0; }
+      .totals-grid .metric-card strong { font-size: 38px; color: var(--accent); margin-top: 12px; }
+      .totals-secondary-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+      .totals-secondary-row .metric-card strong { font-size: 24px; color: #111827; margin-top: 8px; }
+
+      .table-wrap { margin-top: 24px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+      table { width: 100%; border-collapse: collapse; text-align: left; }
+      th, td { padding: 14px 16px; border-bottom: 1px solid var(--line); }
+      th { background: #F9FAFB; font-size: 12px; color: #6B7280; }
+      
+            .quote-actions { display: flex; flex-direction: column; gap: 12px; margin-top: 32px; border-top: 1px solid var(--line); padding-top: 24px;}
+      .quote-actions .button { width: 100%; padding: 16px; font-size: 16px; background: var(--accent); color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;}
+      .quote-actions .action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .quote-actions .action-row .button-secondary { padding: 14px; background: #fff; border: 1px solid #D1D5DB; color: #374151; border-radius: 6px; cursor: pointer; font-weight: 600;}
+      
+      .customer-sheet {
+        margin-top: 48px; padding: 48px; background: #FFFFFF; color: #111827;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.05); border: 1px solid var(--line); border-radius: var(--radius);
+      }
+      .customer-sheet-head { display: flex; justify-content: space-between; padding-bottom: 32px; border-bottom: 2px solid #111827; }
+      .customer-brand { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+      .customer-sheet-meta, .customer-summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; margin-top: 40px; }
+      .customer-summary-grid { grid-template-columns: repeat(2, 1fr); }
+      .customer-meta-card { display: flex; flex-direction: column; gap: 8px; }
+      .customer-meta-card strong { font-size: 18px; line-height: 1.6; }
+      .customer-note-box { margin-top: 40px; line-height: 1.8; }
+      .customer-note-box ul { padding-left: 20px; }
+      .customer-note-box li { margin-bottom: 12px; }
+      .logo-slot img { height: 64px; max-width: 260px; object-fit: contain; }
+      #customerQuoteGrandTotal { font-size: 36px; font-weight: 800; color: var(--accent); }
+      
+      .customer-price-table { margin-top: 32px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+      .customer-price-table th { background: #F3F4F6; }
+      .customer-price-table .grand-row td { font-weight: 800; background: var(--accent-soft); color: var(--accent); border-top: 2px solid var(--line); }
+      
+      .hidden { display: none !important; }
+      
+      @media print {
+        @page { size: A4 portrait; margin: 15mm; }
+        body { background: #fff !important; }
+        
+        /* THE FIX: In print mode, hide everything inside .page except the quotation sheet */
+        body.print-customer-sheet .page > *:not(.customer-sheet) {
+            display: none !important;
+        }
+        
+        body.print-customer-sheet .page { padding: 0 !important; margin: 0 !important; max-width: none !important; }
+        
+        body.print-customer-sheet .customer-sheet {
+            display: block !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            border: none !important;
+            width: 100% !important;
+        }
+        
+        /* Ensure logos and colors show correctly in PDF */
+        .customer-price-table th { background: #f3f4f6 !important; -webkit-print-color-adjust: exact; }
+        #customerQuoteGrandTotal { color: #D05000 !important; -webkit-print-color-adjust: exact; }
+      }
+
+      @media (max-width: 960px) {
+        .settings-grid,
+        .settings-service-grid,
+        .import-config-grid,
+        .import-mapping-grid,
+        .import-preview-grid { grid-template-columns: 1fr; }
+        .settings-header { flex-direction: column; }
+      }
+
+
+    </style>
+  </head>
+  <body>
+    <div class="page">
+            <section class="hero">
+        <div class="hero-text">
+          <div class="hero-brand" style="display: flex; align-items: flex-start; gap: 24px; margin-bottom: 24px;">
+            <img src="仲易达供应链LOGO.png" alt="ZYD" style="height: 86px; object-fit: contain;">
+            <div style="padding-top: 12px;">
+              <div class="eyebrow" style="margin-bottom: 4px;">ZYD USA WAREHOUSE</div>
+              <h1 style="font-size: 26px; line-height: 1.1; margin: 0; font-weight: 700;">一件代发报价工具</h1>
+            </div>
+          </div>
+          <p>录入包裹的装箱尺寸与业务模式，系统自动换算材积重与计费档位，生成内部财务明细账单，并可一键出具标准正规的商务对客报价单。</p>
+        </div>
+        <div class="hero-stat">
+          <div><span class="meta-label">当前推荐计费档位</span><strong id="heroBracket">-</strong></div>
+          <div><span class="meta-label">核心测算最高磅重</span><strong id="heroChargeableLb">0.00 LB</strong></div>
+          <div><span class="meta-label">本次合计预估总报价</span><strong id="heroGrandTotal">$0.00</strong></div>
+        </div>
+      </section>
+
+      <main class="workspace">
+        <section class="panel form">
+          <div class="section-header">
+            <div class="section-title">报价输入</div>
+            <p>默认适合业务员按单个 SKU / 批次录入。结果会在右侧实时刷新。</p>
+          </div>
+          <div class="quote-meta-block">
+            <div class="section-header">
+              <div class="section-title">客户报价信息</div>
+              <p>这些字段会进入客户版报价单，便于直接打印或发给客户。</p>
+            </div>
+            <div class="form-grid" style="grid-template-columns: 2fr 1fr 1fr;">
+              <div class="field"><label for="customerName">客户名称</label><input id="customerName" type="text" placeholder="例如：ACME / 张先生" /></div>
+              <div class="field"><label for="validDays">报价有效期（天）</label><input id="validDays" type="number" min="0" value="0" /></div>
+              <div class="field"><label for="contactName">对接人</label><input id="contactName" type="text" placeholder="可选" /></div>
+            </div>
+            <div class="field" style="margin-top: 16px;">
+              <label for="customerNote">客户报价备注</label>
+              <textarea id="customerNote" placeholder="例如：本报价不含派送运费，最终以实际入仓数据为准。"></textarea>
+            </div>
+          </div>
+          <div class="form-grid">
+            <div class="field"><label for="businessMode">业务模式</label><select id="businessMode"><option value="">请选择</option><option value="dropshipping-only">单纯一件代发</option><option value="headhaul-plus-dropshipping">头程运输 + 一件代发</option></select></div>
+            <div class="field"><label for="inboundType">入库类型</label><select id="inboundType"><option value="">请选择</option><option value="fcl">整柜</option><option value="lcl">散货</option></select></div>
+            <div class="field hidden" id="containerTypeField"><label for="containerType">柜型</label><select id="containerType"><option value="">请选择</option><option value="20GP">20GP</option><option value="40HQ">40HQ</option><option value="45HQ">45HQ</option></select></div>
+          </div>
+          <div class="box-group-block">
+            <div class="section-header">
+              <div class="section-title">箱组录入</div>
+              <p>一个客户可以录多组箱子。每组独立录入箱数、每箱件数、单箱重量、箱规和每箱 SKU 数，再逐组汇总报价。</p>
+            </div>
+            <div class="section-toolbar">
+              <div class="box-group-actions">
+                <button class="button-secondary" id="openImportModalBtn" type="button">导入 Excel 箱单</button>
+                <button class="button-secondary hidden" id="changeImportFileBtn" type="button">重新选择文件</button>
+                <input id="boxGroupImportFile" type="file" accept=".xlsx,.xls" class="hidden" />
+              </div>
+              <div class="import-hint">支持字段映射、默认值补充，以及组合尺寸列自动拆分。</div>
+            </div>
+            <div class="box-group-list" id="boxGroupRows"></div>
+            <button class="button-dashed-full" id="addBoxGroupBtn" type="button">+ 添加箱组</button>
+          </div>
+          <div class="toggle-row">
+            <label><input id="hasThirdPartyLabel" type="checkbox" /> 客户自带平台面单（按件）</label>
+            <label><input id="includeStorage" type="checkbox" checked /> 计入仓储费</label>
+          </div>
+          <div class="form-grid" id="storageFields">
+            <div class="field"><label for="storageType">库存类型</label><select id="storageType"><option value="sellable">可售库存</option><option value="non-sellable">不可售库存</option></select></div>
+            <div class="field"><label for="storageDays">在库天数</label><input id="storageDays" type="number" min="0" value="0" /></div>
+          </div>
+          <div class="service-block">
+            <div class="section-header">
+              <div class="section-title">增值服务</div>
+              <p>下拉选择服务项和数量。标为“人工确认”的项目不会自动计入总价。</p>
+            </div>
+            <div id="serviceRows"></div>
+            <button class="button-dashed-full" id="addServiceBtn" type="button">+ 添加增值服务</button>
+          </div>
+          <div class="helper">说明：这里的长宽高和重量都按单箱录入。系统会先算每组的单箱重量 / 材积重，再按每箱件数折算到单件去命中 LB 价格档位；如果某组每箱 SKU 数 ≥ 2，则只对该组加收混 SKU 附加费。</div>
+        </section>
+
+        <section class="panel result">
+          <div class="section-header">
+            <div class="section-title">计算结果</div>
+            <p>右侧展示的是自动计算结果。人工确认项会单独列出，方便你补报价。</p>
+          </div>
+          <div class="weight-grid">
+            <div class="metric-card"><span class="meta-label">总箱数</span><strong id="actualWeightView">0 箱</strong></div>
+            <div class="metric-card"><span class="meta-label">总件数</span><strong id="volumetricWeightView">0 件</strong></div>
+            <div class="metric-card"><span class="meta-label">最高单件计费重</span><strong id="chargeableWeightKgView">0.00 kg</strong></div>
+            <div class="metric-card"><span class="meta-label">最高单件计费重</span><strong id="chargeableWeightLbView">0.00 LB</strong></div>
+          </div>
+          <div class="summary-grid">
+            <div class="metric-card"><span class="meta-label">入库费</span><strong id="inboundTotalView">$0.00</strong></div>
+            <div class="metric-card"><span class="meta-label">出库费</span><strong id="outboundTotalView">$0.00</strong></div>
+            <div class="metric-card"><span class="meta-label">仓储费</span><strong id="storageTotalView">$0.00</strong></div>
+            <div class="metric-card"><span class="meta-label">增值服务</span><strong id="valueAddedTotalView">$0.00</strong></div>
+          </div>
+                    <div class="totals-grid">
+            <div class="metric-card"><span class="meta-label">合计测算总报价 (USD)</span><strong id="grandTotalView">$0.00</strong></div>
+            <div class="totals-secondary-row">
+              <div class="metric-card metric-card-secondary"><span class="meta-label">单件均摊参考成本</span><strong id="unitCostView">$0.00</strong></div>
+              <div class="metric-card metric-card-secondary"><span class="meta-label">最高命中结算档位</span><strong id="matchedBracketView">-</strong></div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <section class="panel detail-panel" style="margin-top: 32px; padding: 40px; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 48px; align-items: start;">
+        <div class="detail-left">
+          <div class="section-header" style="margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid var(--line);">
+            <div class="section-title">费用明细表</div>
+            <p style="margin: 8px 0 0; color: var(--muted); font-size: 14px;">包含各项费用的计算逻辑和明细金额。</p>
+          </div>
+          <div class="table-wrap" style="margin-top: 0;">
+            <table>
+              <thead><tr><th>模块</th><th>项目</th><th>计算公式</th><th>备注</th><th>金额</th></tr></thead>
+              <tbody id="feeTableBody"></tbody>
+            </table>
+          </div>
+          <div class="manual-box" style="margin-top: 24px; padding: 20px; background: #F9FAFB; border-radius: 8px; border: 1px dashed var(--line);">
+            <div class="section-title" style="color: #111827; margin-bottom: 8px;">人工确认项</div>
+            <div id="manualItemsContainer"></div>
+          </div>
+        </div>
+
+        <div class="detail-right" style="position: sticky; top: 32px;">
+          <div class="quote-actions" style="margin-top: 0; padding-top: 0; border-top: none;">
+            <div style="margin-bottom: 16px; color: var(--muted); font-size: 14px; line-height: 1.5;">确认左侧明细无误后，<br/>可生成用于发给客户的确认单。</div>
+            <button class="button" id="generateCustomerQuoteBtn" type="button" style="width: 100%; padding: 16px; font-size: 16px;">确认生成《客户报价单》</button>
+            <div class="action-row" style="display: flex; flex-direction: column; gap: 12px; margin-top: 12px;">
+              <button class="button-secondary" id="printCustomerQuoteBtn" type="button" style="width: 100%; padding: 14px;">直接打印 PDF</button>
+              <button class="button-secondary" id="openSettingsBtn" type="button" style="width: 100%; padding: 14px;">核心价格参数设置</button>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="customer-sheet hidden" id="customerQuoteSheet">
+                <div class="customer-sheet-head">
+          <div class="customer-brand">
+            <div class="logo-slot" id="customerQuoteLogoSlot">
+              <img id="customerQuoteLogo" class="hidden" alt="公司 Logo" />
+              <span id="customerQuoteLogoPlaceholder">仲易达供应链</span>
+            </div>
+            <div class="customer-brand-titles">
+              <h2 style="margin: 0; font-size: 28px;">美国一件代发报价单</h2>
+            </div>
+          </div>
+          <div class="quote-grand-block">
+            <span class="meta-label">合计报价金额 (USD)</span>
+            <strong id="customerQuoteGrandTotal">$0.00</strong>
+          </div>
+        </div>
+        <div class="customer-sheet-meta">
+          <div class="customer-meta-card"><span class="meta-label">客户名称</span><strong id="customerQuoteCustomerName">待填写</strong></div>
+          <div class="customer-meta-card"><span class="meta-label">报价日期</span><strong id="customerQuoteDate">-</strong></div>
+          <div class="customer-meta-card"><span class="meta-label">有效期</span><strong id="customerQuoteValidity">待确认</strong></div>
+        </div>
+        <div class="customer-summary-grid">
+          <div class="customer-meta-card">
+            <span class="meta-label">货物摘要</span>
+            <strong id="customerQuoteCargoSummary">0 箱 / 0 件</strong>
+            <div class="customer-chip-row" id="customerQuoteSummaryChips"></div>
+          </div>
+          <div class="customer-meta-card">
+            <span class="meta-label">服务摘要</span>
+            <strong id="customerQuoteServiceSummary">待录入</strong>
+            <p id="customerQuoteServiceDescription" style="margin: 10px 0 0; color: var(--muted); line-height: 1.7;"></p>
+          </div>
+        </div>
+        <div class="customer-price-table">
+          <table>
+            <thead><tr><th>报价项目</th><th>明细说明</th><th>金额</th></tr></thead>
+            <tbody id="customerQuotePriceBody"></tbody>
+          </table>
+        </div>
+        <div class="customer-note-box">
+          <span class="meta-label">报价说明</span>
+          <strong>请在发送给客户前确认以下内容</strong>
+          <ul id="customerQuoteNotes"></ul>
+        </div>
+      </section>
+      <div class="settings-modal hidden" id="settingsModal">
+        <div class="settings-panel">
+          <div class="settings-header">
+            <div>
+              <div class="section-title">价格设置</div>
+              <p>这里可以调整当前报价用到的内置单价。保存后会立即刷新报价，也会保存在本机浏览器中。</p>
+            </div>
+            <div class="settings-actions">
+              <button class="button-secondary" id="resetSettingsBtn" type="button">恢复默认价格</button>
+              <button class="button-secondary" id="closeSettingsBtn" type="button">关闭</button>
+            </div>
+          </div>
+          <div id="settingsSections"></div>
+        </div>
+      </div>
+      <div class="settings-modal hidden" id="importModal">
+        <div class="settings-panel import-panel">
+          <div class="settings-header">
+            <div>
+              <div class="section-title">导入 Excel 箱单</div>
+              <p>适配不同客户格式。先选 sheet，再映射字段，系统会自动拆分组合尺寸列并预览可导入结果。</p>
+            </div>
+            <div class="settings-actions">
+              <button class="button-secondary" id="closeImportModalBtn" type="button">关闭</button>
+              <button class="button" id="confirmImportBtn" type="button" disabled>确认导入箱组</button>
+            </div>
+          </div>
+          <div class="import-config-grid">
+            <div class="field">
+              <label for="importSheetName">工作表</label>
+              <select id="importSheetName"></select>
+            </div>
+            <div class="field">
+              <label for="importMode">导入方式</label>
+              <select id="importMode">
+                <option value="append">追加到现有箱组</option>
+                <option value="replace">替换现有箱组</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="defaultSkuCount">默认每箱 SKU 数</label>
+              <input id="defaultSkuCount" type="number" min="1" step="1" value="1" />
+            </div>
+            <div class="field">
+              <label for="defaultWeightKg">默认单箱重量 (kg)</label>
+              <input id="defaultWeightKg" type="number" min="0" step="0.01" placeholder="可留空，缺重时会列入待补充" />
+            </div>
+          </div>
+          <div class="import-status" id="importStatus">请先选择一个 Excel 文件。</div>
+          <div class="import-mapping-grid" id="importMappingFields"></div>
+          <div class="import-preview-grid">
+            <div class="import-preview-card valid">
+              <span class="meta-label">可直接导入</span>
+              <strong id="importValidCount">0</strong>
+            </div>
+            <div class="import-preview-card incomplete">
+              <span class="meta-label">待补充</span>
+              <strong id="importIncompleteCount">0</strong>
+            </div>
+            <div class="import-preview-card skipped">
+              <span class="meta-label">已跳过</span>
+              <strong id="importSkippedCount">0</strong>
+            </div>
+          </div>
+          <div class="import-preview-list">
+            <div class="section-title">预览问题</div>
+            <div id="importPreviewIssues" class="import-empty">完成字段映射后，这里会显示待补充和跳过原因。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <template id="serviceRowTemplate">
+      <div class="service-row">
+        <div class="field"><label>服务项</label><select class="service-code"></select></div>
+        <div class="field"><label>数量</label><input class="service-qty" type="number" min="0" step="1" value="0" /></div>
+        <button class="button-secondary remove-service" type="button">删除</button>
+        <span class="manual-chip hidden">人工确认</span>
+      </div>
+    </template>
+
+    <template id="boxGroupRowTemplate">
+      <div class="box-group-row">
+        <div class="field"><label>箱数</label><input class="group-box-count" type="number" min="0" value="0" /></div>
+        <div class="field"><label>每箱几件</label><input class="group-pieces-per-box" type="number" min="0" value="0" /></div>
+        <div class="field"><label>每箱 SKU 数</label><input class="group-sku-count" type="number" min="0" value="0" /></div>
+        <div class="field"><label>单箱重量 (kg)</label><input class="group-weight-kg" type="number" min="0" step="0.01" value="0" /></div>
+        <div class="field"><label>箱长 (cm)</label><input class="group-length-cm" type="number" min="0" step="0.1" value="0" /></div>
+        <div class="field"><label>箱宽 (cm)</label><input class="group-width-cm" type="number" min="0" step="0.1" value="0" /></div>
+        <div class="field"><label>箱高 (cm)</label><input class="group-height-cm" type="number" min="0" step="0.1" value="0" /></div>
+        <button class="button-secondary remove-box-group" type="button">删除</button>
+      </div>
+    </template>
+
+    <script src="vendor/xlsx.full.min.js"></script>
+    <script type="module">
+      import { IMPORT_FIELD_DEFINITIONS, getSheetRows, mapWorksheetRows, readWorkbookFromFile, suggestMapping } from "./excel-import-runtime.js";
+      const LB_PER_KG = 2.20462262;
+      const SETTINGS_STORAGE_KEY = "dropshipping-pricing-settings-v1";
+      const DEFAULT_SETTINGS = {
+        fclUnloadingFees: { "20GP": 300, "40HQ": 380, "45HQ": 420 },
+        lcl: { boxFee: 2, overCartonThreshold: 800, overCartonSurcharge: 0.3 },
+        mixedSkuSurcharge: 0.3,
+        handlingTiers: [
+          { label: "0-2 LB", maxLb: 2, unitPrice: 0.3 },
+          { label: "2-5 LB", maxLb: 5, unitPrice: 0.4 },
+          { label: "5-10 LB", maxLb: 10, unitPrice: 0.5 },
+          { label: "10-20 LB", maxLb: 20, unitPrice: 0.6 },
+          { label: "20+ LB", continuationPrice: 0.2 }
+        ],
+        outboundTiers: [
+          { label: "0-2 LB", maxLb: 2, unitPrice: 0.5 },
+          { label: "2-5 LB", maxLb: 5, unitPrice: 0.6 },
+          { label: "5-10 LB", maxLb: 10, unitPrice: 0.7 },
+          { label: "10-20 LB", maxLb: 20, unitPrice: 0.8 },
+          { label: "20+ LB", continuationPrice: 0.2 }
+        ],
+        thirdPartyLabelRates: { underOrEqual10Lb: 0.2, over10Lb: 0.3 },
+        sellableStorageTiers: [
+          { startDay: 1, endDay: 30, rate: 0, label: "1-30 天" },
+          { startDay: 31, endDay: 90, rate: 0.6, label: "31-90 天" },
+          { startDay: 91, endDay: 120, rate: 1.05, label: "91-120 天" },
+          { startDay: 121, endDay: 180, rate: 1.5, label: "121-180 天" },
+          { startDay: 181, endDay: 360, rate: 2.35, label: "181-360 天" },
+          { startDay: 361, rate: 3.25, label: "361+ 天" }
+        ],
+        nonSellableStorageTiers: [
+          { startDay: 1, endDay: 15, rate: 0.8, label: "1-15 天" },
+          { startDay: 16, endDay: 30, rate: 1.6, label: "16-30 天" },
+          { startDay: 31, endDay: 60, rate: 3.2, label: "31-60 天" },
+          { startDay: 61, rate: 4.8, label: "61+ 天" }
+        ],
+        valueAddedServices: [
+        { code: "labeling-sku", group: "标签服务", name: "贴标签", unitLabel: "张", price: 0.4, note: "默认覆盖原标" },
+        { code: "relabel", group: "标签服务", name: "换标 / 覆盖原标", unitLabel: "张", price: 0.6, note: "" },
+        { code: "outer-box-photo", group: "拍照 / 拍视频", name: "外箱拍照（不开箱）", unitLabel: "张", price: 1, minimumTotal: 3, note: "最低收费 $3 / 次" },
+        { code: "unbox-photo", group: "拍照 / 拍视频", name: "开箱拍照", unitLabel: "张", price: 3, manual: true, note: "超 3 张后按 $1 / 张加收" },
+        { code: "video-shoot", group: "拍照 / 拍视频", name: "拍摄视频", unitLabel: "分钟", price: 5, note: "不足 1 分钟按 1 分钟计" },
+        { code: "open-box-inspection", group: "仓内操作", name: "开箱检查", unitLabel: "箱", price: 2, note: "" },
+        { code: "counting", group: "仓内操作", name: "清点费", unitLabel: "件", price: 0.3, note: "入库默认不清点" },
+        { code: "reseal-box", group: "仓内操作", name: "封箱费", unitLabel: "箱", price: 0.5, note: "" },
+        { code: "palletizing", group: "仓内操作", name: "打托费", unitLabel: "托", price: 18, note: "" },
+        { code: "repackaging", group: "仓内操作", name: "重新包装", unitLabel: "件", price: 1, manual: true, note: "$1 起，按复杂度定价" },
+        { code: "mailer-small", group: "包装材料", name: "快递袋（小）", unitLabel: "个", price: 0.2, note: "" },
+        { code: "mailer-medium", group: "包装材料", name: "快递袋（中）", unitLabel: "个", price: 0.25, note: "" },
+        { code: "mailer-large", group: "包装材料", name: "快递袋（大）", unitLabel: "个", price: 0.35, note: "" },
+        { code: "bubble-small", group: "包装材料", name: "气泡袋（小）", unitLabel: "个", price: 0.6, note: "适合易碎轻小件" },
+        { code: "bubble-large", group: "包装材料", name: "气泡袋（大）", unitLabel: "个", price: 1, note: "" },
+        { code: "carton-small", group: "包装材料", name: "纸箱（小）", unitLabel: "个", price: 1.5, note: "" },
+        { code: "carton-medium", group: "包装材料", name: "纸箱（中）", unitLabel: "个", price: 2.5, note: "" },
+        { code: "carton-large", group: "包装材料", name: "纸箱（大）", unitLabel: "个", price: 4, note: "" },
+        { code: "returns-reported", group: "退货处理", name: "退货接收（有预报）", unitLabel: "件", price: 2.5, note: "" },
+        { code: "returns-unreported", group: "退货处理", name: "退货接收（无预报）", unitLabel: "件", price: 5, note: "" },
+        { code: "returns-restock", group: "退货处理", name: "退货重新上架", unitLabel: "件", price: 2, note: "" },
+        { code: "returns-disposal", group: "退货处理", name: "退货销毁", unitLabel: "件", price: 1.5, note: "特殊品类另议" },
+        { code: "disposal-general", group: "销毁 / 弃货", name: "普货销毁", unitLabel: "件", price: 1, weightContinuationPrice: 0.15, note: "超 20 LB 按续重" },
+        { code: "disposal-special", group: "销毁 / 弃货", name: "特殊品类销毁", unitLabel: "件", price: null, manual: true, note: "单独询价" },
+        { code: "special-labor", group: "其他特殊服务", name: "人工特殊作业", unitLabel: "人 × 小时", price: 35, note: "最少计费 0.5 小时" },
+        { code: "system-integration", group: "其他特殊服务", name: "系统对接", unitLabel: "单人 / 天", price: 300, note: "" },
+        { code: "custom-request", group: "其他特殊服务", name: "其他定制需求", unitLabel: "-", price: null, manual: true, note: "单独询价" }
+        ]
+      };
+
+      function deepClone(value) {
+        return JSON.parse(JSON.stringify(value));
+      }
+      function mergeSettingsWithDefaults(source, defaults) {
+        if (Array.isArray(defaults)) {
+          return defaults.map((defaultItem, index) => mergeSettingsWithDefaults(source?.[index], defaultItem));
+        }
+        if (defaults && typeof defaults === "object") {
+          const result = {};
+          Object.keys(defaults).forEach((key) => {
+            result[key] = mergeSettingsWithDefaults(source?.[key], defaults[key]);
+          });
+          return result;
+        }
+        return source !== undefined && source !== null ? source : defaults;
+      }
+      function loadPricingSettings() {
+        try {
+          const saved = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+          if (!saved) return deepClone(DEFAULT_SETTINGS);
+          return mergeSettingsWithDefaults(JSON.parse(saved), DEFAULT_SETTINGS);
+        } catch (error) {
+          return deepClone(DEFAULT_SETTINGS);
+        }
+      }
+      let pricingSettings = loadPricingSettings();
+      function savePricingSettings() {
+        window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(pricingSettings));
+      }
+      function getServices() {
+        return pricingSettings.valueAddedServices;
+      }
+      const SETTINGS_SECTIONS = [
+        {
+          title: "入库与卸货",
+          fields: [
+            { type: "number", label: "20GP 卸货费", path: ["fclUnloadingFees", "20GP"], step: "0.01" },
+            { type: "number", label: "40HQ 卸货费", path: ["fclUnloadingFees", "40HQ"], step: "0.01" },
+            { type: "number", label: "45HQ 卸货费", path: ["fclUnloadingFees", "45HQ"], step: "0.01" },
+            { type: "number", label: "散货单箱卸货费", path: ["lcl", "boxFee"], step: "0.01" },
+            { type: "number", label: "散货超箱阈值", path: ["lcl", "overCartonThreshold"], step: "1" },
+            { type: "number", label: "散货超箱附加费", path: ["lcl", "overCartonSurcharge"], step: "0.01" },
+            { type: "number", label: "混 SKU 附加费", path: ["mixedSkuSurcharge"], step: "0.01" }
+          ]
+        },
+        {
+          title: "入库上架费（LB 档位）",
+          fields: [
+            { type: "number", label: "0-2 LB", path: ["handlingTiers", 0, "unitPrice"], step: "0.01" },
+            { type: "number", label: "2-5 LB", path: ["handlingTiers", 1, "unitPrice"], step: "0.01" },
+            { type: "number", label: "5-10 LB", path: ["handlingTiers", 2, "unitPrice"], step: "0.01" },
+            { type: "number", label: "10-20 LB", path: ["handlingTiers", 3, "unitPrice"], step: "0.01" },
+            { type: "number", label: "20+ LB 续重", path: ["handlingTiers", 4, "continuationPrice"], step: "0.01" }
+          ]
+        },
+        {
+          title: "出库与平台面单",
+          fields: [
+            { type: "number", label: "出库 0-2 LB", path: ["outboundTiers", 0, "unitPrice"], step: "0.01" },
+            { type: "number", label: "出库 2-5 LB", path: ["outboundTiers", 1, "unitPrice"], step: "0.01" },
+            { type: "number", label: "出库 5-10 LB", path: ["outboundTiers", 2, "unitPrice"], step: "0.01" },
+            { type: "number", label: "出库 10-20 LB", path: ["outboundTiers", 3, "unitPrice"], step: "0.01" },
+            { type: "number", label: "出库 20+ LB 续重", path: ["outboundTiers", 4, "continuationPrice"], step: "0.01" },
+            { type: "number", label: "平台面单 ≤10 LB", path: ["thirdPartyLabelRates", "underOrEqual10Lb"], step: "0.01" },
+            { type: "number", label: "平台面单 >10 LB", path: ["thirdPartyLabelRates", "over10Lb"], step: "0.01" }
+          ]
+        },
+        {
+          title: "仓储费设置",
+          fields: [
+            { type: "number", label: "可售 31-90 天", path: ["sellableStorageTiers", 1, "rate"], step: "0.01" },
+            { type: "number", label: "可售 91-120 天", path: ["sellableStorageTiers", 2, "rate"], step: "0.01" },
+            { type: "number", label: "可售 121-180 天", path: ["sellableStorageTiers", 3, "rate"], step: "0.01" },
+            { type: "number", label: "可售 181-360 天", path: ["sellableStorageTiers", 4, "rate"], step: "0.01" },
+            { type: "number", label: "可售 361+ 天", path: ["sellableStorageTiers", 5, "rate"], step: "0.01" },
+            { type: "number", label: "不可售 1-15 天", path: ["nonSellableStorageTiers", 0, "rate"], step: "0.01" },
+            { type: "number", label: "不可售 16-30 天", path: ["nonSellableStorageTiers", 1, "rate"], step: "0.01" },
+            { type: "number", label: "不可售 31-60 天", path: ["nonSellableStorageTiers", 2, "rate"], step: "0.01" },
+            { type: "number", label: "不可售 61+ 天", path: ["nonSellableStorageTiers", 3, "rate"], step: "0.01" }
+          ]
+        }
+      ];
+      const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const number2 = new Intl.NumberFormat("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const dateFormatter = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" });
+      const elements = {
+        customerName: document.getElementById("customerName"),
+        validDays: document.getElementById("validDays"),
+        contactName: document.getElementById("contactName"),
+        customerNote: document.getElementById("customerNote"),
+        businessMode: document.getElementById("businessMode"),
+        inboundType: document.getElementById("inboundType"),
+        containerType: document.getElementById("containerType"),
+        containerTypeField: document.getElementById("containerTypeField"),
+        boxGroupRows: document.getElementById("boxGroupRows"),
+        addBoxGroupBtn: document.getElementById("addBoxGroupBtn"),
+        openImportModalBtn: document.getElementById("openImportModalBtn"),
+        changeImportFileBtn: document.getElementById("changeImportFileBtn"),
+        boxGroupImportFile: document.getElementById("boxGroupImportFile"),
+        hasThirdPartyLabel: document.getElementById("hasThirdPartyLabel"),
+        includeStorage: document.getElementById("includeStorage"),
+        storageFields: document.getElementById("storageFields"),
+        storageType: document.getElementById("storageType"),
+        storageDays: document.getElementById("storageDays"),
+        serviceRows: document.getElementById("serviceRows"),
+        addServiceBtn: document.getElementById("addServiceBtn"),
+        feeTableBody: document.getElementById("feeTableBody"),
+        manualItemsContainer: document.getElementById("manualItemsContainer"),
+        generateCustomerQuoteBtn: document.getElementById("generateCustomerQuoteBtn"),
+        printCustomerQuoteBtn: document.getElementById("printCustomerQuoteBtn"),
+        openSettingsBtn: document.getElementById("openSettingsBtn"),
+        settingsModal: document.getElementById("settingsModal"),
+        settingsSections: document.getElementById("settingsSections"),
+        resetSettingsBtn: document.getElementById("resetSettingsBtn"),
+        closeSettingsBtn: document.getElementById("closeSettingsBtn"),
+        importModal: document.getElementById("importModal"),
+        closeImportModalBtn: document.getElementById("closeImportModalBtn"),
+        confirmImportBtn: document.getElementById("confirmImportBtn"),
+        importSheetName: document.getElementById("importSheetName"),
+        importMode: document.getElementById("importMode"),
+        defaultSkuCount: document.getElementById("defaultSkuCount"),
+        defaultWeightKg: document.getElementById("defaultWeightKg"),
+        importStatus: document.getElementById("importStatus"),
+        importMappingFields: document.getElementById("importMappingFields"),
+        importValidCount: document.getElementById("importValidCount"),
+        importIncompleteCount: document.getElementById("importIncompleteCount"),
+        importSkippedCount: document.getElementById("importSkippedCount"),
+        importPreviewIssues: document.getElementById("importPreviewIssues"),
+        customerQuoteSheet: document.getElementById("customerQuoteSheet"),
+        customerQuoteLogo: document.getElementById("customerQuoteLogo"),
+        customerQuoteLogoPlaceholder: document.getElementById("customerQuoteLogoPlaceholder"),
+        customerQuoteCustomerName: document.getElementById("customerQuoteCustomerName"),
+        customerQuoteDate: document.getElementById("customerQuoteDate"),
+        customerQuoteValidity: document.getElementById("customerQuoteValidity"),
+        customerQuoteCargoSummary: document.getElementById("customerQuoteCargoSummary"),
+        customerQuoteSummaryChips: document.getElementById("customerQuoteSummaryChips"),
+        customerQuoteServiceSummary: document.getElementById("customerQuoteServiceSummary"),
+        customerQuoteServiceDescription: document.getElementById("customerQuoteServiceDescription"),
+        customerQuotePriceBody: document.getElementById("customerQuotePriceBody"),
+        customerQuoteGrandTotal: document.getElementById("customerQuoteGrandTotal"),
+        customerQuoteNotes: document.getElementById("customerQuoteNotes")
+      };
+      const moduleLabels = {
+        inbound: "入库",
+        outbound: "出库",
+        storage: "仓储",
+        valueAdded: "增值服务"
+      };
+      let latestRenderState = null;
+      let importSession = null;
+      let logoResolved = false;
+      function getGroupedServices() {
+        return getServices().reduce((acc, service) => {
+          if (!acc[service.group]) acc[service.group] = [];
+          acc[service.group].push(service);
+          return acc;
+        }, {});
+      }
+
+      function toNumber(value, fallback = 0) {
+        const next = Number(value);
+        return Number.isFinite(next) ? next : fallback;
+      }
+      function toNullableNumber(value) {
+        const text = String(value ?? "").trim();
+        if (!text) return null;
+        const next = Number(text);
+        return Number.isFinite(next) ? next : null;
+      }
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+      function roundCurrency(value) { return Math.round(value * 100) / 100; }
+      function formatCurrency(value) { return currency.format(value); }
+      function formatNumber(value) { return number2.format(value); }
+      function isBoxGroupRowEmpty(row) {
+        return Array.from(row.querySelectorAll("input")).every((input) => toNumber(input.value, 0) <= 0);
+      }
+      function getImportDefaults() {
+        return {
+          skuCount: toNullableNumber(elements.defaultSkuCount.value) ?? 1,
+          actualWeightKg: toNullableNumber(elements.defaultWeightKg.value)
+        };
+      }
+      function getImportMappingFromControls() {
+        return IMPORT_FIELD_DEFINITIONS.reduce((acc, field) => {
+          const select = elements.importMappingFields.querySelector(`[data-import-field="${field.key}"]`);
+          if (select && select.value) {
+            acc[field.key] = select.value;
+          }
+          return acc;
+        }, {});
+      }
+      function updateImportStatus(message, tone = "default") {
+        elements.importStatus.textContent = message;
+        elements.importStatus.style.background = tone === "error" ? "#FEF2F2" : tone === "success" ? "#ECFDF5" : "#F9FAFB";
+        elements.importStatus.style.borderColor = tone === "error" ? "#FECACA" : tone === "success" ? "#A7F3D0" : "var(--line)";
+        elements.importStatus.style.color = tone === "error" ? "#991B1B" : tone === "success" ? "#065F46" : "#374151";
+      }
+      function resetImportPreview() {
+        elements.importValidCount.textContent = "0";
+        elements.importIncompleteCount.textContent = "0";
+        elements.importSkippedCount.textContent = "0";
+        elements.importPreviewIssues.className = "import-empty";
+        elements.importPreviewIssues.textContent = "完成字段映射后，这里会显示待补充和跳过原因。";
+        elements.confirmImportBtn.disabled = true;
+      }
+      function renderImportMappingFields(headers, sampleRow, mapping = {}) {
+        elements.importMappingFields.innerHTML = "";
+        IMPORT_FIELD_DEFINITIONS.forEach((field) => {
+          const wrapper = document.createElement("div");
+          wrapper.className = "mapping-card";
+          const title = field.required ? `${field.label}（计算必需）` : `${field.label}（可选）`;
+          wrapper.innerHTML = `<strong>${title}</strong><p>${field.key === "dimensions" ? "适合客户把长宽高写在同一列，例如 62*48*60。" : "不需要时可以留空，系统会尝试用默认值或其它字段补齐。"}</p>`;
+          const select = document.createElement("select");
+          select.dataset.importField = field.key;
+          select.innerHTML = `<option value="">不映射</option>`;
+          headers.forEach((header, index) => {
+            const sample = sampleRow?.[index] ? ` | 例：${String(sampleRow[index]).slice(0, 24)}` : "";
+            const option = document.createElement("option");
+            option.value = header;
+            option.textContent = `${header}${sample}`;
+            if (mapping[field.key] === header) option.selected = true;
+            select.appendChild(option);
+          });
+          select.addEventListener("change", refreshImportPreview);
+          wrapper.appendChild(select);
+          elements.importMappingFields.appendChild(wrapper);
+        });
+      }
+      function findFirstDataRow(rows) {
+        return rows.find((row) => row.some((cell) => String(cell ?? "").trim() !== "")) || [];
+      }
+      function loadImportSheet(sheetName) {
+        if (!importSession?.workbook) return;
+        const { headers, rows } = getSheetRows(importSession.workbook, sheetName);
+        importSession.sheetName = sheetName;
+        importSession.headers = headers;
+        importSession.rows = rows;
+        importSession.mapping = { ...suggestMapping(headers), ...importSession.mapping };
+        renderImportMappingFields(headers, findFirstDataRow(rows), importSession.mapping);
+        refreshImportPreview();
+      }
+      function refreshImportPreview() {
+        if (!importSession?.headers?.length) {
+          resetImportPreview();
+          return;
+        }
+        importSession.mapping = getImportMappingFromControls();
+        importSession.defaults = getImportDefaults();
+        importSession.preview = mapWorksheetRows({
+          headers: importSession.headers,
+          rows: importSession.rows,
+          mapping: importSession.mapping,
+          defaults: importSession.defaults
+        });
+
+        const { validRows, incompleteRows, skippedRows } = importSession.preview;
+        elements.importValidCount.textContent = String(validRows.length);
+        elements.importIncompleteCount.textContent = String(incompleteRows.length);
+        elements.importSkippedCount.textContent = String(skippedRows.length);
+        elements.confirmImportBtn.disabled = validRows.length === 0;
+
+        if (validRows.length > 0 && incompleteRows.length === 0) {
+          updateImportStatus(`已识别 ${validRows.length} 行可直接导入。确认后会按“${elements.importMode.value === "replace" ? "替换现有箱组" : "追加到现有箱组"}”执行。`, "success");
+        } else {
+          updateImportStatus(`已识别 ${validRows.length} 行可直接导入，${incompleteRows.length} 行待补充，${skippedRows.length} 行已跳过。`);
+        }
+
+        const issueItems = [...incompleteRows.slice(0, 6), ...skippedRows.slice(0, Math.max(0, 6 - incompleteRows.length))];
+        if (!issueItems.length) {
+          elements.importPreviewIssues.className = "import-empty";
+          elements.importPreviewIssues.textContent = "当前映射结果没有待补充项，可以直接导入。";
+          return;
+        }
+
+        const list = document.createElement("ul");
+        issueItems.forEach((item) => {
+          const li = document.createElement("li");
+          const ref = item.boxGroup.reference || item.boxGroup.productName || `第 ${item.rowNumber} 行`;
+          li.textContent = `${ref}：${item.issues.join("，")}`;
+          list.appendChild(li);
+        });
+        elements.importPreviewIssues.className = "";
+        elements.importPreviewIssues.innerHTML = "";
+        elements.importPreviewIssues.appendChild(list);
+      }
+      async function handleImportFileSelection(file) {
+        if (!file) return;
+        try {
+          updateImportStatus("正在读取 Excel 文件，请稍候…");
+          const workbook = await readWorkbookFromFile(file);
+          importSession = {
+            fileName: file.name,
+            workbook,
+            sheetName: workbook.SheetNames[0],
+            headers: [],
+            rows: [],
+            mapping: {},
+            defaults: getImportDefaults(),
+            preview: null
+          };
+          elements.changeImportFileBtn.classList.remove("hidden");
+          elements.importSheetName.innerHTML = workbook.SheetNames.map((sheetName) => `<option value="${escapeHtml(sheetName)}">${escapeHtml(sheetName)}</option>`).join("");
+          loadImportSheet(importSession.sheetName);
+          openImportModal();
+        } catch (error) {
+          updateImportStatus(`读取 Excel 失败：${error instanceof Error ? error.message : "未知错误"}`, "error");
+          resetImportPreview();
+          openImportModal();
+        }
+      }
+      function openImportModal() {
+        elements.importModal.classList.remove("hidden");
+      }
+      function closeImportModal() {
+        elements.importModal.classList.add("hidden");
+      }
+      function applyImportedBoxGroups() {
+        if (!importSession?.preview?.validRows?.length) return;
+        const mode = elements.importMode.value;
+        if (mode === "replace") {
+          elements.boxGroupRows.innerHTML = "";
+        } else if (
+          elements.boxGroupRows.children.length === 1 &&
+          isBoxGroupRowEmpty(elements.boxGroupRows.firstElementChild)
+        ) {
+          elements.boxGroupRows.innerHTML = "";
+        }
+
+        importSession.preview.validRows.forEach((row) => {
+          elements.boxGroupRows.appendChild(createBoxGroupRow(row.boxGroup));
+        });
+        closeImportModal();
+        render();
+      }
+      function getBusinessModeLabel(value) {
+        if (value === "dropshipping-only") return "单纯一件代发";
+        if (value === "headhaul-plus-dropshipping") return "头程运输 + 一件代发";
+        return "待选择";
+      }
+      function getInboundTypeLabel(value, containerType) {
+        if (value === "fcl") return containerType ? `整柜 / ${containerType}` : "整柜";
+        if (value === "lcl") return "散货";
+        return "待选择";
+      }
+      function getStorageTypeLabel(value) {
+        return value === "non-sellable" ? "不可售库存" : "可售库存";
+      }
+      function getTierLabel(weightLb) {
+        if (weightLb <= 0) return "-";
+        if (weightLb <= 2) return "0-2 LB";
+        if (weightLb <= 5) return "2-5 LB";
+        if (weightLb <= 10) return "5-10 LB";
+        if (weightLb <= 20) return "10-20 LB";
+        return "20+ LB";
+      }
+      function resolvePieceHandlingAmount(tiers, chargeableWeightLb, pieceCount) {
+        const fixedTier = tiers.find((tier) => typeof tier.maxLb === "number" && chargeableWeightLb <= tier.maxLb);
+        if (fixedTier && typeof fixedTier.unitPrice === "number") {
+          return { amount: fixedTier.unitPrice * pieceCount, formula: `${fixedTier.unitPrice.toFixed(2)} × ${pieceCount}`, bracket: fixedTier.label };
+        }
+        const continuationTier = tiers.find((tier) => typeof tier.continuationPrice === "number");
+        const extraLb = Math.max(chargeableWeightLb - 20, 0);
+        const unitPrice = continuationTier ? continuationTier.continuationPrice : 0;
+        return { amount: extraLb * unitPrice * pieceCount, formula: `(${chargeableWeightLb.toFixed(2)} - 20) × ${unitPrice.toFixed(2)} × ${pieceCount}`, bracket: continuationTier ? continuationTier.label : "20+ LB" };
+      }
+      function calculateProgressiveStorage(totalCbm, storageDays, tiers) {
+        return tiers.reduce((sum, tier) => {
+          if (storageDays < tier.startDay) return sum;
+          const effectiveEnd = typeof tier.endDay === "number" ? tier.endDay : storageDays;
+          const actualEnd = Math.min(storageDays, effectiveEnd);
+          const daysInTier = Math.max(actualEnd - tier.startDay + 1, 0);
+          return sum + totalCbm * daysInTier * tier.rate;
+        }, 0);
+      }
+      function createBoxGroupRow(defaults = {}) {
+        const template = document.getElementById("boxGroupRowTemplate");
+        const node = template.content.firstElementChild.cloneNode(true);
+        node.querySelector(".group-box-count").value = defaults.boxCount ?? 0;
+        node.querySelector(".group-pieces-per-box").value = defaults.piecesPerBox ?? 0;
+        node.querySelector(".group-sku-count").value = defaults.skuCount ?? 0;
+        node.querySelector(".group-weight-kg").value = defaults.actualWeightKg ?? 0;
+        node.querySelector(".group-length-cm").value = defaults.lengthCm ?? 0;
+        node.querySelector(".group-width-cm").value = defaults.widthCm ?? 0;
+        node.querySelector(".group-height-cm").value = defaults.heightCm ?? 0;
+        node.querySelectorAll("input").forEach((input) => input.addEventListener("input", render));
+        node.querySelector(".remove-box-group").addEventListener("click", () => {
+          node.remove();
+          if (!elements.boxGroupRows.children.length) {
+            elements.boxGroupRows.appendChild(createBoxGroupRow());
+          }
+          render();
+        });
+        return node;
+      }
+      function getBoxGroups() {
+        return Array.from(elements.boxGroupRows.querySelectorAll(".box-group-row")).map((row, index) => ({
+          id: index + 1,
+          boxCount: toNumber(row.querySelector(".group-box-count").value, 0),
+          piecesPerBox: toNumber(row.querySelector(".group-pieces-per-box").value, 0),
+          skuCount: toNumber(row.querySelector(".group-sku-count").value, 0),
+          actualWeightKg: toNumber(row.querySelector(".group-weight-kg").value),
+          lengthCm: toNumber(row.querySelector(".group-length-cm").value),
+          widthCm: toNumber(row.querySelector(".group-width-cm").value),
+          heightCm: toNumber(row.querySelector(".group-height-cm").value)
+        }));
+      }
+      function getFormData() {
+        const boxGroups = getBoxGroups();
+        const totalBoxes = boxGroups.reduce((sum, group) => sum + group.boxCount, 0);
+        const totalPieces = boxGroups.reduce((sum, group) => sum + group.boxCount * group.piecesPerBox, 0);
+        return {
+          customerName: elements.customerName.value.trim(),
+          validDays: toNumber(elements.validDays.value),
+          contactName: elements.contactName.value.trim(),
+          customerNote: elements.customerNote.value.trim(),
+          businessMode: elements.businessMode.value,
+          inboundType: elements.inboundType.value,
+          containerType: elements.containerType.value,
+          boxGroups,
+          totalBoxes,
+          pieceCount: totalPieces,
+          hasThirdPartyLabel: elements.hasThirdPartyLabel.checked,
+          includeStorage: elements.includeStorage.checked,
+          storageType: elements.storageType.value,
+          storageDays: toNumber(elements.storageDays.value, 0),
+          selectedServices: Array.from(elements.serviceRows.querySelectorAll(".service-row")).map((row) => ({
+            serviceCode: row.querySelector(".service-code").value,
+            quantity: toNumber(row.querySelector(".service-qty").value)
+          }))
+        };
+      }
+      function calculateQuote(input) {
+        const analyzedGroups = input.boxGroups.map((group) => {
+          const volumetricBoxWeightKg = (group.lengthCm * group.widthCm * group.heightCm) / 6000;
+          const chargeableBoxWeightKg = Math.max(group.actualWeightKg, volumetricBoxWeightKg);
+          const chargeablePieceWeightKg = group.piecesPerBox > 0 ? chargeableBoxWeightKg / group.piecesPerBox : 0;
+          const chargeablePieceWeightLb = chargeablePieceWeightKg * LB_PER_KG;
+          const pieceCount = group.boxCount * group.piecesPerBox;
+          const pieceVolumeCbm =
+            group.piecesPerBox > 0
+              ? ((group.lengthCm * group.widthCm * group.heightCm) / 1000000) / group.piecesPerBox
+              : 0;
+          return {
+            ...group,
+            volumetricBoxWeightKg,
+            chargeablePieceWeightKg,
+            chargeablePieceWeightLb,
+            pieceCount,
+            pieceVolumeCbm,
+            matchedBracket: getTierLabel(chargeablePieceWeightLb)
+          };
+        });
+        const maxGroup = analyzedGroups.reduce(
+          (max, group) => (group.chargeablePieceWeightLb > max.chargeablePieceWeightLb ? group : max),
+          {
+            actualWeightKg: 0,
+            volumetricBoxWeightKg: 0,
+            chargeablePieceWeightKg: 0,
+            chargeablePieceWeightLb: 0,
+            matchedBracket: "-"
+          }
+        );
+        const maxChargeableWeightLb = maxGroup.chargeablePieceWeightLb || 0;
+        const feeLines = [];
+        const manualItems = [];
+        const unloadingFee =
+          !input.inboundType || !input.businessMode
+            ? 0
+            : input.businessMode === "headhaul-plus-dropshipping"
+              ? 0
+              : input.inboundType === "fcl"
+                ? (pricingSettings.fclUnloadingFees[input.containerType] || 0)
+                : input.totalBoxes * pricingSettings.lcl.boxFee;
+        feeLines.push({
+          module: "inbound",
+          name: input.inboundType === "fcl" ? "卸货费" : input.inboundType === "lcl" ? "散货卸货费" : "卸货费",
+          formulaText:
+            !input.inboundType || !input.businessMode
+              ? "待选择业务模式和入库类型"
+              : input.businessMode === "headhaul-plus-dropshipping"
+              ? "头程运输 + 一件代发免卸货费"
+              : input.inboundType === "fcl"
+                ? `${input.containerType} 固定柜型费`
+                : `${input.totalBoxes} 箱 × ${pricingSettings.lcl.boxFee.toFixed(2)}`,
+          note: "",
+          amount: unloadingFee,
+          isManual: false
+        });
+        if (input.inboundType === "lcl") {
+          const extraBoxes = Math.max(input.totalBoxes - pricingSettings.lcl.overCartonThreshold, 0);
+          feeLines.push({
+            module: "inbound",
+            name: "超箱附加费",
+            formulaText: `${extraBoxes} 箱 × ${pricingSettings.lcl.overCartonSurcharge.toFixed(2)}`,
+            note: "",
+            amount: extraBoxes * pricingSettings.lcl.overCartonSurcharge,
+            isManual: false
+          });
+        }
+        analyzedGroups.forEach((group) => {
+          const inboundHandling = resolvePieceHandlingAmount(pricingSettings.handlingTiers, group.chargeablePieceWeightLb, group.pieceCount);
+          feeLines.push({
+            module: "inbound",
+            name: `入库上架费（第${group.id}组）`,
+            formulaText: inboundHandling.formula,
+            note: `${group.matchedBracket} | ${group.boxCount} 箱 × ${group.piecesPerBox} 件`,
+            amount: inboundHandling.amount,
+            isManual: false
+          });
+          if (group.skuCount >= 2) {
+            feeLines.push({
+              module: "inbound",
+              name: `混 SKU 附加费（第${group.id}组）`,
+              formulaText: `${group.pieceCount} 件 × ${pricingSettings.mixedSkuSurcharge.toFixed(2)}`,
+              note: `每箱 SKU 数 ${group.skuCount}`,
+              amount: group.pieceCount * pricingSettings.mixedSkuSurcharge,
+              isManual: false
+            });
+          }
+          const outboundHandling = resolvePieceHandlingAmount(pricingSettings.outboundTiers, group.chargeablePieceWeightLb, group.pieceCount);
+          feeLines.push({
+            module: "outbound",
+            name: `出库操作费（第${group.id}组）`,
+            formulaText: outboundHandling.formula,
+            note: `${group.matchedBracket} | ${group.boxCount} 箱 × ${group.piecesPerBox} 件`,
+            amount: outboundHandling.amount,
+            isManual: false
+          });
+          if (input.hasThirdPartyLabel) {
+            const labelRate =
+              group.chargeablePieceWeightLb <= 10
+                ? pricingSettings.thirdPartyLabelRates.underOrEqual10Lb
+                : pricingSettings.thirdPartyLabelRates.over10Lb;
+            feeLines.push({
+              module: "outbound",
+              name: `平台面单操作费（第${group.id}组）`,
+              formulaText: `${labelRate.toFixed(2)} × ${group.pieceCount} 件`,
+              note: "客户自带平台面单，按件计费",
+              amount: labelRate * group.pieceCount,
+              isManual: false
+            });
+          }
+          if (input.includeStorage) {
+            const totalCbm = Math.max(group.pieceVolumeCbm, 0.001) * group.pieceCount;
+            const tiers = input.storageType === "sellable" ? pricingSettings.sellableStorageTiers : pricingSettings.nonSellableStorageTiers;
+            const storageAmount = calculateProgressiveStorage(totalCbm, input.storageDays, tiers);
+            feeLines.push({
+              module: "storage",
+              name: `${input.storageType === "sellable" ? "可售库存仓储费" : "不可售库存仓储费"}（第${group.id}组）`,
+              formulaText: `${totalCbm.toFixed(3)} CBM × ${input.storageDays} 天 阶梯计费`,
+              note: `${group.boxCount} 箱 × ${group.piecesPerBox} 件`,
+              amount: storageAmount,
+              isManual: false
+            });
+          }
+        });
+        input.selectedServices.forEach((selected) => {
+          if (!selected.serviceCode || selected.quantity <= 0) return;
+          const service = getServices().find((item) => item.code === selected.serviceCode);
+          if (!service) return;
+          if (service.manual || service.price === null) {
+            manualItems.push(service.name);
+            feeLines.push({ module: "valueAdded", name: service.name, formulaText: "人工确认", note: service.note || "", amount: 0, isManual: true });
+            return;
+          }
+          const quantity = service.code === "special-labor" ? Math.max(selected.quantity, 0.5) : selected.quantity;
+          let amount = service.price * quantity;
+          if (service.weightContinuationPrice && maxChargeableWeightLb > 20) amount += (maxChargeableWeightLb - 20) * service.weightContinuationPrice * quantity;
+          if (service.minimumTotal) amount = Math.max(amount, service.minimumTotal);
+          feeLines.push({ module: "valueAdded", name: service.name, formulaText: `${quantity} ${service.unitLabel} × ${service.price.toFixed(2)}`, note: service.note || "", amount, isManual: false });
+        });
+        const inboundTotal = roundCurrency(feeLines.filter((line) => line.module === "inbound" && !line.isManual).reduce((sum, line) => sum + line.amount, 0));
+        const outboundTotal = roundCurrency(feeLines.filter((line) => line.module === "outbound" && !line.isManual).reduce((sum, line) => sum + line.amount, 0));
+        const storageTotal = roundCurrency(feeLines.filter((line) => line.module === "storage" && !line.isManual).reduce((sum, line) => sum + line.amount, 0));
+        const valueAddedTotal = roundCurrency(feeLines.filter((line) => line.module === "valueAdded" && !line.isManual).reduce((sum, line) => sum + line.amount, 0));
+        const grandTotal = roundCurrency(inboundTotal + outboundTotal + storageTotal + valueAddedTotal);
+        return {
+          weights: {
+            totalBoxes: input.totalBoxes,
+            totalPieces: input.pieceCount,
+            maxActualWeightKg: maxGroup.actualWeightKg,
+            maxVolumetricWeightKg: maxGroup.volumetricBoxWeightKg,
+            maxChargeableWeightKg: maxGroup.chargeablePieceWeightKg,
+            maxChargeableWeightLb: maxGroup.chargeablePieceWeightLb,
+            matchedBracket: maxGroup.matchedBracket
+          },
+          pieceCount: input.pieceCount,
+          inboundTotal, outboundTotal, storageTotal, valueAddedTotal, grandTotal,
+          unitCost: input.pieceCount > 0 ? roundCurrency(grandTotal / input.pieceCount) : 0,
+          feeLines, manualItems
+        };
+      }
+      function renderServiceSelect(select, currentCode) {
+        select.innerHTML = "";
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "请选择增值服务 | $0.00";
+        placeholder.selected = !currentCode;
+        select.appendChild(placeholder);
+        Object.entries(getGroupedServices()).forEach(([group, services]) => {
+          const optgroup = document.createElement("optgroup");
+          optgroup.label = group;
+          services.forEach((service) => {
+            const option = document.createElement("option");
+            option.value = service.code;
+            let priceLabel = "";
+            if (service.price === null) {
+              priceLabel = "单独询价";
+            } else if (service.minimumTotal) {
+              priceLabel = `$${service.price.toFixed(2)}/${service.unitLabel}，最低 $${service.minimumTotal.toFixed(2)}`;
+            } else if (service.manual) {
+              priceLabel = `$${service.price.toFixed(2)}/${service.unitLabel} 起`;
+            } else {
+              priceLabel = `$${service.price.toFixed(2)}/${service.unitLabel}`;
+            }
+            option.textContent = `${service.name} | ${priceLabel}`;
+            if (service.code === currentCode) option.selected = true;
+            optgroup.appendChild(option);
+          });
+          select.appendChild(optgroup);
+        });
+      }
+      function createServiceRow(defaultCode = "", defaultQty = 0) {
+        const template = document.getElementById("serviceRowTemplate");
+        const node = template.content.firstElementChild.cloneNode(true);
+        const select = node.querySelector(".service-code");
+        const qty = node.querySelector(".service-qty");
+        const removeBtn = node.querySelector(".remove-service");
+        const manualChip = node.querySelector(".manual-chip");
+        renderServiceSelect(select, defaultCode);
+        qty.value = defaultQty;
+        function syncManualState() {
+          const service = getServices().find((item) => item.code === select.value);
+          manualChip.classList.toggle("hidden", !service || !service.manual);
+          qty.step = select.value === "special-labor" ? "0.5" : "1";
+        }
+        select.addEventListener("change", () => { syncManualState(); render(); });
+        qty.addEventListener("input", render);
+        removeBtn.addEventListener("click", () => { node.remove(); render(); });
+        syncManualState();
+        return node;
+      }
+      function updateInboundFields() {
+        const isFcl = elements.inboundType.value === "fcl";
+        elements.containerTypeField.classList.toggle("hidden", !isFcl);
+        if (!isFcl) elements.containerType.value = "";
+      }
+      function updateStorageFields() {
+        elements.storageFields.classList.toggle("hidden", !elements.includeStorage.checked);
+      }
+      function renderFeeTable(feeLines) {
+        elements.feeTableBody.innerHTML = "";
+        feeLines.forEach((line) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td>${moduleLabels[line.module] || line.module}</td><td>${line.name}${line.isManual ? ' <span class="tag">人工确认</span>' : ""}</td><td>${line.formulaText}</td><td>${line.note || "—"}</td><td>${line.isManual ? "待确认" : formatCurrency(roundCurrency(line.amount))}</td>`;
+          elements.feeTableBody.appendChild(tr);
+        });
+      }
+      function renderManualItems(items) {
+        elements.manualItemsContainer.innerHTML = "";
+        if (!items.length) {
+          const p = document.createElement("p");
+          p.textContent = "当前报价全部可自动计算。";
+          elements.manualItemsContainer.appendChild(p);
+          return;
+        }
+        const ul = document.createElement("ul");
+        items.forEach((item) => {
+          const li = document.createElement("li");
+          li.textContent = item;
+          ul.appendChild(li);
+        });
+        elements.manualItemsContainer.appendChild(ul);
+      }
+      function getSettingValue(path) {
+        return path.reduce((acc, key) => acc?.[key], pricingSettings);
+      }
+      function setSettingValue(path, value) {
+        let target = pricingSettings;
+        for (let i = 0; i < path.length - 1; i += 1) {
+          target = target[path[i]];
+        }
+        target[path[path.length - 1]] = value;
+      }
+      function refreshServiceSelects() {
+        elements.serviceRows.querySelectorAll(".service-row").forEach((row) => {
+          const select = row.querySelector(".service-code");
+          const currentCode = select.value;
+          renderServiceSelect(select, currentCode);
+        });
+      }
+      function renderSettingsSections() {
+        elements.settingsSections.innerHTML = "";
+        SETTINGS_SECTIONS.forEach((section) => {
+          const block = document.createElement("section");
+          block.className = "settings-section";
+          block.innerHTML = `<div class="section-title">${section.title}</div>`;
+          const grid = document.createElement("div");
+          grid.className = "settings-grid";
+          section.fields.forEach((field) => {
+            const wrapper = document.createElement("div");
+            wrapper.className = "field";
+            const input = document.createElement("input");
+            input.type = field.type;
+            input.step = field.step;
+            input.min = "0";
+            input.value = getSettingValue(field.path);
+            input.addEventListener("input", () => {
+              setSettingValue(field.path, toNumber(input.value));
+              savePricingSettings();
+              render();
+            });
+            const label = document.createElement("label");
+            label.textContent = field.label;
+            wrapper.appendChild(label);
+            wrapper.appendChild(input);
+            grid.appendChild(wrapper);
+          });
+          block.appendChild(grid);
+          elements.settingsSections.appendChild(block);
+        });
+
+        const servicesSection = document.createElement("section");
+        servicesSection.className = "settings-section";
+        servicesSection.innerHTML = `<div class="section-title">增值服务单价</div>`;
+        getServices().forEach((service, index) => {
+          const row = document.createElement("div");
+          row.className = "settings-service-grid";
+          const nameField = document.createElement("div");
+          nameField.className = "field";
+          nameField.innerHTML = `<label>${service.group}</label><input type="text" value="${service.name}" disabled />`;
+
+          const priceField = document.createElement("div");
+          priceField.className = "field";
+          priceField.innerHTML = `<label>单价</label>`;
+          const priceInput = document.createElement("input");
+          priceInput.type = "number";
+          priceInput.step = "0.01";
+          priceInput.min = "0";
+          priceInput.value = service.price ?? 0;
+          priceInput.addEventListener("input", () => {
+            pricingSettings.valueAddedServices[index].price = toNumber(priceInput.value);
+            savePricingSettings();
+            refreshServiceSelects();
+            render();
+          });
+          priceField.appendChild(priceInput);
+
+          const continuationField = document.createElement("div");
+          continuationField.className = "field";
+          continuationField.innerHTML = `<label>续重价</label>`;
+          const continuationInput = document.createElement("input");
+          continuationInput.type = "number";
+          continuationInput.step = "0.01";
+          continuationInput.min = "0";
+          continuationInput.value = service.weightContinuationPrice ?? 0;
+          continuationInput.addEventListener("input", () => {
+            const value = toNumber(continuationInput.value);
+            if (value > 0) {
+              pricingSettings.valueAddedServices[index].weightContinuationPrice = value;
+            } else {
+              delete pricingSettings.valueAddedServices[index].weightContinuationPrice;
+            }
+            savePricingSettings();
+            render();
+          });
+          continuationField.appendChild(continuationInput);
+
+          const manualField = document.createElement("div");
+          manualField.className = "field";
+          const manualLabel = document.createElement("label");
+          manualLabel.textContent = "人工确认";
+          const manualCheckbox = document.createElement("input");
+          manualCheckbox.type = "checkbox";
+          manualCheckbox.checked = !!service.manual;
+          manualCheckbox.addEventListener("change", () => {
+            pricingSettings.valueAddedServices[index].manual = manualCheckbox.checked;
+            savePricingSettings();
+            refreshServiceSelects();
+            render();
+          });
+          manualField.appendChild(manualLabel);
+          manualField.appendChild(manualCheckbox);
+
+          row.appendChild(nameField);
+          row.appendChild(priceField);
+          row.appendChild(continuationField);
+          row.appendChild(manualField);
+          servicesSection.appendChild(row);
+        });
+        elements.settingsSections.appendChild(servicesSection);
+      }
+      function restoreDefaultSettings() {
+        pricingSettings = deepClone(DEFAULT_SETTINGS);
+        savePricingSettings();
+        renderSettingsSections();
+        refreshServiceSelects();
+        render();
+      }
+      function ensureLogoSource(force = false) {
+        if (logoResolved && !force) return;
+        logoResolved = false;
+        const candidates = ["仲易达供应链LOGO.png", "仲易达供应链LOGO-副标题.png", "仲易达供应链LOGO.jpg", "logo.png", "logo.jpg", "logo.jpeg", "logo.svg"];
+        let currentIndex = 0;
+        function tryNext() {
+          if (currentIndex >= candidates.length) {
+            elements.customerQuoteLogo.classList.add("hidden");
+            elements.customerQuoteLogoPlaceholder.classList.remove("hidden");
+            logoResolved = true;
+            return;
+          }
+          const candidate = candidates[currentIndex];
+          const image = new Image();
+          image.onload = () => {
+            elements.customerQuoteLogo.src = candidate;
+            elements.customerQuoteLogo.classList.remove("hidden");
+            elements.customerQuoteLogoPlaceholder.classList.add("hidden");
+            logoResolved = true;
+          };
+          image.onerror = () => {
+            currentIndex += 1;
+            tryNext();
+          };
+          image.src = candidate;
+        }
+        tryNext();
+      }
+      function renderCustomerQuote(input, quote) {
+        const hasStorageCharge = input.includeStorage && input.storageDays > 0;
+        const selectedServices = input.selectedServices
+          .filter((item) => item.serviceCode && item.quantity > 0)
+          .map((item) => {
+            const service = getServices().find((entry) => entry.code === item.serviceCode);
+            return service ? `${service.name} × ${item.quantity}` : "";
+          })
+          .filter(Boolean);
+        const summaryChips = [
+          getBusinessModeLabel(input.businessMode),
+          getInboundTypeLabel(input.inboundType, input.containerType),
+          input.hasThirdPartyLabel ? "客户自带平台面单" : "平台面单未计入",
+          hasStorageCharge ? `含仓储 / ${getStorageTypeLabel(input.storageType)}` : "未计仓储"
+        ];
+        ensureLogoSource();
+        elements.customerQuoteCustomerName.textContent = input.customerName || "待填写";
+        elements.customerQuoteDate.textContent = dateFormatter.format(new Date());
+        elements.customerQuoteValidity.textContent = input.validDays > 0 ? `${input.validDays} 天` : "待确认";
+        elements.customerQuoteCargoSummary.textContent = `${quote.weights.totalBoxes} 箱 / ${quote.weights.totalPieces} 件`;
+        elements.customerQuoteServiceSummary.textContent = selectedServices.length ? "已含指定服务与费用明细" : "基础报价与费用明细";
+        elements.customerQuoteServiceDescription.textContent = selectedServices.length
+          ? `本次报价同时包含：${selectedServices.join("，")}`
+          : "当前客户版报价单会逐项展示本次实际计费明细。";
+        elements.customerQuoteGrandTotal.textContent = formatCurrency(quote.grandTotal);
+
+        elements.customerQuoteSummaryChips.innerHTML = "";
+        summaryChips.forEach((chip) => {
+          const span = document.createElement("span");
+          span.className = "customer-chip";
+          span.textContent = chip;
+          elements.customerQuoteSummaryChips.appendChild(span);
+        });
+        if (input.contactName) {
+          const span = document.createElement("span");
+          span.className = "customer-chip";
+          span.textContent = `对接人：${input.contactName}`;
+          elements.customerQuoteSummaryChips.appendChild(span);
+        }
+        elements.customerQuotePriceBody.innerHTML = "";
+        const displayLines = quote.feeLines.filter((line) => line.amount > 0 || line.isManual);
+        if (!displayLines.length) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td>当前暂无有效报价数据</td><td>请先录入箱组信息和业务类型</td><td>${formatCurrency(0)}</td>`;
+          elements.customerQuotePriceBody.appendChild(tr);
+        } else {
+          displayLines.forEach((line) => {
+            const tr = document.createElement("tr");
+            tr.className = line.isManual ? "manual-row" : "";
+            const description = [line.note, line.formulaText].filter(Boolean).join(" | ") || "—";
+            tr.innerHTML = `<td>${line.name}</td><td>${description}</td><td>${line.isManual ? "待确认" : formatCurrency(line.amount)}</td>`;
+            elements.customerQuotePriceBody.appendChild(tr);
+          });
+        }
+        const grandRow = document.createElement("tr");
+        grandRow.className = "grand-row";
+        grandRow.innerHTML = `<td>总报价</td><td>客户确认后的整体报价</td><td>${formatCurrency(quote.grandTotal)}</td>`;
+        elements.customerQuotePriceBody.appendChild(grandRow);
+
+        elements.customerQuoteNotes.innerHTML = "";
+        const notes = [
+          input.customerNote || "本报价基于当前提供的箱规、重量和服务需求测算，最终以实际入仓与出库数据为准。",
+          "本报价单已展示逐项计费明细，特殊说明与人工确认项目请在发送前再次确认。",
+          quote.manualItems.length ? `以下项目需人工确认，暂未计入总价：${quote.manualItems.join("、")}` : "当前无人工确认项，客户版总价已包含所有已选自动计费项目。"
+        ];
+        notes.forEach((note) => {
+          const li = document.createElement("li");
+          li.textContent = note;
+          elements.customerQuoteNotes.appendChild(li);
+        });
+      }
+      function render() {
+        updateInboundFields();
+        updateStorageFields();
+        const input = getFormData();
+        const quote = calculateQuote(input);
+        latestRenderState = { input, quote };
+        document.getElementById("heroChargeableLb").textContent = `${formatNumber(quote.weights.maxChargeableWeightLb)} LB`;
+        document.getElementById("heroBracket").textContent = quote.weights.matchedBracket;
+        document.getElementById("heroGrandTotal").textContent = formatCurrency(quote.grandTotal);
+        document.getElementById("actualWeightView").textContent = `${quote.weights.totalBoxes} 箱`;
+        document.getElementById("volumetricWeightView").textContent = `${quote.weights.totalPieces} 件`;
+        document.getElementById("chargeableWeightKgView").textContent = `${formatNumber(quote.weights.maxChargeableWeightKg)} kg`;
+        document.getElementById("chargeableWeightLbView").textContent = `${formatNumber(quote.weights.maxChargeableWeightLb)} LB`;
+        document.getElementById("inboundTotalView").textContent = formatCurrency(quote.inboundTotal);
+        document.getElementById("outboundTotalView").textContent = formatCurrency(quote.outboundTotal);
+        document.getElementById("storageTotalView").textContent = formatCurrency(quote.storageTotal);
+        document.getElementById("valueAddedTotalView").textContent = formatCurrency(quote.valueAddedTotal);
+        document.getElementById("grandTotalView").textContent = formatCurrency(quote.grandTotal);
+        document.getElementById("unitCostView").textContent = formatCurrency(quote.unitCost);
+        document.getElementById("matchedBracketView").textContent = quote.weights.matchedBracket;
+        renderFeeTable(quote.feeLines);
+        renderManualItems(quote.manualItems);
+        renderCustomerQuote(input, quote);
+      }
+      function showCustomerQuoteSheet() {
+        if (!latestRenderState) render();
+        elements.customerQuoteSheet.classList.remove("hidden");
+        ensureLogoSource(true);
+        if (typeof elements.customerQuoteSheet.scrollIntoView === "function") {
+          elements.customerQuoteSheet.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }
+      function openSettings() {
+        renderSettingsSections();
+        elements.settingsModal.classList.remove("hidden");
+      }
+      function closeSettings() {
+        elements.settingsModal.classList.add("hidden");
+      }
+      document.querySelectorAll("input, select, textarea").forEach((element) => {
+        element.addEventListener("input", render);
+        element.addEventListener("change", render);
+      });
+      elements.addBoxGroupBtn.addEventListener("click", () => {
+        elements.boxGroupRows.appendChild(createBoxGroupRow());
+        render();
+      });
+      elements.openImportModalBtn.addEventListener("click", () => {
+        if (importSession?.workbook) {
+          openImportModal();
+          refreshImportPreview();
+          return;
+        }
+        elements.boxGroupImportFile.click();
+      });
+      elements.changeImportFileBtn.addEventListener("click", () => {
+        elements.boxGroupImportFile.click();
+      });
+      elements.boxGroupImportFile.addEventListener("change", async (event) => {
+        const file = event.target.files?.[0];
+        await handleImportFileSelection(file);
+        elements.boxGroupImportFile.value = "";
+      });
+      elements.importSheetName.addEventListener("change", () => {
+        loadImportSheet(elements.importSheetName.value);
+      });
+      elements.defaultSkuCount.addEventListener("input", refreshImportPreview);
+      elements.defaultWeightKg.addEventListener("input", refreshImportPreview);
+      elements.importMode.addEventListener("change", refreshImportPreview);
+      elements.confirmImportBtn.addEventListener("click", applyImportedBoxGroups);
+      elements.closeImportModalBtn.addEventListener("click", closeImportModal);
+      elements.addServiceBtn.addEventListener("click", () => {
+        elements.serviceRows.appendChild(createServiceRow());
+        render();
+      });
+      elements.generateCustomerQuoteBtn.addEventListener("click", showCustomerQuoteSheet);
+      elements.printCustomerQuoteBtn.addEventListener("click", () => {
+        showCustomerQuoteSheet();
+        document.body.classList.add("print-customer-sheet");
+        requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
+      });
+      elements.openSettingsBtn.addEventListener("click", openSettings);
+      elements.closeSettingsBtn.addEventListener("click", closeSettings);
+      elements.resetSettingsBtn.addEventListener("click", restoreDefaultSettings);
+      elements.settingsModal.addEventListener("click", (event) => {
+        if (event.target === elements.settingsModal) closeSettings();
+      });
+      elements.importModal.addEventListener("click", (event) => {
+        if (event.target === elements.importModal) closeImportModal();
+      });
+      window.addEventListener("afterprint", () => document.body.classList.remove("print-customer-sheet"));
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !elements.settingsModal.classList.contains("hidden")) closeSettings();
+        if (event.key === "Escape" && !elements.importModal.classList.contains("hidden")) closeImportModal();
+      });
+      elements.boxGroupRows.appendChild(createBoxGroupRow());
+      elements.serviceRows.appendChild(createServiceRow());
+      renderSettingsSections();
+      render();
+    </script>
+  </body>
+</html>

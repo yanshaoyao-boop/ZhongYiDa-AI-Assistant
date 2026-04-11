@@ -6,6 +6,7 @@ export interface FileData {
   status: 'idle' | 'loading' | 'loaded';
   data: any[];
   headers: string[];
+  sheets?: string[];
   idCol: string;
   amtCol: string;
   clientCol?: string;
@@ -35,59 +36,134 @@ export interface Discrepancy {
   diff: number;
 }
 
-export const processExcelFile = async (file: File): Promise<Partial<FileData>> => {
+const normalizeHeaders = (row: any[] = []): string[] => {
+  const counts = new Map<string, number>();
+  return Array.from({ length: row.length }, (_, idx) => {
+    const base = String(row[idx] || `Column ${idx + 1}`).trim();
+    const count = counts.get(base) ?? 0;
+    counts.set(base, count + 1);
+    return count === 0 ? base : `${base} (${count + 1})`;
+  });
+};
+
+const detectHeaderRowIndex = (rows: any[][]): number => {
+  if (!rows.length) return 0;
+  const scanLimit = Math.min(rows.length, 25);
+  const keywords = [
+    '\u5355', '\u53f7', 'id', '\u7f16\u53f7', '\u7f16\u7801', 'fba', 'sku',
+    '\u91d1\u989d', '\u5e94\u6536', '\u5e94\u4ed8', '\u4ef7\u683c', 'price', 'amount',
+    '\u5ba2\u6237', '\u5e97\u94fa', '\u4e1a\u52a1\u5458', 'sales'
+  ];
+
+  let bestScore = Number.NEGATIVE_INFINITY;
+  let bestRow = 0;
+
+  for (let i = 0; i < scanLimit; i++) {
+    const row = rows[i] || [];
+    if (!row.length) continue;
+
+    const nonEmptyValues = row.filter(cell => String(cell ?? '').trim() !== '');
+    if (!nonEmptyValues.length) continue;
+
+    const keywordHits = nonEmptyValues.reduce((count, cell) => {
+      const text = String(cell).toLowerCase();
+      return count + (keywords.some(keyword => text.includes(keyword)) ? 1 : 0);
+    }, 0);
+
+    const stringCells = nonEmptyValues.filter(cell => typeof cell === 'string').length;
+    let score = keywordHits * 10 + nonEmptyValues.length + stringCells * 0.5;
+    if (i >= 2 && i <= 4) score += 6;
+    if (i === 0) score -= 2;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestRow = i;
+    }
+  }
+  return bestRow;
+};
+
+const selectAmountColumn = (headers: string[]): string => {
+  const includeStrong = [
+    '\u5e94\u6536', '\u5e94\u4ed8', '\u91d1\u989d', '\u603b\u989d', '\u5408\u8ba1',
+    'amount', 'amt', 'total', 'fee', 'receivable', 'payable'
+  ];
+  const includeMedium = ['\u4ef7', 'price', '\u8d39', '\u6b3e', '\u6210\u672c'];
+  const exclude = ['\u65f6\u95f4', '\u65e5\u671f', 'date', 'time', '\u4ed3\u5e93', '\u6e20\u9053', '\u5ba2\u6237'];
+
+  let bestHeader = headers[1] || headers[0] || '';
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (const header of headers) {
+    const text = String(header).toLowerCase();
+    let score = 0;
+    if (includeStrong.some(k => text.includes(k))) score += 12;
+    if (includeMedium.some(k => text.includes(k))) score += 4;
+    if (exclude.some(k => text.includes(k))) score -= 12;
+    if (score > bestScore) {
+      bestScore = score;
+      bestHeader = header;
+    }
+  }
+  return bestHeader;
+};
+
+const parseAmount = (value: unknown): number => {
+  const text = String(value ?? '')
+    .replace(/[\s,\u00a0]/g, '')
+    .replace(/[￥¥$]/g, '')
+    .trim();
+  if (!text) return 0;
+  const parsed = parseFloat(text);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+export const processExcelFile = async (file: File, targetSheet?: string): Promise<Partial<FileData>> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = e => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
+        const activeSheet = targetSheet && workbook.SheetNames.includes(targetSheet)
+          ? targetSheet
+          : workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[activeSheet];
         const rows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-        if (rows.length === 0) {
-          resolve({ status: 'idle', data: [], headers: [] });
+        if (!rows.length) {
+          resolve({
+            status: 'idle',
+            data: [],
+            headers: [],
+            sheets: workbook.SheetNames,
+            currentSheet: activeSheet
+          });
           return;
         }
 
-        // Header Detective
-        let headerIdx = 0;
-        let headers: string[] = [];
-        const keywords = ['号', 'ID', 'id', '价', '金', 'amt', 'price', '客', '户', '员'];
+        const headerIdx = detectHeaderRowIndex(rows);
+        const headers = normalizeHeaders(rows[headerIdx] || []);
 
-        for (let i = 0; i < Math.min(rows.length, 15); i++) {
-          const r = rows[i];
-          if (r && r.some(c => c && keywords.some(k => String(c).toLowerCase().includes(k)))) {
-            headerIdx = i;
-            headers = r.map(h => String(h || '').trim());
-            break;
-          }
-        }
+        const idKeys = ['\u7f16\u53f7', '\u5355\u53f7', '\u8d27\u53f7', '\u7f16\u7801', '\u8f6c\u53f7', 'fba', 'id', 'code'];
+        const cliKeys = ['\u5ba2\u6237', '\u5e97\u94fa', '\u4e70\u5bb6', '\u6765\u6e90', 'client', 'customer', 'shop'];
+        const spKeys = ['\u4e1a\u52a1\u5458', '\u9500\u552e', '\u8ddf\u5355', 'sales', 'rep', 'owner'];
 
-        if (headers.length === 0) {
-          headerIdx = 0;
-          headers = rows[0].map((h, i) => String(h || `Column ${i + 1}`).trim());
-        }
-
-        const idKeys = ['编号', '单号', '货号', 'ID', 'code'];
-        const amtKeys = ['金', '额', '价', '总', 'amt', 'price', 'amount'];
-        const cliKeys = ['客户', '店铺', '姓名', '买家', 'client', 'customer'];
-        const spKeys = ['业务员', 'sales', '跟单', 'rep', '负责人'];
-
-        const findCol = (keys: string[]) => headers.find(h => keys.some(k => h.toLowerCase().includes(k.toLowerCase())));
+        const findCol = (keys: string[]) =>
+          headers.find(header => keys.some(keyword => header.toLowerCase().includes(keyword)));
 
         resolve({
           status: 'loaded',
           name: file.name,
           headers,
+          sheets: workbook.SheetNames,
           data: rows.slice(headerIdx + 1),
           headerIdx,
           idCol: findCol(idKeys) || headers[0],
-          amtCol: findCol(amtKeys) || headers[1],
+          amtCol: selectAmountColumn(headers),
           clientCol: findCol(cliKeys) || '',
           salespersonCol: findCol(spKeys) || '',
-          currentSheet: sheetName,
+          currentSheet: activeSheet,
           rawFile: file
         });
       } catch (err) {
@@ -110,11 +186,10 @@ export const runReconciliation = (
   const sAmtIdx = salesFile.headers.indexOf(salesFile.amtCol);
   const sCliIdx = salesFile.clientCol ? salesFile.headers.indexOf(salesFile.clientCol) : -1;
 
-  // Build Sales Map
   salesFile.data.forEach(row => {
     const id = String(row[sIdIdx] || '').trim();
     if (!id) return;
-    const amt = parseFloat(String(row[sAmtIdx] || '0').replace(/,/g, '')) || 0;
+    const amt = parseAmount(row[sAmtIdx]);
     const client = sCliIdx > -1 ? String(row[sCliIdx] || '').trim() : '';
 
     if (salesMap.has(id)) {
@@ -127,7 +202,6 @@ export const runReconciliation = (
     }
   });
 
-  // Build Agent Map
   const agentMap = new Map<string, { amount: number; files: number[] }>();
   agentFiles.forEach((file, index) => {
     if (file.status !== 'loaded') return;
@@ -143,7 +217,7 @@ export const runReconciliation = (
         if (String(row[aSpIdx] || '').trim() !== targetSalesperson) return;
       }
 
-      const amt = parseFloat(String(row[aAmtIdx] || '0').replace(/,/g, '')) || 0;
+      const amt = parseAmount(row[aAmtIdx]);
 
       if (agentMap.has(id)) {
         const prev = agentMap.get(id)!;
@@ -155,7 +229,6 @@ export const runReconciliation = (
     });
   });
 
-  // Compare
   const discrepancies: Discrepancy[] = [];
   let totalChecked = 0;
   let matchCount = 0;

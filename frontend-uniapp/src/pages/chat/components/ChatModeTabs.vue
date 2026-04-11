@@ -3,21 +3,21 @@
 		<view class="mode-selector mode-selector-pill glass-panel">
 			<view
 				:class="['mode-tab', 'mode-btn', { active: modelValue === 'general', 'tab-active-general': modelValue === 'general' }]"
-				@tap="$emit('update:modelValue', 'general')"
+				@tap="emit('change', 'general')"
 			>
 				<text class="tab-text">全能助手</text>
 			</view>
 			<view class="tab-divider"></view>
 			<view
 				:class="['mode-tab', 'mode-btn', { active: modelValue === 'coach', 'tab-active-coach': modelValue === 'coach' }]"
-				@tap="$emit('update:modelValue', 'coach')"
+				@tap="emit('change', 'coach')"
 			>
 				<text class="tab-text">知识教练</text>
 			</view>
 			<view class="tab-divider"></view>
 			<view
 				:class="['mode-tab', 'mode-btn', { active: modelValue === 'expert', 'tab-active-expert': modelValue === 'expert' }]"
-				@tap="$emit('update:modelValue', 'expert')"
+				@tap="emit('change', 'expert')"
 			>
 				<text class="tab-text">专家指导</text>
 			</view>
@@ -33,7 +33,7 @@ defineProps({
 	}
 })
 
-defineEmits(['update:modelValue'])
+const emit = defineEmits(['change'])
 </script>
 
 <style scoped>
@@ -83,9 +83,11 @@ defineEmits(['update:modelValue'])
 .tab-active-general.active {
 	color: #2563eb;
 }
+
 .tab-active-coach.active {
 	color: #059669;
 }
+
 .tab-active-expert.active {
 	color: #7c3aed;
 }

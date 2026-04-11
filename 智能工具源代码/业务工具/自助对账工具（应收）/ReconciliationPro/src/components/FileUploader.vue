@@ -27,16 +27,25 @@ const handleFileSelect = async (file: any) => {
   emit('update:modelValue', { ...props.modelValue, ...result });
 };
 
+const handleSheetChange = async (sheetName: string) => {
+  if (!props.modelValue.rawFile) return;
+  const result = await processExcelFile(props.modelValue.rawFile, sheetName);
+  emit('update:modelValue', { ...props.modelValue, ...result });
+};
+
 const clearFile = () => {
   emit('update:modelValue', {
     id: props.modelValue.id,
     status: 'idle',
     data: [],
     headers: [],
+    sheets: [],
     name: '',
     headerIdx: 0,
     idCol: '',
-    amtCol: ''
+    amtCol: '',
+    currentSheet: '',
+    rawFile: undefined
   });
 };
 
@@ -114,30 +123,41 @@ const themeClasses = computed(() => {
 
       <!-- Config Grid -->
       <div class="grid grid-cols-2 gap-3">
+        <div v-if="(modelValue.sheets || []).length > 1" class="col-span-2 space-y-1.5">
+          <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Sheet</label>
+          <el-select
+            :model-value="modelValue.currentSheet"
+            size="small"
+            class="w-full"
+            @change="handleSheetChange"
+          >
+            <el-option v-for="sheet in modelValue.sheets" :key="sheet" :label="sheet" :value="sheet" />
+          </el-select>
+        </div>
         <div class="space-y-1.5">
           <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400">单号/编号列</label>
           <el-select v-model="modelValue.idCol" size="small" class="w-full">
-            <el-option v-for="h in modelValue.headers" :key="h" :label="h" :value="h" />
+            <el-option v-for="(h, idx) in modelValue.headers" :key="`${idx}-${h}`" :label="h" :value="h" />
           </el-select>
         </div>
         <div class="space-y-1.5">
           <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400">金额列</label>
           <el-select v-model="modelValue.amtCol" size="small" class="w-full">
-            <el-option v-for="h in modelValue.headers" :key="h" :label="h" :value="h" />
+            <el-option v-for="(h, idx) in modelValue.headers" :key="`${idx}-${h}`" :label="h" :value="h" />
           </el-select>
         </div>
         
         <div v-if="enableClientSelection" class="col-span-2 space-y-1.5">
           <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400">客户/来源列</label>
           <el-select v-model="modelValue.clientCol" size="small" class="w-full" clearable placeholder="可选：自动匹配客户">
-            <el-option v-for="h in modelValue.headers" :key="h" :label="h" :value="h" />
+            <el-option v-for="(h, idx) in modelValue.headers" :key="`${idx}-${h}`" :label="h" :value="h" />
           </el-select>
         </div>
 
         <div v-if="enableSalespersonSelection" class="col-span-2 space-y-1.5">
           <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400">业务员筛选列</label>
           <el-select v-model="modelValue.salespersonCol" size="small" class="w-full" clearable placeholder="可选：用于按业务员对账">
-            <el-option v-for="h in modelValue.headers" :key="h" :label="h" :value="h" />
+            <el-option v-for="(h, idx) in modelValue.headers" :key="`${idx}-${h}`" :label="h" :value="h" />
           </el-select>
         </div>
       </div>

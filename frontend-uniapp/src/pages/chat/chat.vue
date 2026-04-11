@@ -1,6 +1,6 @@
-<template>
+﻿<template>
 	<view :class="['app-layout', `${currentMode}-mode`]">
-		<!-- 娓氀嗙珶閺嶅繒绮嶆禒?-->
+		<!-- 婵炴挻鐨滈崱娆戝骄闂佸搫绉寸换鎺斿垝瀹ュ棛顩?-->
 		<ChatSidebar
 			:is-open="isSidebarOpen"
 			:sessions="sessions"
@@ -9,24 +9,28 @@
 			:user-initial="userInitial"
 			:is-admin="auth.isAdmin"
 			@close="isSidebarOpen = false"
-			@new-chat="startNewChatWithClose"
-			@switch-session="switchSessionWithClose"
-			@delete-session="deleteSession"
-			@open-settings="openSettings"
-			@go-to-admin="goToAdmin"
+			@newchat="startNewChatWithClose"
+			@switchsession="switchSessionWithClose"
+			@deletesession="deleteSession"
+			@opensettings="openSettings"
+			@gotoadmin="goToAdmin"
 			@logout="handleLogout"
 		/>
 
 		<view class="chat-container">
-			<!-- 妞ゅ爼鍎寸€佃壈鍩呮稉搴⒛佸蹇撳瀼閹?-->
+			<!-- 婵＄偑鍊曢悥濂稿磿鐎电硶鍋撴担鍐棈闁糕晛鎳忕粙澶嬫償閳锋稐绀侀锝堢疀閹惧磭鈧ジ鏌?-->
 			<view class="chat-nav nav-shell glass-panel">
 				<view class="nav-left">
 					<button class="nav-btn-hamburg" @tap="toggleSidebar">
-						<text class="nav-btn-text">{{ isSidebarOpen ? '鑴? : '閳? }}</text>
+						<text class="nav-btn-text">{{ isSidebarOpen ? '×' : '☰' }}</text>
 					</button>
 				</view>
-				<ChatModeTabs v-model="currentMode" @update:model-value="switchMode" />
+				<ChatModeTabs :model-value="currentMode" @change="switchMode" />
 				<view class="nav-right-spacer"></view>
+			</view>
+			<view class="mp-debug-panel">
+				<text class="mp-debug-line">m={{ messages.length }} ai={{ isGenerating ? 1 : 0 }}</text>
+				<text class="mp-debug-line">stage={{ debugStage }}</text>
 			</view>
 
 			<view class="main-body-wrapper">
@@ -37,7 +41,7 @@
 					:scroll-into-view="scrollIntoViewTarget"
 					scroll-with-animation
 				>
-					<!-- 濞嗐垼绻嬮悾宀勬桨 / 閺佹瑧绮岄懣婊冨礋 / 缁涙棃顣介悾宀勬桨 -->
+					<!-- 濠电偛妫庨崹鑲╂崲鐎ｎ喗鍋╃€光偓閸曨剚銆?/ 闂佽桨鐒﹂悷褏鍒掑畝鍕殨婵犲﹤鍟粈?/ 缂備焦绋掑Λ鍐€傛禒瀣仼鐎光偓閸曨剚銆?-->
 					<ChatWelcomeScreen
 						v-if="messages.length === 0"
 						:mode="currentMode"
@@ -51,18 +55,18 @@
 						:coach-regions="coachRegions"
 						:coach-personas="coachPersonas"
 						:coach-subjects="coachSubjects"
-						@preset-msg="presetMsg"
-						@switch-coach-entry="val => coachEntryMode = val"
-						@start-quiz-session="startCoachQuizSession"
-						@restart-quiz="restartCoachQuiz"
-						@select-quiz-answer="selectCoachQuizAnswer"
-						@next-quiz-question="nextCoachQuizQuestion"
-						@update:selected-region="val => selectedRegion = val"
-						@update:selected-persona="val => selectedPersona = val"
-						@start-duel="startRandomCoachDetailed"
+						@presetmsg="presetMsg"
+						@switchcoachentry="val => coachEntryMode = val"
+						@startquizsession="startCoachQuizSession"
+						@restartquiz="restartCoachQuiz"
+						@selectquizanswer="selectCoachQuizAnswer"
+						@nextquizquestion="nextCoachQuizQuestion"
+						@updateselectedregion="val => selectedRegion = val"
+						@updateselectedpersona="val => selectedPersona = val"
+						@startduel="startRandomCoachDetailed"
 					/>
 
-					<!-- 濞戝牊浼呴崚妤勩€?-->
+					<!-- 濠电偞鍨甸悧濠冨閸涙潙绀嗘俊銈呭閳?-->
 					<view v-else class="message-list">
 						<ChatMessageItem
 							v-for="msg in messages"
@@ -79,41 +83,78 @@
 					</view>
 				</scroll-view>
 
-				<!-- 閺佹瑧绮屽Ο鈥崇础鐎圭偞鍨幆鍛Г闂堛垺婢?-->
+				<!-- 闂佽桨鐒﹂悷褏鍒掔仦杞跨喖鍨惧畷鍥╊攨闁诲骸婀遍崑鐐哄垂椤掑嫬绠氶柛娑卞枛琚氶梻鍌氱墑閸ㄥ搫顭?-->
 				<CombatIntelPanel
 					v-if="currentMode === 'coach'"
 					:is-open="isIntelOpen"
-					v-model:is-collapsed="isIntelCollapsed"
+					:is-collapsed="isIntelCollapsed"
 					:current-scenario="currentScenario"
 					:selected-persona="selectedPersona"
 					:success-criteria="currentScenario ? formatSuccessCriteria(currentScenario.success_criteria) : []"
-					@update:is-open="val => isIntelOpen = val"
+					@setopen="val => isIntelOpen = val"
+					@setcollapsed="val => isIntelCollapsed = val"
 					@quit="requestCoachEvaluation"
 				/>
 			</view>
 
-			<!-- 鏉堟挸鍙嗗鍡楀隘閸?-->
-			<ChatMessageInput
-				v-if="!isCoachQuizView"
-				v-model:input-msg="inputMsg"
-				:selected-image="selectedImage"
-				:is-generating="isGenerating"
-				:placeholder="currentMode === 'coach' ? '娑撳骸顓归幋宄邦嚠鐠囨繀鑵?..' : '閸欐垿鈧焦绉烽幁顖樷偓浣虹煒鐠愬瓨鍨ㄩ幏鏍у弳閸ュ墽澧?..'"
-				@send="sendMessage"
-				@stop="stopGeneration"
-				@trigger-image-upload="triggerImageUpload"
-				@remove-image="removeImage"
-				@preview-image="previewImage"
-			/>
+			<!-- 底部输入区直接内联，绕开 mp-weixin 自定义组件事件不稳定问题 -->
+			<view v-if="!isCoachQuizView" class="chat-composer-shell">
+				<view class="mp-chat-footer">
+					<view class="mp-composer-shell" :class="{ 'has-image': selectedImage, 'is-focused': isComposerFocused }">
+						<view v-if="selectedImage" class="zen-image-preview-area">
+							<view class="image-preview-frame">
+								<image :src="selectedImage" mode="aspectFill" class="zen-image-preview" @tap="previewImage(selectedImage)" />
+							</view>
+							<view class="image-preview-meta">
+								<text class="image-preview-chip">已附图</text>
+							</view>
+							<view class="zen-remove-image-btn" @tap="removeImage">×</view>
+						</view>
+
+						<view class="mp-composer-main">
+							<view class="zen-upload-btn upload-pic-btn" :class="{ 'has-attachment': selectedImage }" @tap="triggerImageUpload">
+								<text class="upload-pic-mark">+</text>
+							</view>
+							<input
+								:value="inputMsg"
+								class="zen-input-box zen-input-box-mp mp-composer-input"
+								:cursor-spacing="24"
+								confirm-type="send"
+								:placeholder="composerPlaceholder"
+								@input="handleComposerInput"
+								@confirm="handleSendConfirm"
+								@focus="isComposerFocused = true"
+								@blur="isComposerFocused = false"
+							/>
+							<view
+								v-if="!isGenerating"
+								class="zen-send-btn mp-send-btn"
+								:class="{ active: composerCanSend }"
+								@tap="handleSendTap"
+							>
+								<image class="icon-send-image" src="/static/send.png" mode="aspectFit" />
+							</view>
+							<view v-else class="zen-send-btn mp-send-btn stop" @tap="stopGeneration">
+								<text class="icon-send">■</text>
+							</view>
+						</view>
+					</view>
+
+					<view v-if="selectedImage || isGenerating" class="composer-status-row">
+						<text v-if="selectedImage" class="composer-status-chip image-ready">已附加图片，可直接发送或继续补充文字</text>
+						<text v-if="isGenerating" class="composer-status-chip generating">正在生成回复，可点击停止按钮中断</text>
+					</view>
+				</view>
+			</view>
 		</view>
 
-		<!-- 鎼存洟鍎撮懣婊冨礋鐎佃壈顫?-->
+		<!-- 闁圭厧鐡ㄥú鐔煎磿閹绢喗鍤曟繝濠傚暙缁€瀣倵娴ｅ啫顥嶆い?-->
 		<view class="zen-bottom-nav">
 			<view class="zen-nav-item" :class="{ active: currentTab === 'chat' }" @tap="switchTab('chat')">
 				<view class="zen-nav-icon">
 					<image class="zen-nav-icon-image" :class="{ active: currentTab === 'chat' }" :src="CHAT_NAV_ICON_SRC" mode="aspectFit" />
 				</view>
-				<text class="zen-nav-label">鐎电鐦?/text>
+				<text class="zen-nav-label">鑱婂ぉ</text>
 			</view>
 
 			<view class="zen-nav-item" :class="{ active: currentTab === 'notice' }" @tap="switchTab('notice')">
@@ -121,40 +162,38 @@
 					<image class="zen-nav-icon-image" :class="{ active: currentTab === 'notice' }" :src="NOTICE_NAV_ICON_SRC" mode="aspectFit" />
 					<view v-if="hasUnreadNotices" class="zen-nav-badge"></view>
 				</view>
-				<text class="zen-nav-label">闁氨鐓?/text>
+				<text class="zen-nav-label">閫氱煡</text>
 			</view>
 
-			<view class="zen-nav-item" :class="{ active: currentTab === 'tools' }" @tap="switchTab('tools')">
-				<view class="zen-nav-icon">
-					<image class="zen-nav-icon-image" :class="{ active: currentTab === 'tools' }" :src="TOOLS_NAV_ICON_SRC" mode="aspectFit" />
-				</view>
-				<text class="zen-nav-label">瀹搞儱鍙?/text>
-			</view>
 
 			<view class="zen-nav-item" :class="{ active: currentTab === 'admin' }" @tap="switchTab('admin')">
 				<view class="zen-nav-icon">
 					<image class="zen-nav-icon-image" :class="{ active: currentTab === 'admin' }" :src="ADMIN_NAV_ICON_SRC" mode="aspectFit" />
 				</view>
-				<text class="zen-nav-label">缁狅紕鎮?/text>
+				<text class="zen-nav-label">鍚庡彴</text>
 			</view>
 		</view>
 
-		<!-- 瀵湱鐛ョ紒鍕 -->
+		<!-- 閻庢鍠栧﹢閬嶆偘閵壯呯＜闁告洦浜濋?-->
 		<ChatSettingsSheet
-			v-model:show="showSettings"
-			v-model:output-length="outputLength"
+			:show="showSettings"
+			:output-length="outputLength"
 			:pwd-form="pwdForm"
 			:pwd-loading="pwdLoading"
-			@update:pwd-form="({field, value}) => pwdForm[field] = value"
-			@submit-pwd="submitChangePassword"
+			@setshow="val => showSettings = val"
+			@setoutputlength="val => outputLength = val"
+			@updatepwdform="({field, value}) => pwdForm[field] = value"
+			@submitpwd="submitChangePassword"
 		/>
 
 		<ChatNoticeCenter
-			v-model:show="showNoticeCenter"
-			v-model:notice-tab="noticeTab"
+			:show="showNoticeCenter"
+			:notice-tab="noticeTab"
 			:loading="noticesLoading"
 			:notices="displayNotices"
-			@preview-notice="previewNotice"
+			@setshow="val => showNoticeCenter = val"
+			@setnoticetab="val => noticeTab = val"
+			@previewnotice="previewNotice"
 		/>
 	</view>
 </template>
@@ -170,28 +209,26 @@ import { captureClientEvent } from '@/utils/error-logger'
 import { createMpStreamChatController } from '@/utils/mp-stream-chat'
 import { createSseEventParser } from '@/utils/sse-parser'
 
-// 缂佸嫪娆㈢€电厧鍙?import ChatSidebar from './components/ChatSidebar.vue'
+import ChatSidebar from './components/ChatSidebar.vue'
 import ChatModeTabs from './components/ChatModeTabs.vue'
 import ChatWelcomeScreen from './components/ChatWelcomeScreen.vue'
 import ChatMessageItem from './components/ChatMessageItem.vue'
-import ChatMessageInput from './components/ChatMessageInput.vue'
 import CombatIntelPanel from './components/CombatIntelPanel.vue'
 import ChatSettingsSheet from './components/ChatSettingsSheet.vue'
 import ChatNoticeCenter from './components/ChatNoticeCenter.vue'
 
 const auth = useAuthStore()
-const XIAOYI_AVATAR_SRC = '/static/xiaoyi_transparent.png'
+const XIAOYI_AVATAR_SRC = '/static/xiaoyi_character.png'
 const CHAT_NAV_ICON_SRC = '/static/nav_chat.png'
 const NOTICE_NAV_ICON_SRC = '/static/nav_notice.png'
-const TOOLS_NAV_ICON_SRC = '/static/nav_tools.png'
 const ADMIN_NAV_ICON_SRC = '/static/nav_admin.png'
 const NOTICE_SEEN_STORAGE_KEY = 'zyd_notice_last_seen_id'
 
-// 閸╄櫣顢呴悩鑸碘偓?const messages = ref([])
+const messages = ref([])
 const inputMsg = ref('')
 const isGenerating = ref(false)
 const isSidebarOpen = ref(false)
-const welcomeMsg = ref('閹劎娈戦崗銊ャ亯閸婃瑦娅ら懗钘夊И閹?)
+const welcomeMsg = ref('你好，我是小易智能助手。')
 const currentMode = ref('general')
 const sessions = ref([])
 const currentSessionId = ref(null)
@@ -202,7 +239,7 @@ const currentTab = ref('chat')
 const scrollTop = ref(0)
 const scrollIntoViewTarget = ref('')
 
-// 閺佹瑧绮屽Ο鈥崇础閻樿埖鈧?const coachCases = ref([])
+const coachCases = ref([])
 const currentScenario = ref(null)
 const isIntelOpen = ref(false)
 const isIntelCollapsed = ref(false)
@@ -213,44 +250,52 @@ const coachQuizSession = ref(null)
 const coachQuizLoading = ref(false)
 const coachQuizError = ref('')
 
-// 闁氨鐓℃稉搴ゎ啎缂冾喚濮搁幀?const showNoticeCenter = ref(false)
+const showNoticeCenter = ref(false)
 const noticeTab = ref('current')
 const currentNotices = ref([])
 const noticeHistory = ref([])
 const noticesLoading = ref(false)
 const hasUnreadNotices = ref(false)
 const showSettings = ref(false)
-const outputLength = ref(uni.getStorageSync('zyd_output_length') || 'medium')
+const outputLength = ref('medium')
 const pwdForm = ref({ oldPwd: '', newPwd: '', confirmPwd: '' })
 const pwdLoading = ref(false)
 
-// 鐢悂鍣洪柊宥囩枂
+// 闁汇埄鍨遍幃鍌炲闯濞差亝鐓€鐎广儱娲ㄩ弸?
 const POST_LOGIN_FRESH_CHAT_KEY = 'zyd_post_login_fresh_chat'
 const LAST_CHAT_MODE_KEY = 'zyd_last_chat_mode'
 const coachRegions = [
-	{ name: '缂囧骸娴楃痪?, short: 'US', desc: '闁插秷顫嬪ù閿嬫烦閵嗕線鍋栫紓鏍т焊鏉╂嚎鈧浇顓哥拹褰掑櫢闁插繗顫夐崚娆嶁偓? },
-	{ name: '濞喲勫簥缁?, short: 'EU', desc: '闁插秷顫嬮柧浣规烦閵嗕箓AT 缁嬪骸褰块妴浣圭閸忓啿鎷板ú楣冣偓浣筋潐閸掓瑣鈧? },
+	{ name: '美国线路', short: 'US', desc: '偏远区域、附加费和时效沟通。' },
+	{ name: '欧洲线路', short: 'EU', desc: 'VAT、清关与签收异常处理。' },
 ]
 const coachPersonas = [
-	{ name: '鐞涘奔绗熺亸蹇曟', emoji: '棣冩', desc: '缁€鑹扮煀娴ｅ棔绗夐幊鍌濐攽閿涘矂娓剁憰浣风稑閻劋绗撴稉姘嫲閼版劕绺剧敮锔炬絻鐠ц埇鈧? },
-	{ name: '濮圭喐绠归懓浣瑰', emoji: '棣冩', desc: '鐠囨繃婀抽懓浣虹矊閵嗕礁甯囨禒閿嬫閺勬拝绱濋弴纾嬧偓鍐崣鎼存洜娲忛崪灞藉灲閺傤厹鈧? },
+	{ name: '强势议价型客户', emoji: 'A', desc: '关注价格，倾向压价与反复比价。' },
+	{ name: '流程合规型客户', emoji: 'B', desc: '关注规则、凭证和流程闭环。' },
 ]
 const coachSubjects = [
-	{ name: '閹躲儰鐜幏澶愭暜閹?, emoji: '棣冩尲', desc: '闂堛垹顕€广垺鍩涢崣宥咁槻閸樺鐜敍灞筋洤娴ｆ洖鐣ф担蹇撳焺濞戯妇鈹栭梻娣偓? },
-	{ name: '瀵倸鐖剁痪鐘垫倣婢跺嫮鎮?, emoji: '棣冩礉', desc: '婢跺嫮鎮婇弻銉╃崣閵嗕焦濮囩拠澶堚偓浣虹壃閹圭喎鎷板鎯邦嚖缁涘绱撶敮鎼佹６妫版ǜ鈧? },
-	{ name: '娑撴艾濮熼幒鎺楁祫', emoji: '棣冩敺', desc: '鐠囧棗鍩嗛梾鎰妞嬪酣娅撻妴浣规櫛閹扮喕鎻ｉ崪灞间繆閹垯绗夌€瑰本鏆ｇ拋銏犲礋閵? },
-	{ name: '闁厧宕熸稉搴ｆ樊閹?, emoji: '棣冾檪', desc: '閹恒劏绻橀幋鎰唉閿涘苯鎮撻弮鍓佹樊閹镐礁顓归幋铚備繆娴犺绗岄懞鍌氼殧閵? },
+	{ name: '报价谈判', emoji: '1', desc: '围绕报价、时效、附加费与方案推荐。' },
+	{ name: '异常处理', emoji: '2', desc: '围绕破损、延误、投诉与补偿沟通。' },
+	{ name: '催单跟进', emoji: '3', desc: '围绕方案确认、异议处理和成交推进。' },
+	{ name: '复盘总结', emoji: '4', desc: '围绕沟通复盘、风险识别和改进建议。' },
 ]
 
-// 鐠侊紕鐣荤仦鐐粹偓?const userInitial = computed(() => String(auth.userName || '閺?).trim().slice(0, 1).toUpperCase() || '閺?)
+const userInitial = computed(() => String(auth.userName || '易').trim().slice(0, 1).toUpperCase() || '易')
 const displayNotices = computed(() => (noticeTab.value === 'history' ? noticeHistory.value : currentNotices.value))
 const isCoachQuizView = computed(() => currentMode.value === 'coach' && coachEntryMode.value === 'quiz')
+const isComposerFocused = ref(false)
+const composerCanSend = computed(() => Boolean(String(inputMsg.value || '').trim() || selectedImage.value))
+const composerPlaceholder = computed(() => (
+	currentMode.value === 'coach'
+		? '和客户对练中...'
+		: (selectedImage.value ? '补充图片说明，或直接发送...' : '发送消息，支持粘贴或上传图片...')
+))
+const debugStage = ref('idle')
 const currentCoachQuizQuestion = computed(() => {
 	if (!coachQuizSession.value || coachQuizSession.value.completed) return null
 	return coachQuizSession.value.questions[coachQuizSession.value.currentIndex] || null
 })
 
-// 閺傝纭?- 閸╄櫣顢呯粻锛勬倞
+// 闂佸搫鍊介～澶屾兜?- 闂佺硶鏅炲▍锝夈€侀崨顖滀笉闁挎稑瀚崐?
 const toggleSidebar = () => isSidebarOpen.value = !isSidebarOpen.value
 const openSettings = () => { showSettings.value = true; isSidebarOpen.value = false; }
 const closeSettings = () => {
@@ -264,13 +309,12 @@ const goToAdmin = () => { isSidebarOpen.value = false; currentTab.value = 'admin
 
 const switchTab = (tab) => {
 	if (tab === 'notice') { openNoticeCenter(); return; }
-	if (tab === 'tools') { uni.showToast({ title: '瀹搞儱鍙挎稉顓炵妇瀵偓閸欐垳鑵?, icon: 'none' }); return; }
 	currentTab.value = tab
 	showNoticeCenter.value = false
 	if (tab === 'admin') goToAdmin()
 }
 
-// 閺傝纭?- 鐎电鐦界粻锛勬倞
+// 闂佸搫鍊介～澶屾兜?- 闁诲海鏁搁、濠囨儊閻ｅ瞼涓嶉柨娑樺閸?
 const startNewChat = ({ forceCreate = false } = {}) => {
 	if (currentMode.value === 'coach') resetCoachState()
 	if (!forceCreate && currentSessionId.value) {
@@ -280,7 +324,7 @@ const startNewChat = ({ forceCreate = false } = {}) => {
 		}
 	}
 	const newSessionId = `${Date.now()}`
-	sessions.value = [{ id: newSessionId, title: '閺傛澘顕拠?, messages: [] }, ...sessions.value].slice(0, 20)
+	sessions.value = [{ id: newSessionId, title: '新对话', messages: [] }, ...sessions.value].slice(0, 20)
 	currentSessionId.value = newSessionId
 	messages.value = []; inputMsg.value = ''; clearSelectedImage(); saveSessions()
 }
@@ -333,27 +377,78 @@ const switchMode = (mode) => {
 	switchSession(sessions.value[0].id)
 }
 
-// 閺傝纭?- 閸欐垿鈧椒绗屽ù浣哥础
+// 闂佸搫鍊介～澶屾兜?- 闂佸憡鐟﹂崹鍧楀焵椤戞寧顦风紒妤€鑻湁濞达絽鎽滅涵鈧?
 let requestTask = null
 const stopGeneration = () => { if (requestTask) requestTask.abort(); isGenerating.value = false; }
+const handleComposerInput = (event) => { inputMsg.value = event.detail?.value || '' }
+const logMpChatDebug = (stage, payload = {}) => {
+	debugStage.value = stage
+	try {
+		console.warn('[mp-chat-debug]', stage, JSON.stringify(payload))
+	} catch (error) {
+		console.warn('[mp-chat-debug]', stage, payload)
+	}
+}
+const handleSendTap = () => {
+	logMpChatDebug('tap-send', {
+		inputLength: String(inputMsg.value || '').length,
+		hasImage: Boolean(selectedImage.value),
+		isGenerating: isGenerating.value,
+		isImageUploading: isImageUploading.value,
+	})
+	sendMessage('tap')
+}
+const handleSendConfirm = () => {
+	logMpChatDebug('confirm-send', {
+		inputLength: String(inputMsg.value || '').length,
+		hasImage: Boolean(selectedImage.value),
+		isGenerating: isGenerating.value,
+		isImageUploading: isImageUploading.value,
+	})
+	sendMessage('confirm')
+}
 
-const sendMessage = async () => {
+const sendMessage = async (source = 'direct') => {
 	const content = inputMsg.value.trim()
-	if (!content && !selectedImage.value) return
-	if (isGenerating.value) return
+	logMpChatDebug('sendMessage-enter', {
+		source,
+		trimmedLength: content.length,
+		hasImage: Boolean(selectedImage.value),
+		isGenerating: isGenerating.value,
+		isImageUploading: isImageUploading.value,
+	})
+	if (!content && !selectedImage.value) {
+		logMpChatDebug('sendMessage-return', { reason: 'empty-message' })
+		return
+	}
+	if (isGenerating.value) {
+		logMpChatDebug('sendMessage-return', { reason: 'already-generating' })
+		return
+	}
 	if (selectedImage.value && isImageUploading.value) {
-		uni.showToast({ title: '閸ュ墽澧栨禒宥呮躬娑撳﹣绱舵稉?, icon: 'none' }); return
+		logMpChatDebug('sendMessage-return', { reason: 'image-uploading' })
+		uni.showToast({ title: '图片上传中，请稍候', icon: 'none' }); return
 	}
 
 	const currentImageUploadId = selectedImageUploadId.value || null
 	const currentImageBase64 = selectedImage.value && selectedImage.value.startsWith('data:')
 		? selectedImage.value.split(',')[1] : null
 
-    // 閺嬪嫬缂撶敮锕€浜告總鐣屾畱閸愬懎顔?    let finalContent = content
-    if (outputLength.value === 'short') finalContent = `[鏉堟挸鍤崑蹇撱偨:閺嬩浇鍤х划鍓х暆] ${content}`
-    else if (outputLength.value === 'long') finalContent = `[鏉堟挸鍤崑蹇撱偨:鐠囷箑鏁栫仦鏇炵磻] ${content}`
+	let finalContent = content
+	if (outputLength.value === 'short') finalContent = `[杈撳嚭鍋忓ソ:绠€娲乚 ${content}`
+	else if (outputLength.value === 'long') finalContent = `[杈撳嚭鍋忓ソ:璇︾粏] ${content}`
 
 	messages.value.push({ id: `user-${Date.now()}`, role: 'user', content, image: selectedImage.value })
+	logMpChatDebug('user-message-pushed', {
+		messagesCount: messages.value.length,
+		contentPreview: content.slice(0, 20),
+	})
+	nextTick(() => {
+		logMpChatDebug('after-next-tick', {
+			messagesCount: messages.value.length,
+			isGenerating: isGenerating.value,
+		})
+	})
 	inputMsg.value = ''; clearSelectedImage(); isGenerating.value = true
 	
 	const aiMsgId = `ai-${Date.now()}`
@@ -375,10 +470,18 @@ const sendMessage = async () => {
 			},
 		}),
 	})
+	logMpChatDebug('request-created', {
+		url: resolveApiUrl('/api/chat/stream'),
+		historyCount: messages.value.slice(0, -2).length,
+	})
 
 	try {
 		await requestTask.start({
+			onStatus: (statusCode) => {
+				logMpChatDebug('request-status', { statusCode })
+			},
 			onText: (text) => {
+				logMpChatDebug('request-chunk', { chunkLength: String(text || '').length })
 				const aiMsg = messages.value.find((item) => item.id === aiMsgId)
 				if (!aiMsg || !text) return
 				const parsed = sseParser.push(text)
@@ -394,16 +497,23 @@ const sendMessage = async () => {
 			},
 		})
 	} catch (error) {
+		logMpChatDebug('request-error', {
+			message: error?.message || 'unknown-error',
+		})
 		const aiMsg = messages.value.find((item) => item.id === aiMsgId)
-		if (aiMsg && !aiMsg.content) aiMsg.content = `鐠囬攱鐪版径杈Е閿?{error?.message || '缂冩垹绮跺鍌氱埗'}`
+		if (aiMsg && !aiMsg.content) aiMsg.content = `鍑洪敊浜嗭細${error?.message || '璇锋眰澶辫触'}`
 	} finally {
+		logMpChatDebug('sendMessage-finally', {
+			isGenerating: false,
+			requestTaskCleared: true,
+		})
 		const aiMsg = messages.value.find((item) => item.id === aiMsgId)
 		if (aiMsg) aiMsg.isTyping = false
 		isGenerating.value = false; requestTask = null; saveSessions()
 	}
 }
 
-// 閺傝纭?- 閺佹瑧绮岄柅鏄忕帆
+// 闂佸搫鍊介～澶屾兜?- 闂佽桨鐒﹂悷褏鍒掑畝鍕劵闁哄嫬绻掔敮?
 const startCoachQuizSession = async (count) => {
 	coachQuizLoading.value = true; coachQuizError.value = ''; coachQuizSession.value = null
 	try {
@@ -415,14 +525,14 @@ const startCoachQuizSession = async (count) => {
 				success: resolve, fail: reject,
 			})
 		})
-		if (response.statusCode >= 400) throw new Error('閼惧嘲褰囨０妯兼窗婢惰精瑙?)
+		if (response.statusCode >= 400) throw new Error('鑾峰彇棰樼洰澶辫触')
 		const questions = response.data?.questions || []
-		if (questions.length === 0) { coachQuizError.value = '閺嗗倹妫ら崣顖烆暯閻?; return }
+		if (questions.length === 0) { coachQuizError.value = '鏆傛棤鍙敤棰樼洰'; return }
 		coachQuizSession.value = {
 			currentIndex: 0, correctCount: 0, completed: false,
 			questions: questions.map(q => ({ ...q, selectedAnswer: '', isCorrect: false }))
 		}
-	} catch (e) { coachQuizError.value = '閹朵粙顣芥径杈Е閿涘矁顕柌宥堢槸' } finally { coachQuizLoading.value = false }
+	} catch (e) { coachQuizError.value = '棰樼洰鍔犺浇澶辫触锛岃绋嶅悗閲嶈瘯'; } finally { coachQuizLoading.value = false }
 }
 
 const selectCoachQuizAnswer = (key) => {
@@ -447,19 +557,24 @@ const resetCoachState = () => {
 const startRandomCoachDetailed = (subjectName) => {
 	if (!selectedRegion.value || !selectedPersona.value) return
 	coachEntryMode.value = 'duel'
-	const matches = coachCases.value.filter(c => (c.category || '').includes(selectedRegion.value) && (c.category || '').includes(selectedPersona.value.replace('鐞涘奔绗?,'')))
-	const randomCase = matches[Math.floor(Math.random() * matches.length)]
-	currentScenario.value = randomCase || { name: `${selectedRegion.value} 璺?${subjectName}`, success_criteria: ['鐠囧棗鍩嗙€广垺鍩涚拠澶嬬湴', '缂佹瑥鍤稉鎾茬瑹閺傝顢?] }
-	isIntelOpen.value = true; inputMsg.value = `閹存垼顩﹂幐鎴炲灛閵?{currentScenario.value.name}閵嗘垵婧€閺呯棎; sendMessage()
+	const matches = coachCases.value.filter((c) => (c.category || '').includes(selectedRegion.value))
+	const randomCase = matches.length ? matches[Math.floor(Math.random() * matches.length)] : null
+	currentScenario.value = randomCase || {
+		name: `${selectedRegion.value} 路 ${subjectName}`,
+		success_criteria: ['先确认客户诉求与约束条件', '给出两套可执行方案并解释差异'],
+	}
+	isIntelOpen.value = true
+	inputMsg.value = `我要挑战「${currentScenario.value.name}」场景`
+	sendMessage()
 }
 
 const requestCoachEvaluation = () => {
 	if (isGenerating.value || messages.value.length === 0) return
-	inputMsg.value = '閵嗘劗绮ㄩ弶鐔奉嚠缂佸啨鈧垼顕悳鏉挎躬閸掑洦宕叉稉琛♀偓婊嗙カ濞ｉ亶鏀㈤崬顔解偓鑽ゆ磧/闁叉垹澧濈€电厧绗€閳ユ繄娈戞禍楦款啎閿涘苯鐔€娴滃骸鍨伴幍宥囨畱閸忋劑鍎撮懕濠傘亯鐠佹澘缍嶆潏鎾冲毉缂佹挻鐎崠鏍仯鐠囧嫭濮ら崨濞库偓?
+	inputMsg.value = '【结束对练】请基于刚才的对话，从资深销售教练视角输出结构化点评。'
 	sendMessage()
 }
 
-// 閺傝纭?- 闁氨鐓℃稉搴ゎ啎缂?const openNoticeCenter = async () => {
+const openNoticeCenter = async () => {
 	showNoticeCenter.value = true; noticesLoading.value = true
 	try {
 		const [current, history] = await Promise.all([
@@ -474,19 +589,19 @@ const requestCoachEvaluation = () => {
 	} finally { noticesLoading.value = false }
 }
 
-const previewNotice = (n) => uni.showModal({ title: '闁氨鐓＄拠锔藉剰', content: n.content, showCancel: false })
+const previewNotice = (n) => uni.showModal({ title: '通知详情', content: n.content, showCancel: false })
 
 const submitChangePassword = async () => {
 	const { oldPwd, newPwd, confirmPwd } = pwdForm.value
-	if (!oldPwd || !newPwd || !confirmPwd) { uni.showToast({ title: '鐠囧嘲锝為崘娆忕暚閺?, icon: 'none' }); return }
+	if (!oldPwd || !newPwd || !confirmPwd) { uni.showToast({ title: '请完整填写密码字段', icon: 'none' }); return }
 	pwdLoading.value = true
 	const res = await auth.changePassword(oldPwd, newPwd)
 	pwdLoading.value = false
-	if (res?.success) { uni.showToast({ title: '娣囶喗鏁奸幋鎰' }); closeSettings() }
-	else uni.showToast({ title: res?.message || '婢惰精瑙?, icon: 'none' })
+	if (res?.success) { uni.showToast({ title: '密码修改成功' }); closeSettings() }
+	else uni.showToast({ title: res?.message || '密码修改失败', icon: 'none' })
 }
 
-// 閸ュ墽澧栨潏鍛И
+// 闂佹悶鍎辨晶鑺ユ櫠閺嶃劍缍囬柛娑卞幖琚?
 const clearSelectedImage = () => { selectedImage.value = null; selectedImageUploadId.value = ''; isImageUploading.value = false }
 const removeImage = () => clearSelectedImage()
 const previewImage = (url) => uni.previewImage({ urls: [url] })
@@ -501,7 +616,7 @@ const triggerImageUpload = () => {
 				const up = await uploadChatImage({ filePath, token: auth.token })
 				selectedImageUploadId.value = up.image_upload_id
 			} catch (e) {
-				// 闂勫秶楠囨担璺ㄦ暏 base64
+				// 闂傚倸瀚粔鑸殿殽閸ャ劍濯撮悹鎭掑妽閺?base64
 				uni.getFileSystemManager().readFile({
 					filePath, encoding: 'base64',
 					success: ({ data }) => { selectedImage.value = buildImageDataUrl(filePath, data) }
@@ -511,7 +626,7 @@ const triggerImageUpload = () => {
 	})
 }
 
-// 閼奉亜濮╁姘З鏉堝懎濮?const scrollToBottom = () => {
+const scrollToBottom = () => {
 	nextTick(() => {
 		scrollIntoViewTarget.value = ''
 		setTimeout(() => { scrollIntoViewTarget.value = 'chat-bottom-anchor' }, 50)
@@ -621,15 +736,18 @@ const renderMpMessageBlocks = (content) => {
 	return blocks
 }
 
-// 閻㈢喎鎳￠崨銊︽埂
+// 闂佹眹鍨婚崰搴ㄥ箠閿熺姴宸濋柕濠忛檮閸?
 onMounted(() => {
+	debugStage.value = 'mounted'
 	if (!auth.isAuthenticated) { uni.reLaunch({ url: '/pages/login/login' }); return }
+	// 寤惰繜璇诲彇 storage锛岄伩鍏?invoke too early 閿欒
+	try { outputLength.value = uni.getStorageSync('zyd_output_length') || 'medium' } catch (e) {}
 	const shouldFresh = uni.getStorageSync(POST_LOGIN_FRESH_CHAT_KEY) === '1'
 	if (shouldFresh) uni.removeStorageSync(POST_LOGIN_FRESH_CHAT_KEY)
 	const initialMode = shouldFresh ? 'general' : (uni.getStorageSync(LAST_CHAT_MODE_KEY) || 'general')
 	switchMode(initialMode)
 	
-	// 閸氬骸褰撮棃娆撶帛閸旂姾娴?	uni.request({ url: resolveApiUrl('/api/upload/coach-cases'), header: { Authorization: `Bearer ${auth.token}` }, success: r => coachCases.value = r.data || [] })
+	uni.request({ url: resolveApiUrl('/api/upload/coach-cases'), header: { Authorization: `Bearer ${auth.token}` }, success: r => coachCases.value = r.data || [] })
 	uni.request({ url: resolveApiUrl('/api/settings/public'), success: r => welcomeMsg.value = r.data?.ai_welcome_message || welcomeMsg.value })
 	uni.request({
 		url: resolveApiUrl('/api/notices/current'), header: { Authorization: `Bearer ${auth.token}` },
@@ -639,6 +757,13 @@ onMounted(() => {
 		}
 	})
 })
+
+watch(
+	() => messages.value.length,
+	(length) => {
+		logMpChatDebug('watch-messages-length', { length })
+	}
+)
 </script>
 
 <style>
@@ -666,9 +791,49 @@ onMounted(() => {
 	z-index: 10;
 }
 
-.nav-left { width: 40px; }
-.nav-btn-hamburg { background: transparent; border: none; font-size: 24px; padding: 0; }
-.nav-right-spacer { width: 40px; }
+.nav-left,
+.nav-right-spacer {
+	width: 40px;
+	flex-shrink: 0;
+}
+
+.nav-btn-hamburg {
+	width: 40px;
+	height: 40px;
+	padding: 0;
+	margin: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: transparent;
+	border: none;
+	line-height: 1;
+}
+
+.nav-btn-hamburg::after {
+	border: none;
+}
+
+.nav-btn-text {
+	font-size: 22px;
+	font-weight: 500;
+	color: #0f172a;
+	line-height: 1;
+}
+
+.mp-debug-panel {
+	padding: 4px 12px;
+	background: rgba(15, 23, 42, 0.78);
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.mp-debug-line {
+	font-size: 10px;
+	line-height: 1.4;
+	color: #f8fafc;
+}
 
 .main-body-wrapper {
 	flex: 1;
@@ -739,9 +904,173 @@ onMounted(() => {
 	margin-top: 2px;
 }
 
-/* 濡€崇础娑撳顣介懝?*/
+/* 濠碘槅鍨埀顒€纾涵鈧繛鎴炴尭椤兘銆傛禒瀣殞?*/
 .general-mode { --theme-color: #2563eb; }
 .coach-mode { --theme-color: #059669; }
 .expert-mode { --theme-color: #7c3aed; }
+
+.chat-composer-shell {
+	background: #ffffff;
+	border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.mp-chat-footer {
+	background: #ffffff;
+	padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
+}
+
+.mp-composer-shell {
+	background: #f1f5f9;
+	border-radius: 24px;
+	padding: 4px 8px;
+	transition: all 0.3s;
+	border: 1px solid transparent;
+}
+
+.mp-composer-shell.is-focused {
+	background: #ffffff;
+	border-color: #2563eb;
+	box-shadow: 0 4px 20px rgba(37, 99, 235, 0.08);
+}
+
+.mp-composer-main {
+	display: flex;
+	align-items: center;
+}
+
+.zen-input-box {
+	flex: 1;
+	min-height: 40px;
+	max-height: 120px;
+	padding: 8px 12px;
+	font-size: 15px;
+	color: #1e293b;
+}
+
+.zen-input-box-mp {
+	height: 40px;
+}
+
+.zen-upload-btn {
+	width: 36px;
+	height: 36px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #64748b;
+	flex-shrink: 0;
+}
+
+.upload-pic-mark {
+	font-size: 24px;
+	font-weight: 300;
+	line-height: 1;
+}
+
+.zen-send-btn {
+	width: 36px;
+	height: 36px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	transition: all 0.2s;
+	opacity: 0.5;
+	flex-shrink: 0;
+}
+
+.zen-send-btn.active {
+	opacity: 1;
+}
+
+.icon-send-image {
+	width: 24px;
+	height: 24px;
+}
+
+.icon-send {
+	font-size: 18px;
+	line-height: 1;
+}
+
+.zen-send-btn.stop {
+	opacity: 1;
+	color: #ef4444;
+}
+
+.zen-image-preview-area {
+	display: flex;
+	align-items: center;
+	padding: 8px;
+	background: #ffffff;
+	border-radius: 12px;
+	margin-bottom: 4px;
+}
+
+.image-preview-frame {
+	width: 48px;
+	height: 48px;
+	border-radius: 8px;
+	overflow: hidden;
+	margin-right: 12px;
+	border: 1px solid #e2e8f0;
+	flex-shrink: 0;
+}
+
+.zen-image-preview {
+	width: 100%;
+	height: 100%;
+}
+
+.image-preview-meta {
+	display: flex;
+	align-items: center;
+}
+
+.image-preview-chip {
+	font-size: 12px;
+	color: #64748b;
+	background: #f1f5f9;
+	padding: 2px 8px;
+	border-radius: 4px;
+}
+
+.zen-remove-image-btn {
+	margin-left: auto;
+	padding: 8px;
+	color: #94a3b8;
+	font-size: 18px;
+	line-height: 1;
+}
+
+.composer-status-row {
+	padding: 6px 12px 0;
+	display: flex;
+	flex-wrap: wrap;
+}
+
+.composer-status-chip {
+	font-size: 11px;
+	padding: 2px 8px;
+	border-radius: 10px;
+	margin-right: 8px;
+	margin-bottom: 4px;
+}
+
+.image-ready {
+	background: #ecfdf5;
+	color: #059669;
+}
+
+.generating {
+	background: #eff6ff;
+	color: #2563eb;
+	animation: breathe 2s infinite ease-in-out;
+}
+
+@keyframes breathe {
+	0%, 100% { opacity: 0.7; }
+	50% { opacity: 1; }
+}
 </style>
 

@@ -8,21 +8,34 @@ const source = fs.readFileSync(
 );
 
 const requiredSnippets = [
+  "const CHAT_NAV_ICON_SRC = '/static/nav_chat.png'",
   "const NOTICE_NAV_ICON_SRC = '/static/nav_notice.png'",
-  "const TOOLS_NAV_ICON_SRC = '/static/nav_tools.png'",
+  "const ADMIN_NAV_ICON_SRC = '/static/nav_admin.png'",
+  "@tap=\"switchTab('chat')\"",
   "@tap=\"switchTab('notice')\"",
-  "@tap=\"switchTab('tools')\"",
-  '<text class="zen-nav-label">通知</text>',
-  '<text class="zen-nav-label">工具</text>',
+  "@tap=\"switchTab('admin')\"",
   '.zen-bottom-nav {',
-  'justify-content: space-between;',
+  '.zen-nav-item {',
   'flex: 1;',
 ];
 
 const missing = requiredSnippets.filter((snippet) => !source.includes(snippet));
 
 if (missing.length > 0) {
-  console.error('chat.vue is missing the four-item bottom nav update:\n' + missing.join('\n'));
+  console.error('chat.vue is missing the three-item bottom nav baseline:\n' + missing.join('\n'));
+  process.exit(1);
+}
+
+const forbiddenSnippets = [
+  'TOOLS_NAV_ICON_SRC',
+  "switchTab('tools')",
+  "currentTab === 'tools'",
+];
+
+const unexpected = forbiddenSnippets.filter((snippet) => source.includes(snippet));
+
+if (unexpected.length > 0) {
+  console.error('chat.vue should not contain tools module snippets in mp nav:\n' + unexpected.join('\n'));
   process.exit(1);
 }
 
@@ -30,7 +43,6 @@ const requiredFiles = [
   path.resolve(projectRoot, 'src', 'static', 'nav_chat.png'),
   path.resolve(projectRoot, 'src', 'static', 'nav_admin.png'),
   path.resolve(projectRoot, 'src', 'static', 'nav_notice.png'),
-  path.resolve(projectRoot, 'src', 'static', 'nav_tools.png'),
 ];
 
 const missingFiles = requiredFiles.filter((file) => !fs.existsSync(file));

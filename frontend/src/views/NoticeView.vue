@@ -4,13 +4,7 @@
       <div class="header-main">
         <div class="header-left">
           <router-link to="/admin" class="back-link">← 返回后台</router-link>
-          <h1>重要通知管理</h1>
-        </div>
-        <div class="header-right">
-          <button class="btn-primary notice-btn" :disabled="!noticeContent.trim() || noticeSending" @click="sendNotice">
-            <span v-if="noticeSending">发布中...</span>
-            <span v-else>发布新通知</span>
-          </button>
+          <h1>重要通知与行业资讯管理</h1>
         </div>
       </div>
     </header>
@@ -19,25 +13,31 @@
       <section class="notice-input-section glass-panel">
         <div class="section-header">
           <IconBell class="icon-lg text-orange" />
-          <h2>发布新通知</h2>
+          <h2>发布重要通知</h2>
         </div>
-        <p class="section-desc">请输入需要向全体成员展示的内容，发布后将立即出现在“小易助手”的通知模块中。</p>
-        
-        <textarea 
-          v-model="noticeContent" 
-          placeholder="请输入通知的具体内容..." 
+        <p class="section-desc">发布后将出现在“小易助手”重要通知窗口。</p>
+
+        <textarea
+          v-model="noticeContent"
+          placeholder="请输入通知的具体内容..."
           class="notice-textarea"
-          rows="6"
+          rows="5"
         ></textarea>
+        <div class="section-action">
+          <button class="btn-primary notice-btn" :disabled="!noticeContent.trim() || noticeSending" @click="sendNotice">
+            <span v-if="noticeSending">发布中...</span>
+            <span v-else>发布通知</span>
+          </button>
+        </div>
       </section>
 
       <section class="notice-history-section glass-panel">
         <div class="section-header">
           <IconHistory class="icon-lg text-blue" />
-          <h2>历史通知记录清单</h2>
+          <h2>历史通知记录</h2>
         </div>
-        
-        <div v-if="loading" class="notice-loading">正在读取历史记录...</div>
+
+        <div v-if="loadingNotices" class="notice-loading">正在读取历史记录...</div>
         <div v-else-if="historyNotices.length === 0" class="notice-empty">暂无历史通知</div>
         <div v-else class="notice-table-container">
           <table class="notice-table">
@@ -62,29 +62,97 @@
           </table>
         </div>
       </section>
+
+      <section class="notice-input-section glass-panel">
+        <div class="section-header">
+          <IconNewspaper class="icon-lg text-cyan" />
+          <h2>上传行业资讯</h2>
+        </div>
+        <p class="section-desc">上传后将出现在“行业资讯”窗口，列表仅展示发布时间与内容。</p>
+
+        <textarea
+          v-model="industryNewsContent"
+          placeholder="请输入行业资讯内容..."
+          class="notice-textarea"
+          rows="5"
+        ></textarea>
+        <div class="section-action">
+          <button class="btn-primary industry-btn" :disabled="!industryNewsContent.trim() || industryNewsSending" @click="sendIndustryNews">
+            <span v-if="industryNewsSending">上传中...</span>
+            <span v-else>上传资讯</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="notice-history-section glass-panel">
+        <div class="section-header">
+          <IconHistory class="icon-lg text-cyan" />
+          <h2>行业资讯记录</h2>
+        </div>
+
+        <div v-if="loadingIndustryNews" class="notice-loading">正在读取资讯记录...</div>
+        <div v-else-if="historyIndustryNews.length === 0" class="notice-empty">暂无行业资讯</div>
+        <div v-else class="notice-table-container">
+          <table class="notice-table">
+            <thead>
+              <tr>
+                <th>发布时间</th>
+                <th>资讯内容</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="n in historyIndustryNews" :key="n.id">
+                <td class="date-cell">{{ formatDate(n.created_at) }}</td>
+                <td class="content-cell">{{ n.content }}</td>
+                <td class="action-cell">
+                  <button class="btn-delete" @click="deleteIndustryNews(n.id)">🗑️ 删除</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import axios from 'axios'
-import { Bell as IconBell, History as IconHistory } from 'lucide-vue-next'
+import { Bell as IconBell, History as IconHistory, Newspaper as IconNewspaper } from 'lucide-vue-next'
 
 const noticeContent = ref('')
 const noticeSending = ref(false)
 const historyNotices = ref([])
-const loading = ref(true)
+const loadingNotices = ref(true)
+
+const industryNewsContent = ref('')
+const industryNewsSending = ref(false)
+const historyIndustryNews = ref([])
+const loadingIndustryNews = ref(true)
 
 const fetchHistoryNotices = async () => {
-  loading.value = true
+  loadingNotices.value = true
   try {
     const res = await axios.get('/api/notices/history')
-    historyNotices.value = res.data
+    historyNotices.value = Array.isArray(res.data) ? res.data : []
   } catch (err) {
     console.error('Failed to fetch notices:', err)
   } finally {
-    loading.value = false
+    loadingNotices.value = false
+  }
+}
+
+const fetchHistoryIndustryNews = async () => {
+  loadingIndustryNews.value = true
+  try {
+    const res = await axios.get('/api/industry-news/history')
+    historyIndustryNews.value = Array.isArray(res.data) ? res.data : []
+  } catch (err) {
+    console.error('Failed to fetch industry news:', err)
+  } finally {
+    loadingIndustryNews.value = false
   }
 }
 
@@ -94,7 +162,7 @@ const sendNotice = async () => {
   try {
     await axios.post('/api/notices/', { content: noticeContent.value })
     noticeContent.value = ''
-    fetchHistoryNotices()
+    await fetchHistoryNotices()
     alert('通知发布成功！')
   } catch (err) {
     alert(`发布失败: ${err.response?.data?.detail || err.message}`)
@@ -103,11 +171,36 @@ const sendNotice = async () => {
   }
 }
 
+const sendIndustryNews = async () => {
+  if (!industryNewsContent.value.trim()) return
+  industryNewsSending.value = true
+  try {
+    await axios.post('/api/industry-news/', { content: industryNewsContent.value })
+    industryNewsContent.value = ''
+    await fetchHistoryIndustryNews()
+    alert('行业资讯上传成功！')
+  } catch (err) {
+    alert(`上传失败: ${err.response?.data?.detail || err.message}`)
+  } finally {
+    industryNewsSending.value = false
+  }
+}
+
 const deleteNotice = async (id) => {
-  if (!confirm('确定要永久删除这条记录吗？')) return
+  if (!confirm('确定要永久删除这条通知吗？')) return
   try {
     await axios.delete(`/api/notices/${id}`)
-    fetchHistoryNotices()
+    await fetchHistoryNotices()
+  } catch (err) {
+    alert(`删除失败: ${err.message}`)
+  }
+}
+
+const deleteIndustryNews = async (id) => {
+  if (!confirm('确定要永久删除这条资讯吗？')) return
+  try {
+    await axios.delete(`/api/industry-news/${id}`)
+    await fetchHistoryIndustryNews()
   } catch (err) {
     alert(`删除失败: ${err.message}`)
   }
@@ -129,7 +222,10 @@ const formatDate = (dateStr) => {
     .replace(/\//g, '-')
 }
 
-onMounted(fetchHistoryNotices)
+onMounted(() => {
+  fetchHistoryNotices()
+  fetchHistoryIndustryNews()
+})
 </script>
 
 <style scoped>
@@ -167,7 +263,7 @@ onMounted(fetchHistoryNotices)
 .notice-content {
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 24px;
 }
 
 .section-header {
@@ -184,6 +280,7 @@ onMounted(fetchHistoryNotices)
 
 .text-orange { color: #f97316; }
 .text-blue { color: #3b82f6; }
+.text-cyan { color: #0891b2; }
 
 .section-desc {
   color: var(--text-secondary);
@@ -208,8 +305,12 @@ onMounted(fetchHistoryNotices)
   border-color: var(--accent-color);
 }
 
+.section-action {
+  margin-top: 14px;
+}
+
 .notice-input-section, .notice-history-section {
-  padding: 32px;
+  padding: 28px;
 }
 
 .notice-loading, .notice-empty {
@@ -262,7 +363,7 @@ onMounted(fetchHistoryNotices)
 }
 
 .action-cell {
-  width: 100px;
+  width: 120px;
   text-align: right;
 }
 
@@ -277,6 +378,10 @@ onMounted(fetchHistoryNotices)
 
 .notice-btn {
   background: linear-gradient(135deg, #f97316 0%, #fb923c 100%);
+}
+
+.industry-btn {
+  background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%);
 }
 
 .btn-delete {
@@ -295,4 +400,3 @@ onMounted(fetchHistoryNotices)
   color: white;
 }
 </style>
-

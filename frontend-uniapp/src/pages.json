@@ -1,5 +1,12 @@
-{
+﻿{
   "pages": [
+    {
+      "path": "pages/boot/boot",
+      "style": {
+        "navigationBarTitleText": "启动诊断",
+        "navigationStyle": "custom"
+      }
+    },
     {
       "path": "pages/login/login",
       "style": {

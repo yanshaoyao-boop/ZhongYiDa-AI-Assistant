@@ -1,0 +1,90 @@
+﻿{
+  "groups": [
+    {
+      "key": "business",
+      "title": "业务工具",
+      "tools": [
+        {
+          "slug": "hepiao",
+          "title": "合票工具",
+          "summary": "保留原始 UI 的 FBA 合票工具。",
+          "runtime_path": "/api/tools/runtime/business/hepiao/",
+          "kind": "html_file",
+          "source": {
+            "resolver": "asset",
+            "parts": ["业务工具", "合票工具", "dist", "index.html"]
+          },
+          "version": "2026.04.10",
+          "updated_at": "2026-04-10",
+          "changelog": "同步最新工具入口配置。",
+          "is_new": false
+        },
+        {
+          "slug": "self-order-form",
+          "title": "自助下单表工具",
+          "summary": "保留原始 UI 的自助下单表工具。",
+          "runtime_path": "/api/tools/runtime/business/self-order-form/",
+          "kind": "directory",
+          "source": {
+            "resolver": "self_order_form_dist"
+          },
+          "version": "2026.04.10",
+          "updated_at": "2026-04-10",
+          "changelog": "同步最新工具入口配置。",
+          "is_new": false
+        },
+        {
+          "slug": "reconciliation",
+          "title": "自助对账工具（应收）",
+          "summary": "保留原始 UI 的自助对账工具。",
+          "runtime_path": "/api/tools/runtime/business/reconciliation/",
+          "kind": "directory",
+          "source": {
+            "resolver": "asset",
+            "parts": ["业务工具", "自助对账工具（应收）", "ReconciliationPro", "dist"]
+          },
+          "version": "2026.04.10",
+          "updated_at": "2026-04-10",
+          "changelog": "同步最新工具入口配置。",
+          "is_new": false
+        }
+      ]
+    },
+    {
+      "key": "admin",
+      "title": "行政工具",
+      "tools": [
+        {
+          "slug": "order-sheet-transform",
+          "title": "下单表转换工具（客服专用）",
+          "summary": "保留原始 UI 的客服下单表转换工具。",
+          "runtime_path": "/api/tools/runtime/admin/order-sheet-transform/",
+          "kind": "directory",
+          "source": {
+            "resolver": "asset",
+            "parts": ["行政工具", "下单表转换工具（客服专用）", "excel-transformer", "dist"]
+          },
+          "version": "2026.04.10",
+          "updated_at": "2026-04-10",
+          "changelog": "同步最新工具入口配置。",
+          "is_new": false
+        },
+        {
+          "slug": "fist-transfer",
+          "title": "客服转单工具（Fist专用）",
+          "summary": "保留原始 UI 的客服转单工具。",
+          "runtime_path": "/api/tools/runtime/admin/fist-transfer/",
+          "kind": "html_file",
+          "source": {
+            "resolver": "asset",
+            "parts": ["行政工具", "客服转单工具（Fist专用）", "客服转单工具_Fist专用.html"]
+          },
+          "version": "2026.04.10",
+          "updated_at": "2026-04-10",
+          "changelog": "同步最新工具入口配置。",
+          "is_new": false
+        }
+      ]
+    }
+  ]
+}

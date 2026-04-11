@@ -5,16 +5,16 @@
 			<view class="mp-composer-shell" :class="{ 'has-image': selectedImage, 'is-focused': isFocused }">
 				<view v-if="selectedImage" class="zen-image-preview-area">
 					<view class="image-preview-frame">
-						<image :src="selectedImage" mode="aspectFill" class="zen-image-preview" @tap="$emit('previewImage', selectedImage)" />
+						<image :src="selectedImage" mode="aspectFill" class="zen-image-preview" @tap="$emit('previewimage', selectedImage)" />
 					</view>
 					<view class="image-preview-meta">
 						<text class="image-preview-chip">已附图</text>
 					</view>
-					<view class="zen-remove-image-btn" @tap="$emit('removeImage')">×</view>
+					<view class="zen-remove-image-btn" @tap="$emit('removeimage')">×</view>
 				</view>
 
 				<view class="mp-composer-main">
-					<view class="zen-upload-btn upload-pic-btn" :class="{ 'has-attachment': selectedImage }" @tap="$emit('triggerImageUpload')">
+					<view class="zen-upload-btn upload-pic-btn" :class="{ 'has-attachment': selectedImage }" @tap="$emit('triggerimageupload')">
 						<text class="upload-pic-mark">+</text>
 					</view>
 					<input
@@ -24,7 +24,7 @@
 						confirm-type="send"
 						:placeholder="selectedImage ? '补充图片说明，或直接发送...' : placeholder"
 						@input="handleInput"
-						@confirm="$emit('send')"
+						@confirm="$emit('submitmessage')"
 						@focus="isFocused = true"
 						@blur="isFocused = false"
 					/>
@@ -33,11 +33,11 @@
 						class="zen-send-btn mp-send-btn"
 						:class="{ active: canSend }"
 						:disabled="!canSend"
-						@tap="$emit('send')"
+						@tap="$emit('submitmessage')"
 					>
 						<image class="icon-send-image" :src="sendIcon" mode="aspectFit" />
 					</button>
-					<button v-else class="zen-send-btn mp-send-btn stop" @tap="$emit('stop')">
+					<button v-else class="zen-send-btn mp-send-btn stop" @tap="$emit('stopgeneration')">
 						<text class="icon-send">■</text>
 					</button>
 				</view>
@@ -56,17 +56,17 @@
 				<view class="zen-floating-pill" :class="{ 'has-image': selectedImage, 'is-focused': isFocused }">
 					<view v-if="selectedImage" class="zen-image-preview-area">
 						<view class="image-preview-frame">
-							<image :src="selectedImage" mode="aspectFill" class="zen-image-preview" @tap="$emit('previewImage', selectedImage)" />
+							<image :src="selectedImage" mode="aspectFill" class="zen-image-preview" @tap="$emit('previewimage', selectedImage)" />
 						</view>
 						<view class="image-preview-meta">
 							<text class="image-preview-chip">已附图</text>
 						</view>
-						<view class="zen-remove-image-btn" @tap="$emit('removeImage')">×</view>
+						<view class="zen-remove-image-btn" @tap="$emit('removeimage')">×</view>
 					</view>
 
 					<view class="zen-input-row">
-						<view class="zen-upload-btn upload-pic-btn" :class="{ 'has-attachment': selectedImage }" @tap="$emit('triggerImageUpload')">
-							<text class="upload-pic-mark">＋</text>
+						<view class="zen-upload-btn upload-pic-btn" :class="{ 'has-attachment': selectedImage }" @tap="$emit('triggerimageupload')">
+							<text class="upload-pic-mark">+</text>
 						</view>
 
 						<textarea
@@ -78,16 +78,16 @@
 							confirm-type="send"
 							:placeholder="selectedImage ? '补充图片说明，或直接发送...' : placeholder"
 							@input="handleInput"
-							@confirm="$emit('send')"
+							@confirm="$emit('submitmessage')"
 							@focus="isFocused = true"
 							@blur="isFocused = false"
 						></textarea>
 
 						<view class="zen-send-area">
-							<button v-if="!isGenerating" class="zen-send-btn" :class="{ active: canSend }" :disabled="!canSend" @tap="$emit('send')">
+							<button v-if="!isGenerating" class="zen-send-btn" :class="{ active: canSend }" :disabled="!canSend" @tap="$emit('submitmessage')">
 								<image class="icon-send-image" :src="sendIcon" mode="aspectFit" />
 							</button>
-							<button v-else class="zen-send-btn stop" @tap="$emit('stop')">
+							<button v-else class="zen-send-btn stop" @tap="$emit('stopgeneration')">
 								<text class="icon-send">■</text>
 							</button>
 						</view>
@@ -122,7 +122,7 @@ const props = defineProps({
 	},
 	placeholder: {
 		type: String,
-		default: '发送消息、粘贴或拖入图片...'
+		default: '发送消息，支持粘贴或上传图片...'
 	},
 	sendIcon: {
 		type: String,
@@ -130,14 +130,12 @@ const props = defineProps({
 	}
 })
 
-const emit = defineEmits(['update:inputMsg', 'send', 'stop', 'triggerImageUpload', 'removeImage', 'previewImage'])
-
+const emit = defineEmits(['inputchange', 'submitmessage', 'stopgeneration', 'triggerimageupload', 'removeimage', 'previewimage'])
 const isFocused = ref(false)
-
 const canSend = computed(() => Boolean(props.inputMsg.trim() || props.selectedImage))
 
-const handleInput = (e) => {
-	emit('update:inputMsg', e.detail.value)
+const handleInput = (event) => {
+	emit('inputchange', event.detail.value)
 }
 </script>
 
@@ -146,13 +144,15 @@ const handleInput = (e) => {
 	width: 100%;
 }
 
-.chat-footer, .mp-chat-footer {
+.chat-footer,
+.mp-chat-footer {
 	background: #ffffff;
 	border-top: 1px solid rgba(0, 0, 0, 0.05);
 	padding: 8px 16px env(safe-area-inset-bottom);
 }
 
-.mp-composer-shell, .zen-floating-pill {
+.mp-composer-shell,
+.zen-floating-pill {
 	background: #f1f5f9;
 	border-radius: 24px;
 	padding: 4px 8px;
@@ -160,13 +160,15 @@ const handleInput = (e) => {
 	border: 1px solid transparent;
 }
 
-.mp-composer-shell.is-focused, .zen-floating-pill.is-focused {
+.mp-composer-shell.is-focused,
+.zen-floating-pill.is-focused {
 	background: #ffffff;
 	border-color: #2563eb;
 	box-shadow: 0 4px 20px rgba(37, 99, 235, 0.08);
 }
 
-.mp-composer-main, .zen-input-row {
+.mp-composer-main,
+.zen-input-row {
 	display: flex;
 	align-items: center;
 }
@@ -205,6 +207,10 @@ const handleInput = (e) => {
 	padding: 0;
 	transition: all 0.2s;
 	opacity: 0.5;
+}
+
+.zen-send-btn::after {
+	border: none;
 }
 
 .zen-send-btn.active {

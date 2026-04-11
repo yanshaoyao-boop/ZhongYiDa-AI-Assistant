@@ -615,10 +615,13 @@
                                 row.commit();
                             }
                             
-                            // 补一下 B3 (用第一行数据填)
-                            const refKey = this.mapping['Reference ID'] || this.mapping['FBA编号'] || Object.values(this.mapping)[0];
-                            if (refKey && groupRows.length > 0) {
-                                ws.getCell('B3').value = groupRows[0][refKey];
+                            // B3: 填入 FBA编号 字段的第一行值
+                            const fbaKey = this.mapping['FBA编号'];
+                            if (fbaKey && groupRows.length > 0) {
+                                const fbaVal = groupRows[0][fbaKey];
+                                if (fbaVal !== undefined && fbaVal !== null) {
+                                    ws.getCell('B3').value = fbaVal;
+                                }
                             }
 
                             const buffer = await wb.xlsx.writeBuffer();

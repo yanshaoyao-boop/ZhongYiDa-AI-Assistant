@@ -60,7 +60,7 @@ const props = defineProps({
 	},
 	aiAvatar: {
 		type: String,
-		default: '/static/xiaoyi_transparent.png'
+		default: '/static/xiaoyi_character.png'
 	},
 	// 传入解析后的内容，避免在组件内重复解析
 	markdownNodes: {

@@ -87,13 +87,13 @@ export class Generator {
                 cellF3.value = total;
             }
 
-            // B3: Reference ID (from first row)
-            // find a key that looks like Reference ID or FBA Number
-            const refKey = mapping['Reference ID'] || mapping['FBA编号'] || Object.values(mapping)[0];
-            if (refKey && rows.length > 0) {
-                // @ts-ignore
-                const refVal = rows[0][refKey];
-                if (refVal) ws.getCell('B3').value = refVal;
+            // B3: FBA编号 (from first row of this group)
+            const fbaKey = mapping['FBA编号'];
+            if (fbaKey && rows.length > 0) {
+                const fbaVal = rows[0]![fbaKey];
+                if (fbaVal !== undefined && fbaVal !== null) {
+                    ws.getCell('B3').value = fbaVal;
+                }
             }
 
             // --- Fill Data Rows ---

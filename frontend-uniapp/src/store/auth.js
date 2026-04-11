@@ -142,8 +142,8 @@ axios.interceptors.response.use(
 
 export const useAuthStore = defineStore('auth', {
     state: () => ({
-        token: storage.get('token') || null,
-        user: normalizeUser(readStoredItem('user')),
+        token: null,
+        user: null,
         loading: false,
         error: null
     }),
@@ -312,10 +312,19 @@ export const useAuthStore = defineStore('auth', {
         },
 
         initAuth() {
+            // 延迟读取 storage，避免 invoke too early 错误
+            try {
+                const storedToken = storage.get('token')
+                const storedUser = readStoredItem('user')
+                if (storedToken) {
+                    this.token = storedToken
+                    axios.defaults.headers.common.Authorization = `Bearer ${storedToken}`
+                }
+                if (storedUser) {
+                    this.user = normalizeUser(storedUser)
+                }
+            } catch (e) {}
             this.user = normalizeUser(this.user)
-            if (this.token) {
-                axios.defaults.headers.common.Authorization = `Bearer ${this.token}`
-            }
         }
     }
 })

@@ -47,6 +47,12 @@
             <div class="tool-meta">
               <h3>{{ tool.title }}</h3>
               <p>{{ tool.summary }}</p>
+              <div class="tool-badges">
+                <span v-if="tool.is_new" class="badge-new">NEW</span>
+                <span v-if="tool.version" class="badge-meta">v{{ tool.version }}</span>
+                <span v-if="tool.updated_at" class="badge-meta">更新 {{ formatDate(tool.updated_at) }}</span>
+              </div>
+              <p v-if="tool.changelog" class="tool-changelog">{{ tool.changelog }}</p>
             </div>
             <button class="open-btn" @click="openTool(tool.runtime_path)">
               打开工具
@@ -69,6 +75,14 @@ const errorMessage = ref('')
 const totalTools = computed(() =>
   groups.value.reduce((count, group) => count + (group.tools?.length || 0), 0)
 )
+
+const formatDate = (value) => {
+  if (!value) return ''
+  const date = new Date(value)
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString('zh-CN')
+}
 
 const fetchTools = async () => {
   loading.value = true
@@ -272,6 +286,36 @@ onMounted(fetchTools)
 .tool-meta p {
   color: var(--text-secondary);
   font-size: 14px;
+}
+
+.tool-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.badge-new,
+.badge-meta {
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.badge-new {
+  background: #dc2626;
+  color: #fff;
+}
+
+.badge-meta {
+  background: #eef2ff;
+  color: #1e3a8a;
+}
+
+.tool-changelog {
+  margin-top: 2px;
+  font-size: 13px;
+  color: #475569;
 }
 
 .open-btn {

@@ -42,7 +42,9 @@
 				<WebChatModeSelector
 					v-model="currentMode"
 					:has-new-notice="hasNewNotice"
+					:has-new-industry-news="hasNewIndustryNews"
 					@open-notices="openNotices"
+					@open-industry-news="openIndustryNews"
 					@open-tools="openToolsCenter"
 					@update:model-value="switchMode"
 				/>
@@ -129,6 +131,12 @@
 			:loading="loadingNotices"
 			:notices="formatDisplayNotices"
 		/>
+		<WebIndustryNewsOverlay
+			v-model:show="showIndustryNews"
+			v-model:news-tab="industryNewsTab"
+			:loading="loadingIndustryNews"
+			:items="formatDisplayIndustryNews"
+		/>
 
 		<!-- 设置遮罩层 -->
 		<WebSettingsOverlay
@@ -170,6 +178,7 @@ import WebChatMessageItem from './chat/components/WebChatMessageItem.vue'
 import WebChatMessageInput from './chat/components/WebChatMessageInput.vue'
 import WebCombatIntelPanel from './chat/components/WebCombatIntelPanel.vue'
 import WebNoticeOverlay from './chat/components/WebNoticeOverlay.vue'
+import WebIndustryNewsOverlay from './chat/components/WebIndustryNewsOverlay.vue'
 import WebSettingsOverlay from './chat/components/WebSettingsOverlay.vue'
 import WebWelcomeScreen from './chat/components/WebWelcomeScreen.vue'
 
@@ -180,6 +189,7 @@ const XIAOYI_AVATAR_IMG = '/xiaoyi-avatar.png'
 const OUTPUT_LENGTH_KEY = 'zyd_output_length'
 const LAST_CHAT_MODE_KEY = 'zyd_last_chat_mode'
 const NOTICE_SEEN_STORAGE_KEY = 'last_read_notice_id'
+const INDUSTRY_NEWS_SEEN_STORAGE_KEY = 'last_read_industry_news_id'
 const NOTICE_CHECK_INTERVAL_MS = 60 * 1000
 const APP_VERSION = __APP_VERSION__
 const APP_BUILD_TIME = __APP_BUILD_TIME__
@@ -233,6 +243,11 @@ const noticeTab = ref('current')
 const allNotices = ref({ current: [], history: [] })
 const loadingNotices = ref(false)
 const hasNewNotice = ref(false)
+const showIndustryNews = ref(false)
+const industryNewsTab = ref('current')
+const allIndustryNews = ref({ current: [], history: [] })
+const loadingIndustryNews = ref(false)
+const hasNewIndustryNews = ref(false)
 const showSettings = ref(false)
 const outputLength = ref(localStorage.getItem(OUTPUT_LENGTH_KEY) || 'medium')
 const pwdForm = ref({ oldPwd: '', newPwd: '', confirmPwd: '' })
@@ -249,9 +264,18 @@ const markCurrentNoticesSeen = (currentNotices) => {
 	hasNewNotice.value = false
 }
 
+const markCurrentIndustryNewsSeen = (currentItems) => {
+	const latestId = getLatestNoticeId(currentItems)
+	if (latestId === null) {
+		return
+	}
+	localStorage.setItem(INDUSTRY_NEWS_SEEN_STORAGE_KEY, String(latestId))
+	hasNewIndustryNews.value = false
+}
+
 const refreshNoticeBadgeOnVisibility = () => {
 	if (typeof document === 'undefined' || document.visibilityState === 'visible') {
-		refreshNoticeBadge()
+		refreshAllBadges()
 	}
 }
 
@@ -264,6 +288,7 @@ const messageInputRef = ref(null)
 // 计算属性
 const inputPlaceholder = computed(() => currentMode.value === 'coach' ? '与客户对话中...' : '发送消息、粘贴或拖入图片...')
 const formatDisplayNotices = computed(() => noticeTab.value === 'history' ? allNotices.value.history : allNotices.value.current)
+const formatDisplayIndustryNews = computed(() => industryNewsTab.value === 'history' ? allIndustryNews.value.history : allIndustryNews.value.current)
 const versionBadge = computed(() => `v.${APP_VERSION}`)
 const versionTooltip = computed(() => {
 	const date = new Date(APP_BUILD_TIME)
@@ -568,8 +593,26 @@ const refreshNoticeBadge = async () => {
 	}
 }
 
+const refreshIndustryNewsBadge = async () => {
+	try {
+		const response = await axios.get('/api/industry-news/current')
+		const currentItems = Array.isArray(response.data) ? response.data : []
+		allIndustryNews.value.current = currentItems
+		const seenId = localStorage.getItem(INDUSTRY_NEWS_SEEN_STORAGE_KEY)
+		hasNewIndustryNews.value = hasUnreadNotices(currentItems, seenId)
+	} catch (error) {
+		console.error('Failed to refresh industry news badge:', error)
+	}
+}
+
+const refreshAllBadges = async () => {
+	await Promise.all([refreshNoticeBadge(), refreshIndustryNewsBadge()])
+}
+
 const openNotices = async () => {
-	showNotices.value = true; loadingNotices.value = true
+	showIndustryNews.value = false
+	showNotices.value = true
+	loadingNotices.value = true
 	try {
 		const [cur, hist] = await Promise.all([
 			axios.get('/api/notices/current'),
@@ -578,6 +621,22 @@ const openNotices = async () => {
 		allNotices.value = { current: cur.data, history: hist.data }
 		markCurrentNoticesSeen(cur.data)
 	} finally { loadingNotices.value = false }
+}
+
+const openIndustryNews = async () => {
+	showNotices.value = false
+	showIndustryNews.value = true
+	loadingIndustryNews.value = true
+	try {
+		const [cur, hist] = await Promise.all([
+			axios.get('/api/industry-news/current'),
+			axios.get('/api/industry-news/history')
+		])
+		allIndustryNews.value = { current: cur.data, history: hist.data }
+		markCurrentIndustryNewsSeen(cur.data)
+	} finally {
+		loadingIndustryNews.value = false
+	}
 }
 const openToolsCenter = () => { router.push('/tools') }
 
@@ -616,8 +675,8 @@ onMounted(() => {
 	loadSessionsByMode(currentMode.value)
 	if (sessions.value.length === 0) startNewChat()
 	else switchSession(sessions.value[0].id)
-	refreshNoticeBadge()
-	noticePollTimer = window.setInterval(refreshNoticeBadge, NOTICE_CHECK_INTERVAL_MS)
+	refreshAllBadges()
+	noticePollTimer = window.setInterval(refreshAllBadges, NOTICE_CHECK_INTERVAL_MS)
 	window.addEventListener('focus', refreshNoticeBadgeOnVisibility)
 	document.addEventListener('visibilitychange', refreshNoticeBadgeOnVisibility)
 
@@ -654,18 +713,20 @@ onUnmounted(() => {
 }
 
 .chat-nav {
-	height: 64px;
-	padding: 0 24px;
+	min-height: 96px;
+	height: auto;
+	padding: 10px 16px;
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
 	justify-content: space-between;
+	gap: 14px;
 	background: rgba(255, 255, 255, 0.82);
 	backdrop-filter: blur(20px);
 	border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 	z-index: 80;
 }
 
-.nav-left { display: flex; align-items: center; gap: 16px; }
+.nav-left { display: flex; align-items: center; gap: 16px; min-height: 36px; }
 .brand { display: flex; align-items: center; gap: 12px; }
 .company-logo { height: 32px; width: auto; }
 .brand-divider { color: #e2e8f0; font-size: 20px; }
@@ -716,10 +777,10 @@ onUnmounted(() => {
     .message-list { padding: 0 16px; }
     .chat-nav { 
         height: auto; 
-        padding: 16px; 
+        padding: 10px 12px; 
         flex-direction: column; 
         align-items: stretch; 
-        gap: 16px;
+        gap: 10px;
     }
     .nav-left { gap: 12px; justify-content: flex-start; }
     .company-logo { height: 26px; }

@@ -1,6 +1,13 @@
 <template>
 	<div class="mode-selector-wrapper">
 		<div class="mode-selector glass-panel">
+			<button class="mode-btn" @click="$emit('openIndustryNews')">
+				<div class="icon-wrapper">
+					<Newspaper size="18" class="icon" />
+					<span v-if="hasNewIndustryNews" class="notice-dot"></span>
+				</div>
+				<span class="btn-text">行业资讯</span>
+			</button>
 			<button class="mode-btn" @click="$emit('openNotices')">
 				<div class="icon-wrapper">
 					<AlertCircle size="18" class="icon" />
@@ -37,7 +44,7 @@
 </template>
 
 <script setup>
-import { AlertCircle, Zap, Target, FileQuestion } from 'lucide-vue-next'
+import { AlertCircle, Zap, Target, FileQuestion, Newspaper } from 'lucide-vue-next'
 
 defineProps({
 	modelValue: {
@@ -47,23 +54,27 @@ defineProps({
 	hasNewNotice: {
 		type: Boolean,
 		default: false
+	},
+	hasNewIndustryNews: {
+		type: Boolean,
+		default: false
 	}
 })
 
-defineEmits(['update:modelValue', 'openNotices', 'openTools'])
+defineEmits(['update:modelValue', 'openNotices', 'openTools', 'openIndustryNews'])
 </script>
 
 <style scoped>
 .mode-selector-wrapper {
 	display: flex;
-	align-items: center;
-	gap: 16px;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 10px;
+	width: min(480px, 100%);
 }
 
 @media screen and (max-width: 1024px) {
 	.mode-selector-wrapper {
-		flex-direction: column;
-		align-items: stretch;
 		gap: 12px;
 		width: 100%;
 	}
@@ -81,7 +92,7 @@ defineEmits(['update:modelValue', 'openNotices', 'openTools'])
 }
 
 .mode-btn {
-	padding: 8px 16px;
+	padding: 8px 12px;
 	border-radius: 8px;
 	display: flex;
 	align-items: center;
