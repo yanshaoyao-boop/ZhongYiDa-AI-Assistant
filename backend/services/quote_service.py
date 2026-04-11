@@ -175,6 +175,18 @@ def extract_quote_request_details(message: str) -> Dict[str, Any]:
     warehouse_codes = list(dict.fromkeys(WH_CODE_PATTERN.findall(normalized_message.upper())))
     weight_match = WEIGHT_PATTERN.search(normalized_message)
     volume_match = VOLUME_PATTERN.search(normalized_message)
+    if weight_match is None:
+        weight_match = re.search(
+            r"(\d+(?:\.\d+)?)\s*(?:KG|KGS|\u516c\u65a4|\u5343\u514b)",
+            normalized_message,
+            re.IGNORECASE,
+        )
+    if volume_match is None:
+        volume_match = re.search(
+            r"(\d+(?:\.\d+)?)\s*(?:CBM|\u7acb\u65b9|\u65b9)",
+            normalized_message,
+            re.IGNORECASE,
+        )
     return {
         "warehouse_codes": warehouse_codes,
         "weight_kg": float(weight_match.group(1)) if weight_match else None,
@@ -571,6 +583,20 @@ def _build_quote_table_rows(
                     "note": item["note"] or "-",
                 }
             )
+        if not rows:
+            for item in candidates:
+                rows.append(
+                    {
+                        "bucket_label": "当前命中",
+                        "channel": item["channel"],
+                        "transit_time": item["transit_time"] or "待确认",
+                        "tier_label": f"**{item['tier_label']}**",
+                        "unit_price": f"**¥{_format_price(item['unit_price'])}/KG**",
+                        "total_price": f"**¥{_format_price(item['total_price'])}**",
+                        "weight_tiers": _format_weight_tiers(item["price_system"], item["tier_label"], separator="<br>"),
+                        "note": item["note"] or "-",
+                    }
+                )
         return rows
 
     for item in candidates:
@@ -663,6 +689,8 @@ def _extract_destination_mentions(message: str, quote_records: List[Dict] | None
         destination = str(record.get("目的地区", "")).strip()
         if len(destination) < 2:
             continue
+        if re.fullmatch(r"\d+", destination):
+            continue
         if destination in normalized_message and destination not in destinations:
             destinations.append(destination)
     return destinations
@@ -748,7 +776,7 @@ def _build_reference_only_quote_response(
     address_probe_context: str,
     limit: int,
 ) -> str:
-    warehouse_label = "、".join(warehouse_codes)
+    warehouse_label = "、".join(warehouse_codes) if warehouse_codes else ("、".join(destination_mentions) if destination_mentions else "目标目的地")
     reference_candidates = sorted(
         candidates,
         key=lambda item: (item["total_price"], item["unit_price"], item["channel"]),
@@ -890,16 +918,30 @@ def build_deterministic_quote_response(
     weight_kg = details["weight_kg"]
     volume_cbm = details["volume_cbm"]
     origin_city = details["origin_city"]
+    destination_mentions = _extract_destination_mentions(message, quote_records)
+    explicit_agents = _extract_explicit_agents(message)
+    explicit_aliases = _build_agent_aliases(explicit_agents)
 
     if not warehouse_codes:
-        destination_only_response = _build_destination_quote_availability_response(
-            message,
-            quote_records,
-            limit=limit,
-        )
-        if destination_only_response:
-            return destination_only_response
-        return ""
+        if weight_kg is None and volume_cbm is None:
+            destination_only_response = _build_destination_quote_availability_response(
+                message,
+                quote_records,
+                limit=limit,
+            )
+            if destination_only_response:
+                return destination_only_response
+            return ""
+
+        scoped_records: list[Dict] = []
+        for record in quote_records or []:
+            destination = str(record.get("目的地区", "")).strip()
+            if destination_mentions and destination not in destination_mentions:
+                continue
+            if explicit_aliases and not _record_matches_agent(record, explicit_aliases):
+                continue
+            scoped_records.append(record)
+        quote_records = scoped_records or quote_records
 
     if weight_kg is None:
         return _build_full_tier_quote_response(
@@ -988,28 +1030,35 @@ def build_deterministic_quote_response(
         candidate["match_scope"] = str(record.get("_match_scope", "")).strip()
 
     if not candidates:
+        if not warehouse_codes:
+            destination_label = "、".join(destination_mentions) if destination_mentions else "目标目的地"
+            return (
+                f"结论：当前报价表未收录 **{destination_label}** 的可计算阶梯报价。"
+                "\n\n补充提醒：\n- 请补起运仓代码/起运区域，或给出更具体渠道，我再给你精确对客价。"
+            )
         return (
             f"结论：当前报价表未收录 **{'、'.join(warehouse_codes)}** 的精确仓库报价。"
             "\n\n补充提醒：\n- 这票先别直接对客报死价，建议找对应渠道确认仓库是否直达及附加费。"
         )
 
     exact_candidates = [item for item in candidates if item.get("warehouse_exact_match")]
-    # 不再激进删除非精确匹配，改为优先标记。
-    # 除非精确匹配数量已经很多了（比如 > 5个），才只留精确匹配
-    if exact_candidates and len(exact_candidates) >= 5:
-        candidates = exact_candidates
-    elif exact_candidates:
-        # 将精确匹配排到最前面，但保留其他候选以便“参考”
-        others = [item for item in candidates if not item.get("warehouse_exact_match")]
-        candidates = exact_candidates + others
-    else:
-        return _build_reference_only_quote_response(
-            warehouse_codes,
-            weight_kg,
-            candidates,
-            address_probe_context=address_probe_context,
-            limit=limit,
-        )
+    if warehouse_codes:
+        # 不再激进删除非精确匹配，改为优先标记。
+        # 除非精确匹配数量已经很多了（比如 > 5个），才只留精确匹配
+        if exact_candidates and len(exact_candidates) >= 5:
+            candidates = exact_candidates
+        elif exact_candidates:
+            # 将精确匹配排到最前面，但保留其他候选以便“参考”
+            others = [item for item in candidates if not item.get("warehouse_exact_match")]
+            candidates = exact_candidates + others
+        else:
+            return _build_reference_only_quote_response(
+                warehouse_codes,
+                weight_kg,
+                candidates,
+                address_probe_context=address_probe_context,
+                limit=limit,
+            )
 
     has_origin_hint = _has_origin_hint(message) or bool(origin_city)
     display_candidates = _select_display_candidates(
@@ -1027,6 +1076,12 @@ def build_deterministic_quote_response(
         origin_city=origin_city,
     )
     warehouse_label = "、".join(warehouse_codes)
+    if not warehouse_label:
+        warehouse_label = (
+            ("、".join(destination_mentions)).strip()
+            or str(best.get("destination_region", "")).strip()
+            or "目标目的地"
+        )
     table_rows = _build_quote_table_rows(display_candidates, has_origin_hint, origin_city)
     conclusion_scope = "当前优先参考明日之星渠道里" if prefers_mingrizhixing else "当前命中渠道里"
     if origin_city and best.get("origin_label"):

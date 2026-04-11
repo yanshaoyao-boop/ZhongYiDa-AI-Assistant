@@ -3,11 +3,30 @@ from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from sqlalchemy import text
+from pathlib import Path
 import uvicorn
 import os
+import json
 from routers import upload, chat, auth, staff, settings, chat_logs, client_logs, notices, tools, coach_quiz, industry_news
 
 load_dotenv()
+
+
+def resolve_app_version() -> str:
+    env_version = str(os.getenv("APP_VERSION", "")).strip()
+    if env_version:
+        return env_version
+
+    package_json_path = Path(__file__).resolve().parents[1] / "frontend" / "package.json"
+    try:
+        with package_json_path.open("r", encoding="utf-8") as f:
+            package_data = json.load(f)
+        return str(package_data.get("version", "0.0.0")).strip() or "0.0.0"
+    except Exception:
+        return "0.0.0"
+
+
+APP_VERSION = resolve_app_version()
 
 
 def ensure_legacy_schema(engine):
@@ -76,7 +95,7 @@ app.include_router(industry_news.router, prefix=API_PREFIX)
 
 @app.get("/")
 def read_root():
-    return {"message": "ZhongYiDa AI Assistant API is running"}
+    return {"message": "ZhongYiDa AI Assistant API is running", "version": APP_VERSION}
 
 
 
