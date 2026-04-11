@@ -47,6 +47,21 @@
           "updated_at": "2026-04-10",
           "changelog": "同步最新工具入口配置。",
           "is_new": false
+        },
+        {
+          "slug": "dropshipping-pricing",
+          "title": "一件代发费用计算",
+          "summary": "保留原始 UI 的一件代发费用计算工具。",
+          "runtime_path": "/api/tools/runtime/business/dropshipping-pricing/",
+          "kind": "directory",
+          "source": {
+            "resolver": "asset",
+            "parts": ["业务工具", "一件代发费用计算", "dist"]
+          },
+          "version": "2026.04.11",
+          "updated_at": "2026-04-11",
+          "changelog": "补齐业务工具目录配置，第4个工具上线。",
+          "is_new": true
         }
       ]
     },
