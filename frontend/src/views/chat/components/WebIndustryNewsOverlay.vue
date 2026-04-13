@@ -30,7 +30,7 @@
 								<span class="news-date">{{ formatDate(item.created_at) }}</span>
 								<span v-if="newsTab === 'current'" class="news-tag-new">NEW</span>
 							</div>
-							<p class="news-card-text">{{ item.content }}</p>
+							<div class="news-card-text markdown-body" v-html="renderNewsContent(item.content)"></div>
 						</div>
 					</div>
 				</div>
@@ -41,6 +41,7 @@
 
 <script setup>
 import { Inbox, Newspaper, X } from 'lucide-vue-next'
+import { renderMarkdown } from '@/utils/markdown'
 
 defineProps({
 	show: {
@@ -78,6 +79,15 @@ const formatDate = (value) => {
 	})
 		.format(date)
 		.replace(/\//g, '-')
+}
+
+const renderNewsContent = (text) => {
+	try {
+		return renderMarkdown(String(text ?? ''))
+	} catch (error) {
+		console.error('Failed to render industry news markdown:', error)
+		return String(text ?? '')
+	}
 }
 </script>
 
@@ -253,6 +263,21 @@ h3 {
 	font-size: 14px;
 	color: #334155;
 	line-height: 1.7;
-	white-space: pre-wrap;
+}
+
+.news-card-text :deep(p),
+.news-card-text :deep(ol),
+.news-card-text :deep(ul) {
+	margin: 0 0 8px;
+}
+
+.news-card-text :deep(li) {
+	margin: 2px 0;
+}
+
+.news-card-text :deep(p:last-child),
+.news-card-text :deep(ol:last-child),
+.news-card-text :deep(ul:last-child) {
+	margin-bottom: 0;
 }
 </style>

@@ -18,6 +18,7 @@ WEIGHT_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*(?:KG|公斤|千克)", re.IGNORE
 VOLUME_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*(?:CBM|立方)", re.IGNORECASE)
 KG_TIER_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*KG\+", re.IGNORECASE)
 CBM_TIER_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*CBM\+", re.IGNORECASE)
+ZIP_CODE_PATTERN = re.compile(r"\b\d{5}(?:-\d{4})?\b")
 
 AGENT_ALIASES: dict[str, tuple[str, ...]] = {
     "锦联": ("锦联", "金联"),
@@ -34,6 +35,26 @@ AGENT_ALIASES: dict[str, tuple[str, ...]] = {
 def _contains_any_keyword(text: str, keywords: tuple[str, ...] | list[str]) -> bool:
     normalized = str(text or "").lower()
     return any(str(keyword or "").lower() in normalized for keyword in keywords)
+
+
+def _has_destination_pricing_context(message: str, address_probe_context: str) -> bool:
+    normalized_message = str(message or "")
+    if ZIP_CODE_PATTERN.search(normalized_message):
+        return True
+    if str(address_probe_context or "").strip():
+        return True
+
+    location_hints = (
+        "地址",
+        "邮编",
+        "仓库",
+        "仓名",
+        "address",
+        "warehouse",
+        "zip",
+    )
+    normalized_lower = normalized_message.lower()
+    return any(hint in normalized_lower for hint in location_hints)
 
 
 def _extract_explicit_agents(query: str) -> list[str]:
@@ -937,6 +958,13 @@ def build_deterministic_quote_response(
     destination_mentions = _extract_destination_mentions(message, quote_records)
     explicit_agents = _extract_explicit_agents(message)
     explicit_aliases = _build_agent_aliases(explicit_agents)
+    has_destination_context = _has_destination_pricing_context(message, address_probe_context)
+
+    if (weight_kg is not None or volume_cbm is not None) and not warehouse_codes and not has_destination_context:
+        return (
+            "请提供派送的地址或是仓库名字。\n"
+            "补充后我才能给你准确报价和最优渠道建议。"
+        )
 
     if not warehouse_codes:
         if weight_kg is None and volume_cbm is None:

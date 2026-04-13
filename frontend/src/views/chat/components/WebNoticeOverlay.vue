@@ -30,7 +30,7 @@
 								<span class="notice-date">{{ formatDate(notice.created_at) }}</span>
 								<span v-if="noticeTab === 'current'" class="notice-tag-new">NEW</span>
 							</div>
-							<p class="notice-card-text">{{ notice.content }}</p>
+							<div class="notice-card-text markdown-body" v-html="renderNoticeContent(notice.content)"></div>
 							<div class="notice-card-footer">
 								<span class="notice-author">发布者: {{ notice.created_by_name || '管理中心' }}</span>
 							</div>
@@ -44,6 +44,7 @@
 
 <script setup>
 import { AlertCircle, X, Inbox } from 'lucide-vue-next'
+import { renderMarkdown } from '@/utils/markdown'
 
 const props = defineProps({
 	show: {
@@ -81,6 +82,15 @@ const formatDate = (value) => {
 	})
 		.format(date)
 		.replace(/\//g, '-')
+}
+
+const renderNoticeContent = (text) => {
+	try {
+		return renderMarkdown(String(text ?? ''))
+	} catch (error) {
+		console.error('Failed to render notice markdown:', error)
+		return String(text ?? '')
+	}
 }
 </script>
 
@@ -253,8 +263,23 @@ h3 {
 	font-size: 14px;
 	color: #334155;
 	line-height: 1.6;
-	white-space: pre-wrap;
 	margin-bottom: 16px;
+}
+
+.notice-card-text :deep(p),
+.notice-card-text :deep(ol),
+.notice-card-text :deep(ul) {
+	margin: 0 0 8px;
+}
+
+.notice-card-text :deep(li) {
+	margin: 2px 0;
+}
+
+.notice-card-text :deep(p:last-child),
+.notice-card-text :deep(ol:last-child),
+.notice-card-text :deep(ul:last-child) {
+	margin-bottom: 0;
 }
 
 .notice-card-footer {

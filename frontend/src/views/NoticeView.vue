@@ -53,7 +53,9 @@
               <tr v-for="n in historyNotices" :key="n.id">
                 <td class="date-cell">{{ formatDate(n.created_at) }}</td>
                 <td class="publisher-cell">{{ n.created_by_name || '系统发布' }}</td>
-                <td class="content-cell">{{ n.content }}</td>
+                <td class="content-cell">
+                  <div class="notice-markdown markdown-body" v-html="renderNoticeContent(n.content)"></div>
+                </td>
                 <td class="action-cell">
                   <button class="btn-delete" @click="deleteNotice(n.id)">🗑️ 删除</button>
                 </td>
@@ -104,7 +106,9 @@
             <tbody>
               <tr v-for="n in historyIndustryNews" :key="n.id">
                 <td class="date-cell">{{ formatDate(n.created_at) }}</td>
-                <td class="content-cell">{{ n.content }}</td>
+                <td class="content-cell">
+                  <div class="notice-markdown markdown-body" v-html="renderNoticeContent(n.content)"></div>
+                </td>
                 <td class="action-cell">
                   <button class="btn-delete" @click="deleteIndustryNews(n.id)">🗑️ 删除</button>
                 </td>
@@ -121,6 +125,7 @@
 import { onMounted, ref } from 'vue'
 import axios from 'axios'
 import { Bell as IconBell, History as IconHistory, Newspaper as IconNewspaper } from 'lucide-vue-next'
+import { renderMarkdown } from '@/utils/markdown'
 
 const noticeContent = ref('')
 const noticeSending = ref(false)
@@ -220,6 +225,15 @@ const formatDate = (dateStr) => {
   })
     .format(d)
     .replace(/\//g, '-')
+}
+
+const renderNoticeContent = (text) => {
+  try {
+    return renderMarkdown(String(text ?? ''))
+  } catch (error) {
+    console.error('Failed to render notice markdown:', error)
+    return String(text ?? '')
+  }
 }
 
 onMounted(() => {
@@ -369,7 +383,28 @@ onMounted(() => {
 .content-cell {
   color: var(--text-primary);
   line-height: 1.5;
-  white-space: pre-wrap;
+  min-width: 340px;
+}
+
+.notice-markdown {
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.notice-markdown :deep(p),
+.notice-markdown :deep(ol),
+.notice-markdown :deep(ul) {
+  margin: 0 0 8px;
+}
+
+.notice-markdown :deep(li) {
+  margin: 2px 0;
+}
+
+.notice-markdown :deep(p:last-child),
+.notice-markdown :deep(ol:last-child),
+.notice-markdown :deep(ul:last-child) {
+  margin-bottom: 0;
 }
 
 .action-cell {
