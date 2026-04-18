@@ -54,7 +54,7 @@
               </div>
               <p v-if="tool.changelog" class="tool-changelog">{{ tool.changelog }}</p>
             </div>
-            <button class="open-btn" @click="openTool(tool.runtime_path)">
+            <button class="open-btn" @click="openTool(tool)">
               打开工具
             </button>
           </div>
@@ -97,10 +97,16 @@ const fetchTools = async () => {
   }
 }
 
-const openTool = (runtimePath) => {
+const openTool = (tool) => {
+  const runtimePath = tool?.runtime_path
   if (!runtimePath) return
+
+  const versionToken = tool?.updated_at || tool?.version || Date.now().toString()
+  const separator = runtimePath.includes('?') ? '&' : '?'
+  const runtimeUrl = `${runtimePath}${separator}v=${encodeURIComponent(versionToken)}`
+
   const link = document.createElement('a')
-  link.href = runtimePath
+  link.href = runtimeUrl
   link.target = '_blank'
   link.rel = 'noopener noreferrer'
   document.body.appendChild(link)
