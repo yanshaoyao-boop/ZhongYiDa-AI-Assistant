@@ -58,6 +58,15 @@
         width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #FFFFFF; 
         padding: 12px 14px; font-family: inherit; font-size: 15px; transition: all 0.2s;
       }
+      input[type="number"]::-webkit-outer-spin-button,
+      input[type="number"]::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      input[type="number"] {
+        appearance: textfield;
+        -moz-appearance: textfield;
+      }
       .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
       
       .box-group-row {
@@ -245,7 +254,7 @@
           <div class="box-group-block">
             <div class="section-header">
               <div class="section-title">箱组录入</div>
-              <p>一个客户可以录多组箱子。每组独立录入箱数、每箱件数、单箱重量、箱规和每箱 SKU 数，再逐组汇总报价。</p>
+              <p>一个客户可以录多组箱子。每组独立录入箱数、每箱件数、单件实重、单件尺寸和每箱 SKU 数，再逐组汇总报价。</p>
             </div>
             <div class="section-toolbar">
               <div class="box-group-actions">
@@ -274,7 +283,7 @@
             <div id="serviceRows"></div>
             <button class="button-dashed-full" id="addServiceBtn" type="button">+ 添加增值服务</button>
           </div>
-          <div class="helper">说明：这里的长宽高和重量都按单箱录入。系统会先算每组的单箱重量 / 材积重，再按每箱件数折算到单件去命中 LB 价格档位；如果某组每箱 SKU 数 ≥ 2，则只对该组加收混 SKU 附加费。</div>
+          <div class="helper">说明：这里的长宽高和重量都按单件录入。系统会先对每组按单件实重与单件材积重取大值，再命中 LB 价格档位；箱数和每箱件数只用于汇总总件数与总费用。如果某组每箱 SKU 数 ≥ 2，则只对该组加收混 SKU 附加费。</div>
         </section>
 
         <section class="panel result">
@@ -423,8 +432,8 @@
               <input id="defaultSkuCount" type="number" min="1" step="1" value="1" />
             </div>
             <div class="field">
-              <label for="defaultWeightKg">默认单箱重量 (kg)</label>
-              <input id="defaultWeightKg" type="number" min="0" step="0.01" placeholder="可留空，缺重时会列入待补充" />
+              <label for="defaultPieceWeightKg">默认单件实重 (kg)</label>
+              <input id="defaultPieceWeightKg" type="number" min="0" step="0.01" placeholder="可留空，缺重时会列入待补充" />
             </div>
           </div>
           <div class="import-status" id="importStatus">请先选择一个 Excel 文件。</div>
@@ -466,10 +475,10 @@
         <div class="field"><label>箱数</label><input class="group-box-count" type="number" min="0" value="0" /></div>
         <div class="field"><label>每箱几件</label><input class="group-pieces-per-box" type="number" min="0" value="0" /></div>
         <div class="field"><label>每箱 SKU 数</label><input class="group-sku-count" type="number" min="0" value="0" /></div>
-        <div class="field"><label>单箱重量 (kg)</label><input class="group-weight-kg" type="number" min="0" step="0.01" value="0" /></div>
-        <div class="field"><label>箱长 (cm)</label><input class="group-length-cm" type="number" min="0" step="0.1" value="0" /></div>
-        <div class="field"><label>箱宽 (cm)</label><input class="group-width-cm" type="number" min="0" step="0.1" value="0" /></div>
-        <div class="field"><label>箱高 (cm)</label><input class="group-height-cm" type="number" min="0" step="0.1" value="0" /></div>
+        <div class="field"><label>单件实重 (kg)</label><input class="group-piece-weight-kg" type="number" min="0" step="0.01" value="0" /></div>
+        <div class="field"><label>单件长 (cm)</label><input class="group-length-cm" type="number" min="0" step="0.1" value="0" /></div>
+        <div class="field"><label>单件宽 (cm)</label><input class="group-width-cm" type="number" min="0" step="0.1" value="0" /></div>
+        <div class="field"><label>单件高 (cm)</label><input class="group-height-cm" type="number" min="0" step="0.1" value="0" /></div>
         <button class="button-secondary remove-box-group" type="button">删除</button>
       </div>
     </template>
@@ -666,7 +675,7 @@
         importSheetName: document.getElementById("importSheetName"),
         importMode: document.getElementById("importMode"),
         defaultSkuCount: document.getElementById("defaultSkuCount"),
-        defaultWeightKg: document.getElementById("defaultWeightKg"),
+        defaultPieceWeightKg: document.getElementById("defaultPieceWeightKg"),
         importStatus: document.getElementById("importStatus"),
         importMappingFields: document.getElementById("importMappingFields"),
         importValidCount: document.getElementById("importValidCount"),
@@ -732,7 +741,7 @@
       function getImportDefaults() {
         return {
           skuCount: toNullableNumber(elements.defaultSkuCount.value) ?? 1,
-          actualWeightKg: toNullableNumber(elements.defaultWeightKg.value)
+          actualWeightKg: toNullableNumber(elements.defaultPieceWeightKg.value)
         };
       }
       function getImportMappingFromControls() {
@@ -941,7 +950,7 @@
         node.querySelector(".group-box-count").value = defaults.boxCount ?? 0;
         node.querySelector(".group-pieces-per-box").value = defaults.piecesPerBox ?? 0;
         node.querySelector(".group-sku-count").value = defaults.skuCount ?? 0;
-        node.querySelector(".group-weight-kg").value = defaults.actualWeightKg ?? 0;
+        node.querySelector(".group-piece-weight-kg").value = defaults.actualWeightKg ?? 0;
         node.querySelector(".group-length-cm").value = defaults.lengthCm ?? 0;
         node.querySelector(".group-width-cm").value = defaults.widthCm ?? 0;
         node.querySelector(".group-height-cm").value = defaults.heightCm ?? 0;
@@ -962,7 +971,7 @@
           boxCount: toNumber(row.querySelector(".group-box-count").value, 0),
           piecesPerBox: toNumber(row.querySelector(".group-pieces-per-box").value, 0),
           skuCount: toNumber(row.querySelector(".group-sku-count").value, 0),
-          actualWeightKg: toNumber(row.querySelector(".group-weight-kg").value),
+          actualWeightKg: toNumber(row.querySelector(".group-piece-weight-kg").value),
           lengthCm: toNumber(row.querySelector(".group-length-cm").value),
           widthCm: toNumber(row.querySelector(".group-width-cm").value),
           heightCm: toNumber(row.querySelector(".group-height-cm").value)
@@ -996,18 +1005,14 @@
       }
       function calculateQuote(input) {
         const analyzedGroups = input.boxGroups.map((group) => {
-          const volumetricBoxWeightKg = (group.lengthCm * group.widthCm * group.heightCm) / 6000;
-          const chargeableBoxWeightKg = Math.max(group.actualWeightKg, volumetricBoxWeightKg);
-          const chargeablePieceWeightKg = group.piecesPerBox > 0 ? chargeableBoxWeightKg / group.piecesPerBox : 0;
+          const volumetricPieceWeightKg = (group.lengthCm * group.widthCm * group.heightCm) / 6000;
+          const chargeablePieceWeightKg = Math.max(group.actualWeightKg, volumetricPieceWeightKg);
           const chargeablePieceWeightLb = chargeablePieceWeightKg * LB_PER_KG;
           const pieceCount = group.boxCount * group.piecesPerBox;
-          const pieceVolumeCbm =
-            group.piecesPerBox > 0
-              ? ((group.lengthCm * group.widthCm * group.heightCm) / 1000000) / group.piecesPerBox
-              : 0;
+          const pieceVolumeCbm = (group.lengthCm * group.widthCm * group.heightCm) / 1000000;
           return {
             ...group,
-            volumetricBoxWeightKg,
+            volumetricPieceWeightKg,
             chargeablePieceWeightKg,
             chargeablePieceWeightLb,
             pieceCount,
@@ -1019,7 +1024,7 @@
           (max, group) => (group.chargeablePieceWeightLb > max.chargeablePieceWeightLb ? group : max),
           {
             actualWeightKg: 0,
-            volumetricBoxWeightKg: 0,
+            volumetricPieceWeightKg: 0,
             chargeablePieceWeightKg: 0,
             chargeablePieceWeightLb: 0,
             matchedBracket: "-"
@@ -1144,7 +1149,7 @@
             totalBoxes: input.totalBoxes,
             totalPieces: input.pieceCount,
             maxActualWeightKg: maxGroup.actualWeightKg,
-            maxVolumetricWeightKg: maxGroup.volumetricBoxWeightKg,
+            maxVolumetricWeightKg: maxGroup.volumetricPieceWeightKg,
             maxChargeableWeightKg: maxGroup.chargeablePieceWeightKg,
             maxChargeableWeightLb: maxGroup.chargeablePieceWeightLb,
             matchedBracket: maxGroup.matchedBracket
@@ -1532,7 +1537,7 @@
         loadImportSheet(elements.importSheetName.value);
       });
       elements.defaultSkuCount.addEventListener("input", refreshImportPreview);
-      elements.defaultWeightKg.addEventListener("input", refreshImportPreview);
+      elements.defaultPieceWeightKg.addEventListener("input", refreshImportPreview);
       elements.importMode.addEventListener("change", refreshImportPreview);
       elements.confirmImportBtn.addEventListener("click", applyImportedBoxGroups);
       elements.closeImportModalBtn.addEventListener("click", closeImportModal);

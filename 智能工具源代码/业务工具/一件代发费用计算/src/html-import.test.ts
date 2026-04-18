@@ -22,6 +22,34 @@ describe('standalone html import wiring', () => {
     expect(html.indexOf('<label>品名</label>')).toBeLessThan(html.indexOf('<label>箱数</label>'));
   });
 
+  it('uses single-piece actual weight in the box-group template instead of carton weight', () => {
+    const html = readFileSync(htmlPath, 'utf-8');
+
+    expect(html).toContain('class="group-piece-weight-kg"');
+    expect(html).toContain('单件实重 (kg)');
+    expect(html).not.toContain('class="group-weight-kg"');
+    expect(html).not.toContain('单箱重量 (kg)');
+  });
+
+  it('suppresses spinner controls for number inputs in the standalone html form', () => {
+    const html = readFileSync(htmlPath, 'utf-8');
+
+    expect(html).toContain('input[type="number"]::-webkit-outer-spin-button');
+    expect(html).toContain('input[type="number"]::-webkit-inner-spin-button');
+    expect(html).toContain('-webkit-appearance: none;');
+    expect(html).toContain('input[type="number"] {');
+    expect(html).toContain('appearance: textfield;');
+  });
+
+  it('calculates single-piece chargeable weight from piece actual weight and piece dimensions', () => {
+    const html = readFileSync(htmlPath, 'utf-8');
+
+    expect(html).toContain('const volumetricPieceWeightKg = (group.lengthCm * group.widthCm * group.heightCm) / 6000;');
+    expect(html).toContain('const chargeablePieceWeightKg = Math.max(group.actualWeightKg, volumetricPieceWeightKg);');
+    expect(html).not.toContain('const volumetricBoxWeightKg = (group.lengthCm * group.widthCm * group.heightCm) / 6000;');
+    expect(html).not.toContain('group.piecesPerBox > 0 ? chargeableBoxWeightKg / group.piecesPerBox : 0;');
+  });
+
   it('includes contact phone input and a dedicated printed contact line', () => {
     const html = readFileSync(htmlPath, 'utf-8');
 

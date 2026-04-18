@@ -8,11 +8,11 @@
     { key: 'piecesPerBox', label: '每箱件数', description: '优先映射；如只给总件数，会自动按箱数拆分。', required: true },
     { key: 'totalPieces', label: '总件数', description: '选填，可在缺少每箱件数时参与换算。' },
     { key: 'skuCount', label: '每箱 SKU 数', description: '选填；不映射时可用默认值补齐。' },
-    { key: 'actualWeightKg', label: '单箱重量 (KG)', description: '必填；不映射时可用默认值补齐。', required: true },
-    { key: 'dimensions', label: '组合尺寸列', description: '如 “62*47.5*59”，会自动拆成长宽高。', required: true },
-    { key: 'lengthCm', label: '箱长 (CM)', description: '如果客户已拆列，可单独映射。', required: true },
-    { key: 'widthCm', label: '箱宽 (CM)', description: '如果客户已拆列，可单独映射。', required: true },
-    { key: 'heightCm', label: '箱高 (CM)', description: '如果客户已拆列，可单独映射。', required: true }
+    { key: 'actualWeightKg', label: '单件实重 (KG)', description: '必填；不映射时可用默认值补齐。', required: true },
+    { key: 'dimensions', label: '组合尺寸列', description: '如 “62*47.5*59”，会自动拆成单件长宽高。', required: true },
+    { key: 'lengthCm', label: '单件长 (CM)', description: '如果客户已拆列，可单独映射。', required: true },
+    { key: 'widthCm', label: '单件宽 (CM)', description: '如果客户已拆列，可单独映射。', required: true },
+    { key: 'heightCm', label: '单件高 (CM)', description: '如果客户已拆列，可单独映射。', required: true }
   ];
 
   const FIELD_ALIASES = {
@@ -23,7 +23,7 @@
     piecesPerBox: ['单箱个数', '每箱个数', '每箱件数', '装箱数', 'pcs/ctn'],
     totalPieces: ['总个数', '总件数', '数量', 'totalpcs'],
     skuCount: ['每箱sku数', 'sku数', 'skuqty', 'skucount'],
-    actualWeightKg: ['单箱重量', '毛重', '净重', '重量', 'kg'],
+    actualWeightKg: ['单件实重', '单件重量', '单品重量', '毛重', '净重', '重量', 'kg'],
     dimensions: ['外箱尺寸（厘米）', '外箱尺寸', '箱规', '长宽高', '尺寸', 'cm'],
     lengthCm: ['箱长', '长'],
     widthCm: ['箱宽', '宽'],
@@ -75,10 +75,10 @@
 
     if (!boxGroup.boxCount || boxGroup.boxCount <= 0) issues.push('缺少箱数');
     if (!boxGroup.piecesPerBox || boxGroup.piecesPerBox <= 0) issues.push('缺少每箱件数');
-    if (boxGroup.actualWeightKg === null || boxGroup.actualWeightKg <= 0) issues.push('缺少单箱重量');
-    if (boxGroup.lengthCm === null || boxGroup.lengthCm <= 0) issues.push('缺少箱长');
-    if (boxGroup.widthCm === null || boxGroup.widthCm <= 0) issues.push('缺少箱宽');
-    if (boxGroup.heightCm === null || boxGroup.heightCm <= 0) issues.push('缺少箱高');
+    if (boxGroup.actualWeightKg === null || boxGroup.actualWeightKg <= 0) issues.push('缺少单件实重');
+    if (boxGroup.lengthCm === null || boxGroup.lengthCm <= 0) issues.push('缺少单件长');
+    if (boxGroup.widthCm === null || boxGroup.widthCm <= 0) issues.push('缺少单件宽');
+    if (boxGroup.heightCm === null || boxGroup.heightCm <= 0) issues.push('缺少单件高');
 
     return issues;
   }
