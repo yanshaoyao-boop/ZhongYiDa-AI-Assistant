@@ -58,9 +58,9 @@
             "resolver": "asset",
             "parts": ["业务工具", "一件代发费用计算", "美国一件代发报价计算器.html"]
           },
-          "version": "2026.04.23.1",
+          "version": "2026.04.23.2",
           "updated_at": "2026-04-23",
-          "changelog": "按指定 HTML 源文件重新同步一件代发费用计算网页版入口。",
+          "changelog": "按指定 HTML 版本重新发布，并禁止浏览器缓存旧工具页面。",
           "is_new": true
         }
       ]

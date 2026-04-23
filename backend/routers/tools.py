@@ -184,7 +184,12 @@ def _file_response(path: Path, media_type: str | None = None):
             media_type = guessed_type
         else:
             media_type = "application/octet-stream"
-    return FileResponse(path, media_type=media_type)
+    response = FileResponse(path, media_type=media_type)
+    if media_type == "text/html":
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 
 def _render_fist_html() -> HTMLResponse:
