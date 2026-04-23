@@ -53,14 +53,14 @@
           "title": "一件代发费用计算",
           "summary": "保留原始 UI 的一件代发费用计算工具。",
           "runtime_path": "/api/tools/runtime/business/dropshipping-pricing/",
-          "kind": "html_file",
+          "kind": "directory",
           "source": {
             "resolver": "asset",
-            "parts": ["业务工具", "一件代发费用计算", "美国一件代发报价计算器.html"]
+            "parts": ["业务工具", "一件代发费用计算", "dist"]
           },
-          "version": "2026.04.18",
-          "updated_at": "2026-04-18",
-          "changelog": "更新一件代发导入与计费逻辑，改为按单件实重和单件尺寸计算。",
+          "version": "2026.04.23",
+          "updated_at": "2026-04-23",
+          "changelog": "切换到最新版 dist 构建入口，同步一件代发费用计算最新 HTML 页面。",
           "is_new": true
         }
       ]
