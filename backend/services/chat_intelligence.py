@@ -63,6 +63,8 @@ ADMIN_ROLE_LOOKUP_KEYWORDS = (
 ADMIN_ROLE_DIRECTORY_EXPANSION = "行政部门 岗位职责 对接人 负责人 职位 职务 联系方式"
 ADMIN_ATTENDANCE_EXPANSION = "考勤制度 迟到 早退 漏打卡 未打卡 扣款 满勤 旷工 请假 薪酬 管理制度"
 ADMIN_REIMBURSEMENT_EXPANSION = "费用报销 报销制度 报销标准 报销流程 发票 审批 时效"
+ADMIN_FINANCE_INFO_EXPANSION = "银行账号 账户号码 开户银行 开户行 开票信息 联行号 统一信用代码 信用代码"
+ADMIN_WAREHOUSE_ADDRESS_EXPANSION = "仓库地址 仓库位置 收货地址 海外仓地址 义乌仓 泉州仓 厦门仓 东莞凤岗仓 福永仓 美西海外仓 美东海外仓"
 ORDER_SHEET_ROUTING_EXPANSION = "下单表 修改 下单表内容变更 对接人 客服主管 行政部门 岗位职责 联系方式"
 EXECUTIVE_PROFILE_EXPANSION = "集团简介 组织架构 高管 董事长 法人 核心管理层"
 QUOTE_HINT_KEYWORDS = ("报价", "价格", "多少钱", "费用", "卖价", "单价", "运费")
@@ -94,6 +96,22 @@ ADMIN_KNOWLEDGE_KEYWORDS = (
     "制度",
     "晋升",
     "调休",
+    "银行",
+    "银行账号",
+    "账号",
+    "账户",
+    "账户号码",
+    "开户行",
+    "开户银行",
+    "开票",
+    "开票信息",
+    "联行号",
+    "统一信用代码",
+    "信用代码",
+    "仓库地址",
+    "仓库位置",
+    "收货地址",
+    "海外仓地址",
     *ADMIN_ROLE_LOOKUP_KEYWORDS,
 )
 BUSINESS_KNOWLEDGE_KEYWORDS = (
@@ -124,6 +142,26 @@ ADMIN_REIMBURSEMENT_KEYWORDS = (
     "费用",
     "发票",
     "审批",
+)
+ADMIN_FINANCE_INFO_KEYWORDS = (
+    "银行",
+    "银行账号",
+    "账号",
+    "账户",
+    "账户号码",
+    "开户行",
+    "开户银行",
+    "开票",
+    "开票信息",
+    "联行号",
+    "统一信用代码",
+    "信用代码",
+)
+ADMIN_WAREHOUSE_ADDRESS_KEYWORDS = (
+    "仓库地址",
+    "仓库位置",
+    "收货地址",
+    "海外仓地址",
 )
 ORDER_SHEET_ROUTING_KEYWORDS = (
     "下单表",
@@ -218,6 +256,10 @@ def _count_keyword_matches(text: str, keywords: tuple[str, ...]) -> int:
     return sum(1 for keyword in keywords if _keyword_in_text(text, keyword, query_terms))
 
 
+def _count_direct_keyword_matches(text: str, keywords: tuple[str, ...]) -> int:
+    return sum(1 for keyword in keywords if keyword in text)
+
+
 def _dedupe_keep_order(items: Iterable[str]) -> list[str]:
     seen = set()
     result = []
@@ -268,6 +310,13 @@ def infer_knowledge_category(message: str) -> str | None:
 
     admin_score = _count_keyword_matches(normalized, ADMIN_KNOWLEDGE_KEYWORDS)
     biz_score = _count_keyword_matches(normalized, BUSINESS_KNOWLEDGE_KEYWORDS)
+    if _count_keyword_matches(normalized, ADMIN_FINANCE_INFO_KEYWORDS) > 0:
+        admin_score += 3
+    if (
+        _count_keyword_matches(normalized, ADMIN_WAREHOUSE_ADDRESS_KEYWORDS) > 0
+        or ("仓库" in normalized and "地址" in normalized)
+    ):
+        admin_score += 2
 
     if admin_score == 0 and biz_score == 0:
         return None
@@ -315,7 +364,17 @@ def build_document_search_query(
     elif _count_keyword_matches(current_message, ADMIN_ATTENDANCE_KEYWORDS) > 0:
         search_query = f"{search_query} {ADMIN_ATTENDANCE_EXPANSION}".strip()
 
-    if _count_keyword_matches(current_message, ORDER_SHEET_ROUTING_KEYWORDS) > 0:
+    if _count_keyword_matches(current_message, ADMIN_FINANCE_INFO_KEYWORDS) > 0:
+        search_query = f"{search_query} {ADMIN_FINANCE_INFO_EXPANSION}".strip()
+
+    if (
+        _count_keyword_matches(current_message, ADMIN_WAREHOUSE_ADDRESS_KEYWORDS) > 0
+        or ("仓库" in current_message and "地址" in current_message)
+    ):
+        search_query = f"{search_query} {ADMIN_WAREHOUSE_ADDRESS_EXPANSION}".strip()
+
+    # Order-sheet routing should only trigger on explicit mentions.
+    if _count_direct_keyword_matches(current_message, ORDER_SHEET_ROUTING_KEYWORDS) > 0:
         search_query = f"{search_query} {ORDER_SHEET_ROUTING_EXPANSION}".strip()
 
     if _count_keyword_matches(current_message, EXECUTIVE_PROFILE_KEYWORDS) > 0:
