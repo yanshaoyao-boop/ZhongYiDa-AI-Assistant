@@ -50,6 +50,19 @@ class ChatIntelligenceTestCase(unittest.TestCase):
         self.assertIn("公司简介", query)
         self.assertIn("核心业务", query)
 
+    def test_build_document_search_query_expands_oral_company_culture_prompt(self):
+        query = build_document_search_query(
+            message="公司的企业文化最新的有吗",
+            history=[],
+            company_intro_keywords=["公司", "介绍", "简介"],
+        )
+
+        self.assertIn("完整企业文化", query)
+        self.assertIn("当前生效", query)
+        self.assertIn("使命", query)
+        self.assertIn("愿景", query)
+        self.assertIn("价值观", query)
+
     def test_build_document_search_query_expands_finance_info_without_order_sheet_noise(self):
         query = build_document_search_query(
             message="公司的银行账号多少",
@@ -186,6 +199,10 @@ class ChatIntelligenceTestCase(unittest.TestCase):
 
     def test_infer_knowledge_category_returns_admin_for_warehouse_address_queries(self):
         self.assertEqual(infer_knowledge_category("公司的仓库地址多少"), "admin")
+
+    def test_infer_knowledge_category_returns_admin_for_company_culture_queries(self):
+        self.assertEqual(infer_knowledge_category("公司的企业文化最新的有吗"), "admin")
+        self.assertEqual(infer_knowledge_category("咱们公司的使命愿景价值观是什么"), "admin")
 
     def test_infer_knowledge_category_returns_biz_for_operation_queries(self):
         self.assertEqual(infer_knowledge_category("物流报价和仓库操作SOP"), "biz")

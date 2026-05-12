@@ -3,6 +3,7 @@ from typing import Iterable
 
 
 COMPANY_INTRO_EXPANSION = "公司简介 发展历程 核心业务 企业文化 优势特色"
+COMPANY_CULTURE_EXPANSION = "完整企业文化 当前生效 企业文化 公司文化 文化理念 使命 愿景 价值观"
 ASSISTANT_CAPABILITY_QUERY_MARKERS = (
     "你能做什么",
     "你会什么",
@@ -67,6 +68,14 @@ ADMIN_FINANCE_INFO_EXPANSION = "银行账号 账户号码 开户银行 开户行
 ADMIN_WAREHOUSE_ADDRESS_EXPANSION = "仓库地址 仓库位置 收货地址 海外仓地址 义乌仓 泉州仓 厦门仓 东莞凤岗仓 福永仓 美西海外仓 美东海外仓"
 ORDER_SHEET_ROUTING_EXPANSION = "下单表 修改 下单表内容变更 对接人 客服主管 行政部门 岗位职责 联系方式"
 EXECUTIVE_PROFILE_EXPANSION = "集团简介 组织架构 高管 董事长 法人 核心管理层"
+COMPANY_CULTURE_KEYWORDS = (
+    "企业文化",
+    "公司文化",
+    "文化理念",
+    "使命",
+    "愿景",
+    "价值观",
+)
 QUOTE_HINT_KEYWORDS = ("报价", "价格", "多少钱", "费用", "卖价", "单价", "运费")
 ADDRESS_HINT_KEYWORDS = ("偏远", "地址", "邮编", "仓库", "送吗", "哪里")
 REGION_KEYWORDS = ("美东", "美中", "美西", "欧洲", "英国", "加拿大", "澳洲", "华东", "华南")
@@ -112,6 +121,7 @@ ADMIN_KNOWLEDGE_KEYWORDS = (
     "仓库位置",
     "收货地址",
     "海外仓地址",
+    *COMPANY_CULTURE_KEYWORDS,
     *ADMIN_ROLE_LOOKUP_KEYWORDS,
 )
 BUSINESS_KNOWLEDGE_KEYWORDS = (
@@ -305,6 +315,9 @@ def _has_address_target(text: str) -> bool:
 
 def infer_knowledge_category(message: str) -> str | None:
     normalized = _normalize_text(message)
+    if _count_keyword_matches(normalized, COMPANY_CULTURE_KEYWORDS) > 0:
+        return "admin"
+
     if _count_keyword_matches(normalized, ADMIN_ROLE_LOOKUP_KEYWORDS) > 0:
         return "admin"
 
@@ -352,6 +365,9 @@ def build_document_search_query(
 
     if len(current_message) < 15 and any(keyword in current_message for keyword in company_intro_keywords):
         search_query = f"{search_query} {COMPANY_INTRO_EXPANSION}".strip()
+
+    if _count_keyword_matches(current_message, COMPANY_CULTURE_KEYWORDS) > 0:
+        search_query = f"{search_query} {COMPANY_CULTURE_EXPANSION}".strip()
 
     if any(keyword in current_message for keyword in ASSISTANT_CAPABILITY_QUERY_MARKERS):
         search_query = f"{search_query} {ASSISTANT_CAPABILITY_EXPANSION}".strip()

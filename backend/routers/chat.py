@@ -104,6 +104,7 @@ DEEPSEEK_ENDPOINT = os.getenv("DEEPSEEK_MODEL_ENDPOINT", DOUBAO_MODEL_ENDPOINT)
 # 公司介绍关键词 (用于触发 RAG 补全或详尽输出模式)
 COMPANY_INTRO_KEYWORDS = [
     "公司", "介绍", "简介", "概况", "你是谁", "你们是谁", "仲易达", "发展历程", "背景", 
+    "企业文化", "公司文化", "文化理念", "使命", "愿景", "价值观",
     "能做哪些事", "怎么用", "正确的使用", "功能", "用法", "技巧", "操作说明", "业务"
 ]
 
@@ -133,6 +134,12 @@ QUOTE_VENDOR_HINTS = [
 QUOTE_FOLLOWUP_HINTS = ["呢", "那", "还有", "怎么样", "啥情况", "可以吗", "有吗"]
 QUOTE_ASSISTANT_HINTS = ["报价", "价格", "报价表", "价格表", "仓库代码", "重量", "体积", "计费重", "KG", "CBM"]
 POLICY_ONLY_DOCUMENT_KEYWORDS = [
+    "企业文化",
+    "公司文化",
+    "文化理念",
+    "使命",
+    "愿景",
+    "价值观",
     "制度",
     "规定",
     "标准",
@@ -918,7 +925,7 @@ async def chat_stream(
             best_distance = 1.0
             similar_docs = []
             source_summary = ""
-            search_category = infer_knowledge_category(search_query)
+            search_category = infer_knowledge_category(request.message)
             
             enable_rag = get_config("ai_enable_rag", "true").lower() == "true"
             try:
@@ -1010,7 +1017,7 @@ async def chat_stream(
 2. **组合能力**：当用户问及“你能做什么”时，完整展示上述 6 项能力，并结合参考材料给出具体例子。
 {source_instruction}
 4. **歧义拦截**：遇到多义词先追问确认。
-5. **制度类问题仅基于内部资料**：涉及制度、报销、考勤、人事、审批、处罚、薪酬时，不联网、不用外部常识补齐。
+5. **内部事实仅基于内部资料**：涉及企业文化、使命、愿景、价值观、制度、报销、考勤、人事、审批、处罚、薪酬时，不联网、不用外部常识或模型记忆补齐。
 6. **缺资料就明确说明**：如未检索到内部材料，直接说明“未在公司已上传材料中找到依据”，不要编造。
 7. **适度情绪价值**：在不影响准确性的前提下，可先用 1 句自然共情开场（如“我来帮你快速定位这个问题”），语气像靠谱同事，不要生硬说教。
 

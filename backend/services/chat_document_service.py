@@ -11,6 +11,21 @@ DOCUMENT_CATEGORIES = ("admin", "biz")
 FALLBACK_SUPPORTED_EXTENSIONS = {".txt", ".md", ".doc", ".docx"}
 COMPANY_INTRO_QUERY_MARKERS = ("介绍", "简介", "概况", "发展历程", "核心业务", "企业文化", "优势特色")
 COMPANY_INTRO_SOURCE_BOOSTERS = ("简介", "概况", "企业文化", "发展历程", "核心业务")
+COMPANY_CULTURE_QUERY_MARKERS = ("企业文化", "公司文化", "文化理念", "使命", "愿景", "价值观")
+COMPANY_CULTURE_STRICT_QUERY_MARKERS = ("完整企业文化", "公司文化", "文化理念", "使命", "愿景", "价值观")
+COMPANY_CULTURE_SUPPORT_MARKERS = (
+    "企业文化",
+    "公司文化",
+    "文化理念",
+    "使命",
+    "愿景",
+    "价值观",
+    "ACTS",
+    "当家作主",
+    "连接共赢",
+    "透明坦诚",
+    "顺势应变",
+)
 COMPANY_DIRECTORY_SOURCE_MARKERS = ("分公司", "官方网站", "官网", "地址")
 ASSISTANT_CAPABILITY_QUERY_MARKERS = (
     "你能做什么",
@@ -276,6 +291,24 @@ def _boost_company_intro_score(query: str, source_name: str, content: str, score
     return score
 
 
+def _is_company_culture_query(query: str) -> bool:
+    normalized_query = _normalize_text(query)
+    return any(marker in normalized_query for marker in COMPANY_CULTURE_STRICT_QUERY_MARKERS)
+
+
+def _filter_company_culture_documents(query: str, documents: list[dict]) -> list[dict]:
+    if not _is_company_culture_query(query):
+        return documents
+
+    supported_docs = []
+    for doc in documents:
+        metadata = doc.get("metadata") or {}
+        haystack = f"{metadata.get('source', '')} {doc.get('document', '')}"
+        if any(marker in haystack for marker in COMPANY_CULTURE_SUPPORT_MARKERS):
+            supported_docs.append(doc)
+    return supported_docs
+
+
 def _boost_assistant_capability_score(query: str, source_name: str, content: str, score: int) -> int:
     if not _is_assistant_capability_query(query):
         return score
@@ -507,6 +540,7 @@ async def retrieve_document_context(
             similar_docs = _merge_document_candidates(search_query, similar_docs, fallback_docs)
 
     similar_docs = _filter_supporting_documents(search_query, similar_docs)
+    similar_docs = _filter_company_culture_documents(search_query, similar_docs)
     similar_docs = _sanitize_documents_for_query(search_query, similar_docs)
     result["similar_docs"] = similar_docs
     if not similar_docs:
